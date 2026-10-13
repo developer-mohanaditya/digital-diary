@@ -161,6 +161,28 @@
   .outlier-list li { padding:8px 0; border-top:1px solid var(--line); }
   .outlier-list .tag { color:var(--alert); font-weight:700; }
 
+  /* Small screens: keep wide grids readable instead of squashing them. */
+  @media (max-width:600px) {
+    .top { padding:10px 12px; }
+    .brand { font-size:.95rem; }
+    main { padding:12px 12px 32px; }
+    .card { padding:14px 14px; border-radius:16px; }
+    .hero h1 { font-size:1.75rem; }
+    .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .kpi b { font-size:1.5rem; }
+    .heat { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .heat .hrow { min-width:520px; }
+    .cal { gap:4px; }
+    .cell { padding:4px 5px; border-radius:10px; aspect-ratio:auto; min-height:52px; }
+    .cell small { font-size:.62rem; }
+    .donut { flex-direction:column; align-items:flex-start; }
+    .donut svg { width:120px; height:120px; }
+    .strip, .ticks { gap:2px; }
+    .add .row { flex-direction:column; align-items:stretch; }
+    .actions { flex-direction:column; align-items:flex-start; }
+    .menu { right:-4px; max-width:calc(100vw - 24px); }
+  }
+
   footer.foot { border-top:1px solid var(--line); padding:18px 24px; color:var(--muted); font-size:.85rem; text-align:center; }
 </style>
 </head>
