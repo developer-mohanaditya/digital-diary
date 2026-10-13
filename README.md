@@ -16,6 +16,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
   - `/think` marks a thought for deeper analysis.
   - Category tags: `/class`, `/learn`, `/thought`, `/quote`, `/work`, `/project`, `/life`, `/task`.
   - Tags can be combined with a space: `/push /thought Stay hungry, stay foolish`.
+  - `/timezone Asia/Kolkata` sets the timezone used to decide which day an entry belongs to. `/timezone` on its own shows the current one. Older entries keep their day.
 - Puts untagged text in Inbox for now.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
 - Serves a web interface from the same Worker (currently a preview with sample data, see `demo/`).
@@ -24,7 +25,6 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 
 - Automatic cleanup and categorization with an LLM.
 - Speech-to-text for voice notes, and photo capture.
-- The timezone setting. For now, entries are grouped by Paris time.
 - Moving entries between categories on the web.
 - Link capture.
 - Anything that reads patterns or writes summaries.
@@ -41,7 +41,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 ```
 src/            Worker code: webhook entry point, update handler, command parser
 test/           Tests for the parser and the handler
-migrations/     Database schema, applied in the Supabase SQL editor
+migrations/     Database schema, applied in order in the Supabase SQL editor
 public/         Web interface served by the Worker
 demo/           A standalone copy of the interface with sample data
 wrangler.toml   Worker configuration (name, routes, cron, timezone)
@@ -68,11 +68,11 @@ Secrets are never stored in this repository. They live in Cloudflare (Worker set
 | `SUPABASE_SERVICE_KEY` | secret | Supabase `service_role` key, used only by the Worker |
 | `SUPABASE_URL` | variable | Supabase project URL |
 | `ALLOWED_CHAT_ID` | variable | Numeric Telegram chat ID of the owner |
-| `DIARY_TZ` | variable | IANA timezone used to group entries by day, currently `Europe/Paris` |
+| `DIARY_TZ` | variable | Fallback timezone, used only if none is stored. The stored value (set with `/timezone`) wins |
 
 ## Database setup
 
-Open the Supabase SQL editor and run `migrations/0001_init.sql`. It is safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order (`0001_init.sql`, then `0002_settings.sql`). Both are safe to run again.
 
 ## Contributing
 
