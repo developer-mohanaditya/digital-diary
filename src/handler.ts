@@ -75,6 +75,14 @@ export async function handleUpdate(
     return 'ignored';
   }
 
+  if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/start') {
+    await notifier.reply(
+      msg.chat.id,
+      'Send any note and it goes into your diary. Start with /push, /learn, /thought, /quote, /work, /project, /life or /task to pick a category. Use /reason or /think for a longer take. Set your timezone with /timezone Europe/Paris.',
+    );
+    return 'ignored';
+  }
+
   const parsed = parseCommand(msg.text);
   const capture = await store.insertCapture({
     update_id: update.update_id,
