@@ -72,7 +72,7 @@ Secrets are never stored in this repository. They live in Cloudflare (Worker set
 
 ## Database setup
 
-Open the Supabase SQL editor and run each file in `migrations/` in order (`0001_init.sql`, then `0002_settings.sql`, then `0003_row_level_security.sql`). All three are safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order (`0001_init.sql`, then `0002_settings.sql`, then `0003_row_level_security.sql`, then `0004_service_role_grants.sql`). All four are safe to run again.
 
 ## Contributing
 
