@@ -21,6 +21,14 @@ const update = (text: string | undefined, chat = 42, update_id = 100): TelegramU
 });
 
 describe('handleUpdate', () => {
+  it('/start replies with help and stores nothing as a diary entry', async () => {
+    const store = fakeStore(); const n = fakeNotifier();
+    expect(await handleUpdate(update('/start'), store, n, SETTINGS, NOW)).toBe('ignored');
+    expect(store.insertCapture).not.toHaveBeenCalled();
+    expect(store.insertThought).not.toHaveBeenCalled();
+    expect(n.reply.mock.calls[0][1]).toContain('Send any note');
+  });
+
   it('ignores messages from any chat other than the owner', async () => {
     const store = fakeStore(); const n = fakeNotifier();
     expect(await handleUpdate(update('hi', 999), store, n, SETTINGS, NOW)).toBe('ignored');
