@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Digital Diary · preview</title>
+<link rel="icon" href="logo/mark.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400..800&family=Hanken+Grotesk:wght@400..700&family=Space+Grotesk:wght@400..700&family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet" />
+<style>
+  /* Palettes: theme x mode. Card shape (hard shadow) is shared by all themes. */
+  [data-theme="minimal"][data-mode="light"] { --bg:#eef1ff; --ink:#0d1020; --muted:#5b6382; --accent:#4338ca; --card:#ffffff; --line:#d9ddf2; --alert:#e11d48; --edge:#0d1020; --shadow:#0d1020; --top:#0d1020; --grain:none; }
+  [data-theme="minimal"][data-mode="dark"]  { --bg:#15122b; --ink:#f1eeff; --muted:#a7a1d6; --accent:#a78bfa; --card:#1e1a3d; --line:#342e66; --alert:#fb7185; --edge:#6d5bd0; --shadow:#6d5bd0; --top:#0c0a1f;
+    --grain:radial-gradient(1100px 620px at 8% -12%, rgba(167,139,250,.22), transparent 60%), radial-gradient(900px 520px at 100% 0%, rgba(99,102,241,.16), transparent 60%); }
+  [data-theme="paper"][data-mode="light"]   { --bg:#fbfaf6; --ink:#24231f; --muted:#8b877d; --accent:#c26a3d; --card:#ffffff; --line:#ebe7dd; --alert:#e0454b; --edge:#24231f; --shadow:#e3dccb; --top:#2b2a26; --grain:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.45  0 0 0 0 0.35  0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  [data-theme="paper"][data-mode="dark"]   { --bg:#1d1a16; --ink:#f3ece0; --muted:#a39a8a; --accent:#e0a46b; --card:#26221d; --line:#3d362d; --alert:#f07171; --edge:#5a5044; --shadow:#5a5044; --top:#14110d; --grain:none; }
+  [data-theme="journal"][data-mode="light"] { --bg:#f5f2ea; --ink:#1c1f26; --muted:#6b7280; --accent:#b7791f; --card:#ffffff; --line:#e3e0d8; --alert:#dc2626; --edge:#1c1f26; --shadow:#e2b96e; --top:#1c1f26; --grain:none; }
+  [data-theme="journal"][data-mode="dark"]  { --bg:#14161b; --ink:#ece9e2; --muted:#8a8f9a; --accent:#f0b66a; --card:#1d2027; --line:#2c303a; --alert:#ff6b6b; --edge:#3a3f4b; --shadow:#f0b66a; --top:#0f1115; --grain:none; }
+
+  /* Fonts. Minimal and Dark Journal use Grotesk; Paper uses its own pair. Minimal font is unchanged. */
+  [data-theme="minimal"], [data-theme="journal"] { --head:"Space Grotesk", Arial, sans-serif; --font:"Instrument Sans", Arial, sans-serif; }
+  [data-theme="paper"] { --head:"Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; --font:"Hanken Grotesk", "Helvetica Neue", Arial, sans-serif; }
+
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; flex-direction:column; background-color:var(--bg); background-image:var(--grain);
+    color:var(--ink); font-family:var(--font); font-size:15px; line-height:1.5; transition:background-color .25s, color .25s; }
+  h1,h2,.brand { font-family:var(--head); letter-spacing:-0.01em; }
+  a { color:inherit; text-decoration:none; }
+  button, select, textarea { font:inherit; }
+
+  .top { position:sticky; top:0; z-index:5; display:flex; justify-content:space-between; align-items:center; gap:14px;
+    padding:12px 24px; background:var(--top); color:#f5f5ff; }
+  .brand { font-weight:800; font-size:1.05rem; display:inline-flex; align-items:center; gap:10px; }
+  .brand img { display:block; width:36px; height:36px; border-radius:10px; }
+  .tools { display:flex; gap:8px; align-items:center; }
+  .theme-wrap { position:relative; }
+  .iconbtn { width:36px; height:36px; border-radius:999px; display:grid; place-items:center; cursor:pointer;
+    background:rgba(255,255,255,.08); border:1.5px solid rgba(255,255,255,.18); color:#f5f5ff; padding:0; }
+  .iconbtn:hover, .iconbtn[aria-expanded="true"] { border-color:#f5f5ff; }
+  .iconbtn svg { width:18px; height:18px; }
+  .menu { position:absolute; right:0; top:44px; min-width:220px; background:var(--card); color:var(--ink);
+    border:2px solid var(--edge); box-shadow:4px 4px 0 var(--shadow); border-radius:14px; padding:6px; z-index:10; }
+  .menu[hidden] { display:none; }
+  .menu button { display:flex; width:100%; align-items:center; justify-content:space-between; gap:12px; background:none; border:0;
+    padding:9px 10px; border-radius:10px; color:inherit; cursor:pointer; text-align:left; font-size:.92rem; }
+  .menu button:hover { background:var(--bg); }
+  .menu button[aria-checked="true"] { font-weight:700; }
+  .sw { display:inline-flex; gap:3px; }
+  .sw i { width:10px; height:10px; border-radius:50%; display:block; }
+
+  main { flex:1; width:min(1100px,100%); margin:0 auto; padding:16px 24px 40px; }
+  .crumbs { display:flex; gap:6px; align-items:center; font-size:.76rem; color:var(--muted); margin-bottom:14px; letter-spacing:.01em; }
+  .crumbs a:hover { color:var(--accent); }
+  .crumbs .sep { opacity:.5; }
+
+  .card { background:var(--card); border:2px solid var(--edge); box-shadow:4px 4px 0 var(--shadow); border-radius:18px; padding:18px 20px; margin-bottom:18px; }
+  .card h2 { margin:0 0 12px; font-size:1.05rem; font-weight:700; }
+  .kicker { font-size:.7rem; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-weight:700; }
+  .hero h1 { font-size:clamp(1.9rem,4.4vw,2.9rem); margin:4px 0 6px; line-height:1.05; font-weight:800; letter-spacing:-.02em; }
+  .muted { color:var(--muted); }
+
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; margin-bottom:18px; }
+  .kpi { background:var(--card); border:2px solid var(--edge); box-shadow:4px 4px 0 var(--shadow); border-radius:18px; padding:14px 16px; }
+  .kpi b { display:block; font-family:var(--head); font-size:1.8rem; font-weight:800; }
+  .kpi span { font-size:.8rem; color:var(--muted); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:800px) { .grid2 { grid-template-columns:1fr; } .top { padding:12px 16px; } main { padding:14px 16px 36px; } }
+
+  .navrow { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .seg { display:inline-flex; gap:2px; padding:3px; border-radius:999px; border:1.5px solid var(--line); background:var(--bg); }
+  .seg button { background:transparent; border:0; color:var(--muted); border-radius:999px; padding:4px 12px; cursor:pointer; font-size:.85rem; }
+  .seg button[aria-pressed="true"] { background:var(--ink); color:var(--card); }
+  .btn { background:var(--card); color:var(--ink); border:1.5px solid var(--line); border-radius:10px; padding:5px 12px; cursor:pointer; font-size:.88rem; display:inline-block; }
+  .btn:hover { border-color:var(--accent); }
+  .link { background:none; border:0; color:var(--accent); cursor:pointer; padding:0; font-weight:700; font-size:.82rem; }
+
+  .chart { width:100%; height:auto; display:block; }
+  .chart .grid { stroke:var(--line); stroke-dasharray:2 4; }
+  .chart .axis { fill:var(--muted); font-size:11px; font-family:var(--font); }
+  .chart .bar { fill:var(--accent); }
+  .chart .out { fill:var(--alert); }
+  .comp .bar { display:flex; height:10px; border-radius:99px; overflow:hidden; background:var(--line); gap:2px; }
+  .comp .bar span { height:100%; }
+  .keys { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:12px; font-size:.86rem; }
+  .k { display:inline-flex; align-items:center; gap:7px; }
+  .k i { width:8px; height:8px; border-radius:50%; }
+  .k em { font-style:normal; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .donut { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  .donut svg { width:150px; height:150px; flex-shrink:0; }
+  .donut .comp { flex:1; min-width:200px; }
+  .donut .comp .bar { display:none; }
+  .donut .keys { flex-direction:column; gap:8px; margin-top:0; }
+  .dtot { font-family:var(--head); font-size:22px; font-weight:800; fill:var(--ink); }
+
+  .folders { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  .folder { background:var(--card); border:2px solid var(--edge); box-shadow:3px 3px 0 var(--shadow); border-radius:16px; padding:12px 14px; }
+  .folder:hover { transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--accent); }
+  .folder strong { display:block; font-family:var(--head); font-size:1.02rem; }
+  .folder span { font-size:.82rem; color:var(--muted); }
+  .folder.off { opacity:.4; pointer-events:none; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+
+  .heat .hrow { display:grid; grid-template-columns:34px repeat(31,1fr); gap:3px; align-items:center; margin-bottom:3px; }
+  .hm { font-size:.7rem; color:var(--muted); }
+  .hc { display:block; aspect-ratio:1; border-radius:3px; background:var(--line); }
+  .hc.l1 { background:color-mix(in srgb, var(--accent) 30%, var(--card)); }
+  .hc.l2 { background:color-mix(in srgb, var(--accent) 55%, var(--card)); }
+  .hc.l3 { background:color-mix(in srgb, var(--accent) 80%, var(--card)); }
+  .hc.l4 { background:var(--accent); }
+  .hc.na { opacity:.25; pointer-events:none; }
+  .hc.blank { background:transparent; }
+
+  .cal { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .dow { font-size:.72rem; color:var(--muted); text-align:center; }
+  .cell { aspect-ratio:1.15; border:1.5px solid var(--line); border-radius:12px; padding:6px 8px; display:flex; flex-direction:column; justify-content:space-between; background:var(--bg); }
+  .cell:hover { border-color:var(--accent); }
+  .cell b { font-weight:700; }
+  .cell small { font-size:.72rem; color:var(--muted); }
+  .cell.blank { border:none; background:transparent; }
+  .cell.l1 { background:color-mix(in srgb, var(--accent) 22%, var(--card)); }
+  .cell.l2 { background:color-mix(in srgb, var(--accent) 40%, var(--card)); }
+  .cell.l3 { background:color-mix(in srgb, var(--accent) 60%, var(--card)); }
+  .cell.l4 { background:color-mix(in srgb, var(--accent) 80%, var(--card)); color:#fff; }
+  .cell.l4 small { color:#fff; }
+
+  .summary p { margin:0 0 8px; }
+  .summary .note { font-size:.8rem; color:var(--muted); }
+
+  .tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  .tab { background:var(--bg); color:var(--ink); border:1.5px solid var(--line); border-radius:999px; padding:5px 12px; cursor:pointer; font-size:.88rem; }
+  .tab:hover { border-color:var(--accent); }
+  .tab[aria-selected="true"] { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .tab small { opacity:.75; margin-left:5px; }
+  .tab.zero { opacity:.45; }
+
+  .entry { background:var(--card); border:2px solid var(--edge); box-shadow:4px 4px 0 var(--shadow); border-left:10px solid var(--c); border-radius:18px; padding:14px 16px; margin-bottom:12px; }
+  .meta { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:.8rem; color:var(--muted); }
+  .time { font-variant-numeric:tabular-nums; font-weight:700; color:var(--ink); }
+  .chip { background:var(--c); color:#fff; border-radius:6px; padding:1px 8px; font-weight:700; font-size:.76rem; }
+  .mode { border:1.5px solid var(--line); border-radius:999px; padding:0 8px; font-size:.74rem; }
+  .rawtag { margin-left:auto; background:transparent; border:1.5px dashed var(--line); color:var(--muted); border-radius:999px; padding:0 10px; font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }
+  .rawtag:hover { border-color:var(--accent); color:var(--accent); }
+  .rawtag[aria-pressed="true"] { border-style:solid; border-color:var(--accent); color:var(--accent); }
+  .entry p { margin:8px 0 0; font-size:1rem; white-space:pre-wrap; }
+  .raw { margin-top:10px; padding:10px 12px; border-radius:12px; background:var(--bg); border:1.5px dashed var(--line); }
+  .raw p { color:var(--ink); font-size:.94rem; }
+  .actions { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; font-size:.8rem; color:var(--muted); }
+  .actions label { display:flex; gap:8px; align-items:center; }
+
+  select, textarea { color:var(--ink); background:var(--bg); border:1.5px solid var(--line); border-radius:10px; padding:6px 8px; }
+  textarea { width:100%; min-height:72px; resize:vertical; }
+  .add { display:grid; gap:10px; }
+  .add .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+  .strip { display:grid; grid-template-columns:repeat(24,1fr); gap:3px; align-items:end; height:64px; }
+  .strip div { background:var(--line); border-radius:4px 4px 0 0; min-height:3px; }
+  .strip div.has { background:var(--accent); }
+  .ticks { display:grid; grid-template-columns:repeat(24,1fr); gap:3px; font-size:.65rem; color:var(--muted); text-align:center; margin-top:4px; }
+  .outlier-list { margin:12px 0 0; padding:0; list-style:none; font-size:.88rem; }
+  .outlier-list li { padding:8px 0; border-top:1px solid var(--line); }
+  .outlier-list .tag { color:var(--alert); font-weight:700; }
+
+  footer.foot { border-top:1px solid var(--line); padding:18px 24px; color:var(--muted); font-size:.85rem; text-align:center; }
+</style>
+</head>
+<body data-theme="minimal" data-mode="light">
+<header class="top">
+  <a class="brand" href="#/"><img src="logo/mark.svg" width="36" height="36" alt="Digital Diary logo" />Digital Diary</a>
+  <div class="tools">
+    <button class="iconbtn" id="mode-btn" data-action="mode-toggle" aria-label="Switch to dark mode" title="Light / dark"></button>
+    <div class="theme-wrap">
+      <button class="iconbtn" id="theme-btn" data-action="theme-menu" aria-haspopup="menu" aria-expanded="false" aria-label="Choose theme" title="Theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4.4-4-7.2-9-7.2z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7.5" r="1"/></svg></button>
+      <div class="menu" id="theme-menu" role="menu" hidden>
+        <button role="menuitemradio" aria-checked="true" data-action="theme" data-v="minimal">Minimal <span class="sw"><i style="background:#4338ca"></i><i style="background:#eef1ff"></i><i style="background:#0d1020"></i></span></button>
+        <button role="menuitemradio" aria-checked="false" data-action="theme" data-v="paper">Paper <span class="sw"><i style="background:#c26a3d"></i><i style="background:#fbfaf6"></i><i style="background:#24231f"></i></span></button>
+        <button role="menuitemradio" aria-checked="false" data-action="theme" data-v="journal">Dark Journal <span class="sw"><i style="background:#f0b66a"></i><i style="background:#14161b"></i><i style="background:#ece9e2"></i></span></button>
+      </div>
+    </div>
+  </div>
+</header>
+<main>
+  <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+  <div id="app"></div>
+</main>
+<footer class="foot">Digital Diary. Copyright, Aditya @ aweditya.com.</footer>
+<script>
+const CATS = [
+  { id:'class',    label:'Class',    color:'#4f6ef7' },
+  { id:'learning', label:'Learning', color:'#14a37f' },
+  { id:'thought',  label:'Thought',  color:'#e8a33d' },
+  { id:'quote',    label:'Quote',    color:'#c2578a' },
+  { id:'work',     label:'Work',     color:'#64748b' },
+  { id:'project',  label:'Project',  color:'#8b5cf6' },
+  { id:'life',     label:'Life',     color:'#f0643c' },
+  { id:'task',     label:'Task',     color:'#0ea5b7' },
+  { id:'inbox',    label:'Inbox',    color:'#9ca3af' },
+];
+const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+const MODE_LABEL = { refined:'Refined', verbatim:'Verbatim', reason:'Reason', think:'Think' };
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const START = '2026-01-01', TODAY = '2026-10-13';
+const STORE_KEY = 'diary-preview-v4';
+
+const SAMPLES = {
+  class: ['Lecture on indexing: B-trees keep keys sorted, so range queries stay fast.',
+          'Seminar notes: the speaker framed trust as consistency over time.',
+          'Lab: wrote a small parser and broke it three times before it worked.',
+          'Algorithms: amortized analysis of dynamic arrays.'],
+  learning: ['A hash index cannot answer range queries. Obvious now, not at 2am.',
+             'Practiced SQL joins until LEFT JOIN stopped confusing me.',
+             'Read about backpressure: the queue size is the real knob.'],
+  thought: ['Real progress comes from small, repeated steps, not the one big push I keep waiting for.',
+            'I keep building tools before I know the problem. Slow down.',
+            'Maybe a diary is just a memory that answers back.',
+            'Most of my good ideas arrive after I stop trying.'],
+  quote: ['"Stay hungry, stay foolish."', '"The obstacle is the way."', '"Make it work, make it right, make it fast."'],
+  work: ['Shipped the onboarding fix; two support tickets closed.', 'Stand-up: blocked on API keys, unblocked by lunch.'],
+  project: ['Digital Diary: settled on a Cloudflare Worker and Supabase Postgres.', 'Life Board: drafted the widget contract.', 'Diary schema: added the categories table.'],
+  life: ['Gym, slept seven hours. Energy felt steady.', 'Long call with a friend; felt lighter afterwards.', 'Felt scattered in the evening, too many tabs open.'],
+  task: ['Email the professor about the project deadline.', 'Renew the DNS records before Friday.'],
+  inbox: ['Unsorted idea about a monthly review ritual.'],
+};
+
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y, m-1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const dim = (y, m) => new Date(y, m, 0).getDate();
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDay = d => d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+const shortDay = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+const levelOf = n => n === 0 ? 0 : n <= 2 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4;
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function pickCat(r) {
+  const w = { thought:3, learning:2, class:2, quote:1, work:2, project:2, life:2, task:1, inbox:1 };
+  const total = Object.values(w).reduce((a,b) => a+b, 0);
+  let x = r() * total;
+  for (const k in w) { x -= w[k]; if (x < 0) return k; }
+  return 'inbox';
+}
+function pickHour(r) {
+  const x = r();
+  if (x < 0.04) return Math.floor(r() * 5);
+  if (x < 0.55) return 9 + Math.floor(r() * 5);
+  if (x < 0.9)  return 19 + Math.floor(r() * 4);
+  return 12 + Math.floor(r() * 7);
+}
+function pickMode(cat, r) {
+  if (cat === 'quote') return 'verbatim';
+  if (cat === 'thought' && r() < 0.25) return 'reason';
+  if (r() < 0.06) return 'think';
+  if (r() < 0.1) return 'verbatim';
+  return 'refined';
+}
+// Raw = what was spoken or typed before cleanup (sample fillers for the preview).
+function rawOf(text, mode, r) {
+  if (mode === 'verbatim') return text;
+  const fillers = ['um, ', 'so like ', 'uh, ', 'you know, ', 'I mean, '];
+  const f = fillers[Math.floor(r() * fillers.length)];
+  return f + text.toLowerCase().replace(/[.!?]+$/, '').replace(/[,"]/g, '').replace(/\s+/g, ' ') + ' and yeah';
+}
+function generate() {
+  const r = rng(20261013);
+  const days = {};
+  for (let d = parse(START); iso(d) <= TODAY; d = addDays(d, 1)) {
+    const k = iso(d);
+    const n = r() < 0.12 ? 0 : Math.floor(r() * 8) + 1;
+    const list = [];
+    for (let i = 0; i < n; i++) {
+      const cat = pickCat(r);
+      const mode = pickMode(cat, r);
+      const pool = SAMPLES[cat];
+      const text = pool[Math.floor(r() * pool.length)];
+      list.push({
+        id: `${k}-${i}`,
+        time: `${pad(pickHour(r))}:${pad(Math.floor(r() * 60))}`,
+        cat, mode,
+        src: r() < 0.15 ? 'tag' : 'auto',
+        text,
+        raw: rawOf(text, mode, r),
+      });
+    }
+    list.sort((a, b) => a.time.localeCompare(b.time));
+    days[k] = list;
+  }
+  return days;
+}
+function loadState() {
+  try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && s.days) return s; } catch (_) {}
+  return { days: generate() };
+}
+let state = loadState();
+const saveState = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {} };
+const items = k => state.days[k] || [];
+const tallyInto = (c, list) => list.forEach(it => { c[it.cat] = (c[it.cat] || 0) + 1; });
+
+/* Preferences: theme (Minimal default, Paper, Dark Journal) and light/dark mode. */
+const SUN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+const THEMES = ['minimal', 'paper', 'journal'];
+const prefs = { theme:'minimal', mode:'light' };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem('diary-prefs-v2') || '{}')); } catch (_) {}
+if (!THEMES.includes(prefs.theme)) prefs.theme = 'minimal';
+if (!['light', 'dark'].includes(prefs.mode)) prefs.mode = 'light';
+function applyPrefs() {
+  document.body.dataset.theme = prefs.theme;
+  document.body.dataset.mode = prefs.mode;
+  const mb = $('#mode-btn');
+  mb.innerHTML = prefs.mode === 'light' ? MOON_ICON : SUN_ICON;
+  mb.setAttribute('aria-label', prefs.mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
+  document.querySelectorAll('[role="menuitemradio"]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === prefs.theme)));
+}
+function savePrefs() { try { localStorage.setItem('diary-prefs-v2', JSON.stringify(prefs)); } catch (_) {} }
+function setMenu(open) {
+  $('#theme-menu').hidden = !open;
+  $('#theme-btn').setAttribute('aria-expanded', String(open));
+}
+
+const ui = { range:'month', anchor:TODAY, tab:'all', openRaw:new Set(), openMove:new Set() };
+
+function route() {
+  const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  if (p[0] === 'y' && p[1] && p[2] === 'm' && p[3]) {
+    const y = +p[1], m = +p[3];
+    if (p[4] === 'd' && p[5]) return { view:'day', y, m, d:+p[5] };
+    return { view:'month', y, m };
+  }
+  return { view:'home' };
+}
+
+function bounds() {
+  const a = parse(ui.anchor);
+  if (ui.range === 'day') return { from:a, to:a };
+  if (ui.range === 'week') { const from = addDays(a, -((a.getDay() + 6) % 7)); return { from, to:addDays(from, 6) }; }
+  if (ui.range === 'month') return { from:new Date(a.getFullYear(), a.getMonth(), 1), to:new Date(a.getFullYear(), a.getMonth()+1, 0) };
+  return { from:new Date(a.getFullYear(), 0, 1), to:new Date(a.getFullYear(), 11, 31) };
+}
+function rangeLabel() {
+  const { from, to } = bounds();
+  if (ui.range === 'day') return fmtDay(from);
+  if (ui.range === 'year') return String(from.getFullYear());
+  if (ui.range === 'month') return `${MONTHS[from.getMonth()]} ${from.getFullYear()}`;
+  return `${shortDay(from)} to ${shortDay(to)} ${to.getFullYear()}`;
+}
+function rangeItems() {
+  const { from, to } = bounds(); const out = [];
+  for (let d = new Date(from); d <= to; d = addDays(d, 1)) out.push(...items(iso(d)));
+  return out;
+}
+function buckets() {
+  const { from, to } = bounds();
+  if (ui.range === 'day') {
+    const b = Array.from({ length:24 }, (_, h) => ({ label:pad(h), counts:{} }));
+    items(iso(from)).forEach(it => tallyInto(b[+it.time.slice(0,2)].counts, [it]));
+    return b;
+  }
+  if (ui.range === 'year') {
+    const y = from.getFullYear(), b = [];
+    for (let m = 1; m <= 12; m++) {
+      const c = {};
+      for (let d = 1; d <= dim(y, m); d++) tallyInto(c, items(`${y}-${pad(m)}-${pad(d)}`));
+      b.push({ label:MONTHS[m-1].slice(0,3), counts:c });
+    }
+    return b;
+  }
+  const b = [];
+  for (let d = new Date(from); d <= to; d = addDays(d, 1)) {
+    const c = {}; tallyInto(c, items(iso(d)));
+    b.push({ label: ui.range === 'week' ? d.toLocaleDateString('en-GB', { weekday:'short' }) : String(d.getDate()), counts:c });
+  }
+  return b;
+}
+
+/* ---------- Charts (plain SVG) ---------- */
+function stackChart(bks, label) {
+  const W = 720, H = 240, P = 30, B = 24;
+  const totals = bks.map(b => Object.values(b.counts).reduce((a, c) => a + c, 0));
+  const max = Math.max(1, ...totals);
+  const plotH = H - P - B, slot = (W - P * 2) / bks.length, bw = Math.min(22, slot * 0.58);
+  const every = Math.ceil(bks.length / 12);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">`;
+  for (let i = 0; i <= 4; i++) {
+    const y = P + plotH - plotH * i / 4;
+    s += `<line class="grid" x1="${P}" x2="${W-P}" y1="${y}" y2="${y}"/><text class="axis" x="${P-8}" y="${y+4}" text-anchor="end">${Math.round(max*i/4)}</text>`;
+  }
+  bks.forEach((b, i) => {
+    const cx = P + slot * i + slot / 2, x = cx - bw / 2;
+    let base = P + plotH;
+    CATS.forEach(c => {
+      const n = b.counts[c.id]; if (!n) return;
+      const full = plotH * n / max; base -= full;
+      // 2px gap between stacked segments keeps each block distinct
+      s += `<rect x="${x}" y="${base + 1}" width="${bw}" height="${Math.max(1, full - 2)}" rx="3" fill="${c.color}"><title>${esc(b.label)} · ${c.label}: ${n}</title></rect>`;
+    });
+    if (i % every === 0) s += `<text class="axis" x="${cx}" y="${H - 6}" text-anchor="middle">${esc(b.label)}</text>`;
+  });
+  return s + '</svg>';
+}
+// Category composition: one slim proportional bar plus text keys (no boxes).
+function compHTML(counts) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (!total) return '<p class="muted">No items in this range.</p>';
+  const act = CATS.filter(c => counts[c.id]);
+  const bar = act.map(c => `<span style="flex:${counts[c.id]};background:${c.color}" title="${c.label}: ${counts[c.id]}"></span>`).join('');
+  const keys = act.map(c => `<span class="k"><i style="background:${c.color}"></i>${c.label}<em>${counts[c.id]} · ${Math.round(counts[c.id] / total * 100)}%</em></span>`).join('');
+  return `<div class="comp"><div class="bar">${bar}</div><div class="keys">${keys}</div></div>`;
+}
+function hourHistogram() {
+  const all = Object.entries(state.days).flatMap(([k, list]) => list.map(it => ({ ...it, k })));
+  const c = Array(24).fill(0); all.forEach(it => c[+it.time.slice(0,2)]++);
+  const total = all.length || 1, max = Math.max(1, ...c);
+  const isOut = n => n > 0 && n / total < 0.03;
+  const W = 720, H = 200, P = 24, bw = (W - P * 2) / 24;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Items by hour of day">`;
+  c.forEach((n, h) => {
+    const hh = (H - P * 2) * n / max, x = P + h * bw + 3, y = H - P - hh;
+    s += `<rect class="${isOut(n) ? 'out' : 'bar'}" x="${x}" y="${y}" width="${bw-6}" height="${hh}" rx="3"><title>${pad(h)}:00 · ${n} items${isOut(n) ? ' (outlier)' : ''}</title></rect>`;
+    if (h % 3 === 0) s += `<text class="axis" x="${x + (bw-6)/2}" y="${H-6}" text-anchor="middle">${pad(h)}</text>`;
+  });
+  s += '</svg>';
+  const outliers = all.filter(it => isOut(c[+it.time.slice(0,2)])).sort((a, b) => b.k.localeCompare(a.k) || b.time.localeCompare(a.time)).slice(0, 6);
+  const list = outliers.length
+    ? `<ul class="outlier-list">${outliers.map(it => `<li><span class="tag">Outlier ${it.time}</span> · <a href="#/y/${it.k.slice(0,4)}/m/${+it.k.slice(5,7)}/d/${+it.k.slice(8,10)}">${it.k}</a> · ${CAT[it.cat].label}<br><span class="muted">${esc(it.text)}</span></li>`).join('')}</ul>`
+    : '<p class="muted">No outliers yet.</p>';
+  return s + list;
+}
+function yearHeat(y) {
+  let h = '<div class="heat">';
+  for (let m = 1; m <= 12; m++) {
+    h += `<div class="hrow"><span class="hm">${MONTHS[m-1].slice(0,3)}</span>`;
+    for (let d = 1; d <= 31; d++) {
+      if (d > dim(y, m)) { h += '<span class="hc blank"></span>'; continue; }
+      const k = `${y}-${pad(m)}-${pad(d)}`, n = items(k).length, future = k > TODAY;
+      h += `<a class="hc l${levelOf(n)}${future ? ' na' : ''}" href="#/y/${y}/m/${m}/d/${d}" title="${k}: ${n} items"></a>`;
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+function monthCalendar(y, m) {
+  const lead = (new Date(y, m-1, 1).getDay() + 6) % 7;
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<span class="cell blank"></span>';
+  for (let d = 1; d <= dim(y, m); d++) {
+    const k = `${y}-${pad(m)}-${pad(d)}`, n = items(k).length;
+    cells += `<a class="cell l${levelOf(n)}" href="#/y/${y}/m/${m}/d/${d}"><b>${d}</b><small>${n ? n + ' items' : ''}</small></a>`;
+  }
+  return `<div class="cal">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x => `<span class="dow">${x}</span>`).join('')}${cells}</div>`;
+}
+function donut(counts) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (!total) return '<p class="muted">No items yet.</p>';
+  const C = 2 * Math.PI * 40; let cum = 0, arcs = '';
+  CATS.forEach(c => {
+    const n = counts[c.id] || 0; if (!n) return;
+    const f = n / total;
+    arcs += `<circle r="40" cx="60" cy="60" fill="none" stroke="${c.color}" stroke-width="16" stroke-dasharray="${f*C} ${C}" stroke-dashoffset="${-cum*C}" transform="rotate(-90 60 60)"><title>${c.label}: ${n}</title></circle>`;
+    cum += f;
+  });
+  return `<div class="donut"><svg viewBox="0 0 120 120">${arcs}<text class="dtot" x="60" y="66" text-anchor="middle">${total}</text></svg>${compHTML(counts)}</div>`;
+}
+function monthSummary(y, m) {
+  const its = [];
+  for (let d = 1; d <= dim(y, m); d++) { const k = `${y}-${pad(m)}-${pad(d)}`; items(k).forEach(it => its.push({ ...it, k })); }
+  if (!its.length) return '<p class="muted">No entries this month yet.</p>';
+  const counts = {}; tallyInto(counts, its);
+  const perDay = {}; its.forEach(it => perDay[it.k] = (perDay[it.k] || 0) + 1);
+  const busiest = Object.entries(perDay).sort((a, b) => b[1] - a[1])[0];
+  const hours = Array(24).fill(0); its.forEach(it => hours[+it.time.slice(0,2)]++);
+  const peak = hours.indexOf(Math.max(...hours));
+  const night = its.filter(it => +it.time.slice(0,2) < 5).length;
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return `<div class="summary">
+    <p>In ${MONTHS[m-1]}, you logged <b>${its.length}</b> items across <b>${Object.keys(perDay).length}</b> days. ${CAT[top[0]].label} led with <b>${top[1]}</b>.</p>
+    <p>Your busiest day was <b>${busiest[0].slice(8)} ${MONTHS[m-1].slice(0,3)}</b> with ${busiest[1]} items. Peak writing hour: <b>${pad(peak)}:00</b>.</p>
+    <p>${night ? `${night} entries were written between midnight and 5am.` : 'No late-night entries this month.'}</p>
+    <p class="muted" style="font-size:.8rem">Computed from your entries. The AI summary (highlights, failures, resilience) arrives with the LLM step.</p>
+  </div>`;
+}
+
+function viewHome() {
+  const y = parse(ui.anchor).getFullYear();
+  const rItems = rangeItems();
+  const counts = {}; tallyInto(counts, rItems);
+  const activeDays = new Set(rItems.map(it => it.id.slice(0,10))).size;
+  const seg = ['day','week','month','year'].map(r => `<button data-action="range" data-v="${r}" aria-pressed="${ui.range===r}">${r[0].toUpperCase()+r.slice(1)}</button>`).join('');
+  const months = MONTHS.map((name, i) => {
+    const m = i + 1;
+    const n = Object.keys(state.days).filter(k => k.startsWith(`${y}-${pad(m)}`)).reduce((a, k) => a + items(k).length, 0);
+    const future = `${y}-${pad(m)}-01` > TODAY;
+    return `<a class="folder${future ? ' off' : ''}" href="#/y/${y}/m/${m}"><strong>${name}</strong><span>${n} items</span></a>`;
+  }).join('');
+  return `
+  <section class="hero"><span class="kicker">Your diary</span><h1>Explore ${y}, one day at a time.</h1></section>
+  <section class="kpis" style="margin-top:16px">
+    <div class="kpi"><b>${rItems.length}</b><span>items</span></div>
+    <div class="kpi"><b>${counts.thought||0}</b><span>thoughts</span></div>
+    <div class="kpi"><b>${counts.learning||0}</b><span>learnings</span></div>
+    <div class="kpi"><b>${counts.class||0}</b><span>class notes</span></div>
+    <div class="kpi"><b>${activeDays}</b><span>active days</span></div>
+  </section>
+  <section class="card">
+    <div class="navrow">
+      <div><span class="kicker">Activity</span><h2 style="margin:2px 0 0">${rangeLabel()}</h2></div>
+      <div class="navrow" style="margin:0;gap:8px">
+        <button class="btn" data-action="shift" data-v="-1" aria-label="Previous">‹</button>
+        <button class="btn" data-action="shift" data-v="0">Today</button>
+        <button class="btn" data-action="shift" data-v="1" aria-label="Next">›</button>
+        <div class="seg">${seg}</div>
+      </div>
+    </div>
+    ${stackChart(buckets(), 'Activity by category')}
+    ${compHTML(counts)}
+  </section>
+  <section class="grid2">
+    <div class="card"><span class="kicker">Calendar</span><h2>${y} at a glance</h2>${yearHeat(y)}</div>
+    <div class="card"><span class="kicker">When you write</span><h2>Hour of day · all time</h2>${hourHistogram()}</div>
+  </section>
+  <section class="card"><span class="kicker">Folders</span><h2>${y}</h2><div class="folders">${months}</div></section>`;
+}
+
+function viewMonth(y, m) {
+  const k = `${y}-${pad(m)}`;
+  const days = []; for (let d = 1; d <= dim(y, m); d++) days.push(d);
+  const counts = {}; days.forEach(d => tallyInto(counts, items(`${k}-${pad(d)}`)));
+  const folders = days.map(d => {
+    const kk = `${k}-${pad(d)}`, list = items(kk), future = kk > TODAY;
+    let dot = '';
+    if (list.length) {
+      const c = {}; tallyInto(c, list);
+      const dominant = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0];
+      dot = `<i class="dot" style="background:${CAT[dominant].color}"></i>`;
+    }
+    return `<a class="folder${future ? ' off' : ''}" href="#/y/${y}/m/${m}/d/${d}"><strong>${d} ${MONTHS[m-1].slice(0,3)}</strong><span>${dot}${list.length} items</span></a>`;
+  }).join('');
+  return `
+  <section class="hero"><span class="kicker">${y}</span><h1>${MONTHS[m-1]}</h1></section>
+  <section class="grid2" style="margin-top:16px">
+    <div class="card"><span class="kicker">Calendar</span><h2>Pick a day</h2>${monthCalendar(y, m)}</div>
+    <div class="card"><span class="kicker">Mix</span><h2>Categories this month</h2>${donut(counts)}</div>
+  </section>
+  <section class="card"><span class="kicker">Summary</span><h2>${MONTHS[m-1]} in review</h2>${monthSummary(y, m)}</section>
+  <section class="card"><span class="kicker">Days</span><h2>Folders</h2><div class="folders">${folders}</div></section>`;
+}
+
+function entryHTML(it, k) {
+  const c = CAT[it.cat];
+  const rawOpen = ui.openRaw.has(it.id), moveOpen = ui.openMove.has(it.id);
+  const opts = CATS.map(x => `<option value="${x.id}"${x.id === it.cat ? ' selected' : ''}>${x.label}</option>`).join('');
+  return `
+    <article class="entry" style="--c:${c.color}">
+      <div class="meta">
+        <span class="time">${it.time}</span><span class="chip">${c.label}</span><span class="mode">${MODE_LABEL[it.mode]}</span>
+        <button class="rawtag" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}">Raw</button>
+      </div>
+      <p>${esc(it.text)}</p>
+      ${rawOpen ? `<div class="raw"><span class="kicker">Raw</span><p>${esc(it.raw || it.text)}</p></div>` : ''}
+      <div class="actions">
+        ${moveOpen
+          ? `<label>Move to <select data-move="${k}|${it.id}">${opts}</select></label>`
+          : `<button class="link" data-action="move" data-v="${it.id}">Move to</button>`}
+        <span>Source · ${it.src}</span>
+      </div>
+    </article>`;
+}
+
+function viewDay(y, m, d) {
+  const k = `${y}-${pad(m)}-${pad(d)}`, date = parse(k), list = items(k);
+  const counts = {}; tallyInto(counts, list);
+  const shown = ui.tab === 'all' ? list : list.filter(it => it.cat === ui.tab);
+  const tabDefs = [{ id:'all', label:'All', n:list.length }, ...CATS.map(c => ({ id:c.id, label:c.label, n:counts[c.id]||0 }))];
+  const tabs = tabDefs.map(t => `<button class="tab${t.n ? '' : ' zero'}" role="tab" data-action="tab" data-v="${t.id}" aria-selected="${ui.tab===t.id}">${t.label}<small>${t.n}</small></button>`).join('');
+  const strip = Array.from({ length:24 }, (_, h) => {
+    const n = list.filter(it => +it.time.slice(0,2) === h).length;
+    return `<div class="${n ? 'has' : ''}" style="height:${n ? Math.min(100, 18 + n * 22) : 4}%" title="${pad(h)}:00 · ${n}"></div>`;
+  }).join('');
+  const entries = shown.length ? shown.map(it => entryHTML(it, k)).join('') : '<p class="muted">Nothing here yet.</p>';
+  const dayLink = dt => `#/y/${dt.getFullYear()}/m/${dt.getMonth()+1}/d/${dt.getDate()}`;
+  return `
+  <section class="hero"><span class="kicker">${list.length} items</span><h1>${fmtDay(date)}</h1>
+    <div class="navrow" style="margin-top:10px;gap:8px">
+      <a class="btn" href="${dayLink(addDays(date, -1))}">‹ Previous day</a>
+      <a class="btn" href="${dayLink(addDays(date, 1))}">Next day ›</a>
+    </div>
+  </section>
+  <section class="card"><span class="kicker">Categories</span><div class="tabs" role="tablist">${tabs}</div>${entries}</section>
+  <section class="grid2">
+    <div class="card"><span class="kicker">Timeline</span><h2>Hours</h2><div class="strip">${strip}</div><div class="ticks">${Array.from({length:24},(_,h)=>`<span>${h%3===0?pad(h):''}</span>`).join('')}</div></div>
+    <div class="card"><span class="kicker">New note</span><h2>Add an item</h2>
+      <form class="add" onsubmit="return false">
+        <textarea id="add-text" placeholder="Type a thought, quote or note…"></textarea>
+        <div class="row">
+          <select id="add-mode"><option value="refined">Refined</option><option value="verbatim">Verbatim (/push)</option><option value="reason">Reason (/reason)</option><option value="think">Think (/think)</option></select>
+          <select id="add-cat"><option value="">Auto (Inbox for now)</option>${CATS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}</select>
+          <button class="btn" type="button" data-action="add">Add</button>
+        </div>
+      </form>
+    </div>
+  </section>`;
+}
+
+function renderCrumbs(r) {
+  let html = '<a href="#/">Home</a>';
+  if (r.view !== 'home') html += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
+  if (r.view === 'day') html += `<span class="sep">/</span><span>${r.d}</span>`;
+  $('#crumbs').innerHTML = html;
+}
+function render() {
+  const r = route();
+  renderCrumbs(r);
+  if (r.view === 'day') ui.anchor = `${r.y}-${pad(r.m)}-${pad(r.d)}`;
+  $('#app').innerHTML = r.view === 'home' ? viewHome() : r.view === 'month' ? viewMonth(r.y, r.m) : viewDay(r.y, r.m, r.d);
+}
+function shiftAnchor(n) {
+  const a = parse(ui.anchor);
+  if (ui.range === 'day') ui.anchor = iso(addDays(a, n));
+  else if (ui.range === 'week') ui.anchor = iso(addDays(a, 7 * n));
+  else if (ui.range === 'month') ui.anchor = iso(new Date(a.getFullYear(), a.getMonth() + n, 1));
+  else ui.anchor = `${a.getFullYear() + n}-01-01`;
+  if (ui.anchor > TODAY) ui.anchor = TODAY;
+}
+function addEntry() {
+  const text = $('#add-text').value.trim();
+  if (!text) return;
+  const now = new Date();
+  const k = route().view === 'day' ? ui.anchor : TODAY;
+  const chosen = $('#add-cat').value;
+  const it = {
+    id: `${k}-${Date.now()}`,
+    time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+    cat: chosen || 'inbox',
+    mode: $('#add-mode').value,
+    src: chosen ? 'manual' : 'auto',
+    text,
+    raw: text,
+  };
+  state.days[k] = [...items(k), it].sort((a, b) => a.time.localeCompare(b.time));
+  saveState(); render();
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-action]'); if (!t) return;
+  const a = t.dataset.action, v = t.dataset.v;
+  if (a === 'mode-toggle') { prefs.mode = prefs.mode === 'light' ? 'dark' : 'light'; applyPrefs(); savePrefs(); }
+  else if (a === 'theme-menu') setMenu($('#theme-menu').hidden);
+  else if (a === 'theme') { prefs.theme = v; applyPrefs(); savePrefs(); setMenu(false); }
+  else if (a === 'range') { ui.range = v; render(); }
+  else if (a === 'shift') { if (v === '0') ui.anchor = TODAY; else shiftAnchor(+v); render(); }
+  else if (a === 'tab') { ui.tab = v; render(); }
+  else if (a === 'raw') { ui.openRaw.has(v) ? ui.openRaw.delete(v) : ui.openRaw.add(v); render(); }
+  else if (a === 'move') { ui.openMove.add(v); render(); }
+  else if (a === 'add') addEntry();
+});
+document.addEventListener('change', e => {
+  const s = e.target.closest('[data-move]'); if (!s) return;
+  const [k, id] = s.dataset.move.split('|');
+  const it = items(k).find(x => x.id === id);
+  if (it) { it.cat = s.value; it.src = 'manual'; ui.openMove.delete(id); saveState(); render(); }
+});
+document.addEventListener('click', e => { if (!e.target.closest('.theme-wrap')) setMenu(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
+window.addEventListener('hashchange', () => { ui.tab = 'all'; render(); window.scrollTo(0, 0); });
+
+applyPrefs();
+if (!location.hash) history.replaceState(null, '', '#/');
+render();
+</script>
+</body>
+</html>
