@@ -9,6 +9,8 @@ function fakeStore(overrides: Partial<Store> = {}) {
     insertCapture: vi.fn(async () => ({ inserted: true, id: 'cap-1' })),
     insertThought: vi.fn(async () => {}),
     setCaptureStatus: vi.fn(async () => {}),
+    getTimeZone: vi.fn(async () => null),
+    setTimeZone: vi.fn(async () => {}),
     ...overrides,
   };
   return store;
@@ -84,5 +86,42 @@ describe('localDay', () => {
     const late = new Date('2026-10-13T23:30:00Z');
     expect(localDay(late, 'UTC')).toBe('2026-10-13');
     expect(localDay(late, 'Asia/Kolkata')).toBe('2026-10-14');
+  });
+});
+
+describe('timezone handling', () => {
+  function tzStore(zone: string | null) {
+    return fakeStore({ getTimeZone: vi.fn(async () => zone) });
+  }
+
+  it('/timezone with a name stores it and confirms, without making a thought', async () => {
+    const store = tzStore('Europe/Paris'); const n = fakeNotifier();
+    expect(await handleUpdate(update('/timezone Asia/Kolkata'), store, n, SETTINGS, NOW)).toBe('saved');
+    expect(store.setTimeZone).toHaveBeenCalledWith('Asia/Kolkata');
+    expect(store.insertThought).not.toHaveBeenCalled();
+    expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done');
+    expect(n.reply.mock.calls[0][1]).toContain('Timezone set to Asia/Kolkata');
+  });
+
+  it('/timezone alone shows the current zone', async () => {
+    const store = tzStore('Europe/Paris'); const n = fakeNotifier();
+    await handleUpdate(update('/timezone'), store, n, SETTINGS, NOW);
+    expect(store.setTimeZone).not.toHaveBeenCalled();
+    expect(n.reply.mock.calls[0][1]).toBe('Your timezone is Europe/Paris.');
+  });
+
+  it('an unknown zone is refused and nothing is stored', async () => {
+    const store = tzStore('Europe/Paris'); const n = fakeNotifier();
+    await handleUpdate(update('/timezone Mars/Olympus'), store, n, SETTINGS, NOW);
+    expect(store.setTimeZone).not.toHaveBeenCalled();
+    expect(n.reply.mock.calls[0][1]).toContain('is not a timezone I know');
+  });
+
+  it('new entries use the stored zone, not the default', async () => {
+    // 23:30 UTC is already the next day in Asia/Kolkata (+05:30).
+    const store = tzStore('Asia/Kolkata');
+    const late = { update_id: 7, message: { message_id: 2, date: Date.parse('2026-10-13T23:30:00Z') / 1000, text: 'late thought', chat: { id: 42 } } };
+    await handleUpdate(late, store, fakeNotifier(), { allowedChatId: 42, timeZone: 'Europe/Paris' }, new Date('2026-10-13T23:30:00Z'));
+    expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({ day: '2026-10-14' }));
   });
 });

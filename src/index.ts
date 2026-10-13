@@ -41,6 +41,18 @@ function supabaseStore(env: Env): Store {
         body: JSON.stringify(t),
       }));
     },
+    async getTimeZone() {
+      const res = await check(await fetch(`${base}/settings?key=eq.timezone&select=value`, { headers }));
+      const rows = (await res.json()) as { value: string }[];
+      return rows[0]?.value ?? null;
+    },
+    async setTimeZone(zone) {
+      await check(await fetch(`${base}/settings?on_conflict=key`, {
+        method: 'POST',
+        headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ key: 'timezone', value: zone, updated_at: new Date().toISOString() }),
+      }));
+    },
     async setCaptureStatus(id, status, error) {
       await check(await fetch(`${base}/captures?id=eq.${id}`, {
         method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
