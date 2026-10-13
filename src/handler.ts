@@ -1,4 +1,5 @@
 import { parseCommand, type Category, type Mode } from './parse';
+import { parseTimeZoneCommand } from './timezone';
 
 // Telegram update shape (only the fields we use).
 export interface TelegramUpdate {
@@ -31,6 +32,8 @@ export interface Store {
   insertCapture(c: CaptureInput): Promise<{ inserted: boolean; id?: string }>;
   insertThought(t: ThoughtInput): Promise<void>;
   setCaptureStatus(id: string, status: 'done' | 'failed', error?: string): Promise<void>;
+  getTimeZone(): Promise<string | null>;
+  setTimeZone(zone: string): Promise<void>;
 }
 export interface Notifier {
   reply(chatId: number, text: string): Promise<void>;
@@ -83,6 +86,21 @@ export async function handleUpdate(
   });
   if (!capture.inserted || !capture.id) return 'duplicate';
 
+  const tzCommand = parseTimeZoneCommand(msg.text);
+  if (tzCommand) {
+    const current = (await store.getTimeZone()) ?? settings.timeZone;
+    if (tzCommand.kind === 'show') {
+      await notifier.reply(msg.chat.id, `Your timezone is ${current}.`);
+    } else if (tzCommand.kind === 'invalid') {
+      await notifier.reply(msg.chat.id, `"${tzCommand.input}" is not a timezone I know. Use a name like Europe/Paris or Asia/Kolkata.`);
+    } else {
+      await store.setTimeZone(tzCommand.zone);
+      await notifier.reply(msg.chat.id, `Timezone set to ${tzCommand.zone}. New entries use it; older entries keep their day.`);
+    }
+    await store.setCaptureStatus(capture.id, 'done');
+    return 'saved';
+  }
+
   if (!parsed.ok) {
     await store.setCaptureStatus(capture.id, 'failed', parsed.error);
     const text =
@@ -97,7 +115,7 @@ export async function handleUpdate(
   const category: Category = parsed.category ?? 'inbox';
   await store.insertThought({
     capture_id: capture.id,
-    day: localDay(now, settings.timeZone),
+    day: localDay(now, (await store.getTimeZone()) ?? settings.timeZone),
     captured_at: new Date(msg.date * 1000).toISOString(),
     category,
     category_source: parsed.categorySource === 'tag' ? 'tag' : 'auto',
