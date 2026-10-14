@@ -65,6 +65,7 @@
   .kpi b { display:block; font-family:var(--head); font-size:1.8rem; font-weight:800; }
   .kpi span { font-size:.8rem; color:var(--muted); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .grid2 > .card { min-width:0; }
   @media (max-width:800px) { .grid2 { grid-template-columns:1fr; } .top { padding:12px 16px; } main { padding:14px 16px 36px; } }
 
   .navrow { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
@@ -101,9 +102,10 @@
   .folder.off { opacity:.4; pointer-events:none; }
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
 
-  .heat .hrow { display:grid; grid-template-columns:34px repeat(31,1fr); gap:3px; align-items:center; margin-bottom:3px; }
+  .heat { display:grid; gap:4px; max-width:100%; overflow:hidden; }
+  .heat .hrow { display:grid; grid-template-columns:34px repeat(31, minmax(0,1fr)); gap:3px; align-items:center; }
   .hm { font-size:.7rem; color:var(--muted); }
-  .hc { display:block; aspect-ratio:1; border-radius:3px; background:var(--line); }
+  .hc { width:100%; aspect-ratio:1; border-radius:2px; background:var(--line); outline:1px solid color-mix(in srgb, var(--ink) 8%, transparent); outline-offset:-1px; }
   .hc.l1 { background:color-mix(in srgb, var(--accent) 30%, var(--card)); }
   .hc.l2 { background:color-mix(in srgb, var(--accent) 55%, var(--card)); }
   .hc.l3 { background:color-mix(in srgb, var(--accent) 80%, var(--card)); }
@@ -111,9 +113,9 @@
   .hc.na { opacity:.25; pointer-events:none; }
   .hc.blank { background:transparent; }
 
-  .cal { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .cal { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
   .dow { font-size:.72rem; color:var(--muted); text-align:center; }
-  .cell { aspect-ratio:1.15; border:1.5px solid var(--line); border-radius:12px; padding:6px 8px; display:flex; flex-direction:column; justify-content:space-between; background:var(--bg); }
+  .cell { min-width:0; min-height:64px; border:1.5px solid var(--line); border-radius:12px; padding:6px 8px; display:flex; flex-direction:column; justify-content:space-between; background:var(--bg); }
   .cell:hover { border-color:var(--accent); }
   .cell b { font-weight:700; }
   .cell small { font-size:.72rem; color:var(--muted); }
@@ -152,6 +154,22 @@
   textarea { width:100%; min-height:72px; resize:vertical; }
   .add { display:grid; gap:10px; }
   .add .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .duewrap { position:relative; display:inline-flex; }
+  .duewrap[hidden] { display:none; }
+  .duebtn { display:inline-flex; gap:7px; align-items:center; }
+  .duebtn svg { width:14px; height:14px; }
+  .duepop { position:absolute; right:0; bottom:calc(100% + 8px); z-index:20; width:264px; max-width:calc(100vw - 24px); background:var(--card); color:var(--ink);
+    border:2px solid var(--edge); box-shadow:4px 4px 0 var(--shadow); border-radius:14px; padding:10px 12px 8px; }
+  .duepop[hidden] { display:none; }
+  .dhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .dhead strong { font-size:.9rem; }
+  .dhead .btn { padding:2px 10px; }
+  .dgrid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .dbtn { aspect-ratio:1; border:1.5px solid transparent; background:none; color:inherit; border-radius:8px; cursor:pointer; font-size:.8rem; padding:0; }
+  .dbtn:hover { border-color:var(--accent); }
+  .dbtn.today { border-color:var(--line); }
+  .dbtn.sel { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:800; }
+  .dfoot { display:flex; justify-content:space-between; margin-top:8px; }
 
   .strip { display:grid; grid-template-columns:repeat(24,1fr); gap:3px; align-items:end; height:64px; }
   .strip div { background:var(--line); border-radius:4px 4px 0 0; min-height:3px; }
@@ -170,8 +188,7 @@
     .hero h1 { font-size:1.75rem; }
     .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .kpi b { font-size:1.5rem; }
-    .heat { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-    .heat .hrow { min-width:520px; }
+    .heat .hrow { grid-template-columns:28px repeat(31, minmax(0,1fr)); gap:2px; }
     .cal { gap:4px; }
     .cell { padding:4px 5px; border-radius:10px; aspect-ratio:auto; min-height:52px; }
     .cell small { font-size:.62rem; }
@@ -182,6 +199,76 @@
     .actions { flex-direction:column; align-items:flex-start; }
     .menu { right:-4px; max-width:calc(100vw - 24px); }
   }
+
+  .lhead { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .lgrp { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:800; margin:14px 0 2px; }
+  .lgrp:first-child { margin-top:0; }
+  .lgrp .n { opacity:.7; font-weight:400; }
+  .ledg { border-bottom:1px solid var(--line); }
+  .lrow { display:flex; gap:10px; padding:7px 2px; border-top:1px solid var(--line); align-items:baseline; }
+  .lrow:first-child { border-top:0; }
+  .ltime { flex:0 0 44px; font-size:.78rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .ltime.wide { flex-basis:82px; }
+  .ltxt { flex:1; min-width:0; }
+  .ltxt.clamp { overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .ltag { font-size:.66rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; border:1.5px dashed var(--line); color:var(--muted); border-radius:999px; padding:0 8px; cursor:pointer; background:none; margin-left:8px; }
+  .ltag:hover { border-color:var(--accent); color:var(--accent); }
+  .ltag.solid { border-style:solid; }
+  .lmore { font-size:.76rem; font-weight:700; color:var(--accent); background:none; border:0; cursor:pointer; padding:0; margin-left:8px; }
+  .lmove { flex:0 0 auto; font-size:.74rem; font-weight:700; color:var(--muted); background:none; border:0; cursor:pointer; padding:2px 4px; opacity:0; }
+  .lrow:hover .lmove, .lrow:focus-within .lmove { opacity:1; }
+  @media (hover:none) { .lmove { opacity:.55; } }
+  .lmove:hover { color:var(--accent); }
+  .lmove-open { flex:0 0 auto; font-size:.78rem; color:var(--muted); display:flex; gap:6px; align-items:center; }
+  .lraw { margin:0 0 4px 54px; padding:8px 10px; border-radius:10px; background:var(--bg); border:1.5px dashed var(--line); }
+  .lraw p { margin:4px 0 0; font-size:.88rem; }
+
+  .lrow.clickable { cursor:pointer; border-radius:10px; }
+  .lrow.clickable:hover { background:color-mix(in srgb, var(--accent) 7%, transparent); }
+  .lrow.clickable:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  .overlay { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px; }
+  .backdrop { position:absolute; inset:0; background:rgba(10,10,25,.5); }
+  .sheet { position:relative; width:min(560px,100%); min-height:min(360px,68vh); max-height:82vh; overflow:auto; background:var(--card); color:var(--ink);
+    border:2px solid var(--edge); box-shadow:6px 6px 0 var(--shadow); border-radius:18px; padding:20px 22px 28px; }
+  .shead { display:flex; align-items:center; gap:10px; }
+  .shead .mode { font-size:.74rem; }
+  .sdot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+  .xbtn { margin-left:auto; background:none; border:1.5px solid #cf7d7d; color:#b05050; border-radius:10px; width:32px; height:32px; cursor:pointer; font-size:1.35rem; line-height:1; flex-shrink:0; transition:background .15s, color .15s, border-color .15s; }
+  .xbtn:hover { border-color:#a93e3e; color:#fff; background:#c05a5a; }
+  .smeta { font-size:.8rem; color:var(--muted); margin:6px 0 10px; font-variant-numeric:tabular-nums; }
+  .sfull { font-size:1.05rem; margin:0 0 14px; white-space:pre-wrap; }
+  .due { display:inline-block; font-size:.72rem; font-weight:800; letter-spacing:.02em; border-radius:999px; padding:1px 9px; border:1.5px solid var(--line); color:var(--muted); white-space:nowrap; }
+  .due.soon { border-color:#b7791f; color:#8a5a12; background:color-mix(in srgb, #e8a33d 14%, transparent); }
+  .due.over { border-color:#c05a5a; color:#a93e3e; background:color-mix(in srgb, #e5484d 10%, transparent); }
+  .due.done { border-color:var(--line); color:var(--muted); }
+  .duline { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:.88rem; margin:0 0 12px; }
+  .stitle { font-size:1.12rem; line-height:1.35; margin:0 0 6px; letter-spacing:-.01em; }
+  .sfigure { margin:0 0 14px; border-radius:14px; overflow:hidden; border:1.5px solid var(--line); background:#101223; }
+  .sfigure img { display:block; width:100%; height:auto; max-height:46vh; object-fit:contain; }
+  .sraw { margin:8px 0 14px; padding:10px 12px; border-radius:12px; background:var(--bg); border:1.5px solid var(--line); }
+  .sraw p { margin:4px 0 0; font-size:.94rem; }
+  .smove { display:flex; gap:8px; align-items:center; font-size:.88rem; color:var(--muted); margin-top:12px; }
+
+  .gdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; }
+  .hbtn { background:none; border:1.5px solid var(--line); color:var(--muted); border-radius:10px; width:32px; height:32px; cursor:pointer;
+    display:inline-grid; place-items:center; font-size:.8rem; font-weight:800; font-family:ui-monospace, monospace; flex-shrink:0; padding:0; }
+  .hbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .hbtn[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
+  .hbtn[data-action="move-menu"][aria-expanded="true"] { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); }
+  .hbtn[data-action="raw"][aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); }
+  .hbtn svg { width:16px; height:16px; }
+  .spacer { flex:1; }
+  .mmenu { position:absolute; top:64px; right:22px; z-index:5; min-width:180px; background:var(--card); color:var(--ink);
+    border:1.5px solid var(--edge); box-shadow:none; border-radius:12px; padding:6px; }
+  .mmenu button[data-action="move-to"] { display:flex; width:100%; align-items:center; gap:7px; background:none; border:0;
+    padding:4px 8px; border-radius:8px; color:inherit; cursor:pointer; text-align:left; font-size:.82rem; }
+  .mmenu button[data-action="move-to"]:hover { background:var(--bg); }
+  .mmenu button[data-action="move-to"] i { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .mmenu button[data-action="move-to"][aria-checked="true"] { font-weight:800; }
+  .mconf { padding:8px; font-size:.86rem; display:grid; gap:8px; }
+  .mconf .row { display:flex; gap:8px; }
+  .smeta { margin:8px 0 12px; font-size:.78rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .smeta i { font-style:normal; margin:0 10px; opacity:.55; }
 
   footer.foot { border-top:1px solid var(--line); padding:18px 24px; color:var(--muted); font-size:.85rem; text-align:center; }
 </style>
@@ -216,13 +303,14 @@ const CATS = [
   { id:'project',  label:'Project',  color:'#8b5cf6' },
   { id:'life',     label:'Life',     color:'#f0643c' },
   { id:'task',     label:'Task',     color:'#0ea5b7' },
+  { id:'deadline', label:'Deadline', color:'#e5484d' },
   { id:'inbox',    label:'Inbox',    color:'#9ca3af' },
 ];
 const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 const MODE_LABEL = { refined:'Refined', verbatim:'Verbatim', reason:'Reason', think:'Think' };
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const START = '2026-01-01', TODAY = '2026-10-13';
-const STORE_KEY = 'diary-preview-v4';
+const STORE_KEY = 'diary-preview-v5';
 
 const SAMPLES = {
   class: ['Lecture on indexing: B-trees keep keys sorted, so range queries stay fast.',
@@ -241,8 +329,22 @@ const SAMPLES = {
   project: ['Digital Diary: settled on a Cloudflare Worker and Supabase Postgres.', 'Life Board: drafted the widget contract.', 'Diary schema: added the categories table.'],
   life: ['Gym, slept seven hours. Energy felt steady.', 'Long call with a friend; felt lighter afterwards.', 'Felt scattered in the evening, too many tabs open.'],
   task: ['Email the professor about the project deadline.', 'Renew the DNS records before Friday.'],
+  deadline: ['Submit the thesis draft to the advisor',
+             'Renew the domain before it expires',
+             'File the conference travel reimbursement',
+             'Pay the electricity bill',
+             'Send the project proposal to the client',
+             'Prepare slides for the Monday seminar',
+             'Book the dentist appointment'],
   inbox: ['Unsorted idea about a monthly review ritual.'],
 };
+
+/* Temporary stand-in photos (inline SVG, offline-safe) in three ratios to preview real photo layout. */
+const PHOTOS = [
+  { ar:'4:3', src:"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'><defs><linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%233a1c71'/><stop offset='.55' stop-color='%23d76d77'/><stop offset='1' stop-color='%23ffaf7b'/></linearGradient></defs><rect width='800' height='600' fill='url(%23s)'/><circle cx='560' cy='370' r='95' fill='%23ffe29f' opacity='.25'/><circle cx='560' cy='370' r='72' fill='%23ffe29f'/><path d='M0 470 Q200 400 420 460 T800 440 V600 H0 Z' fill='%232b2b4d'/><path d='M0 520 Q260 470 520 515 T800 505 V600 H0 Z' fill='%231b1b33'/></svg>" },
+  { ar:'3:4', src:"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'><defs><linearGradient id='n' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%230b1e33'/><stop offset='.6' stop-color='%231b4d6e'/><stop offset='1' stop-color='%232c7a8c'/></linearGradient></defs><rect width='600' height='800' fill='url(%23n)'/><g fill='%23ffffff'><circle cx='80' cy='90' r='2.5'/><circle cx='180' cy='150' r='1.8'/><circle cx='300' cy='70' r='2.2'/><circle cx='450' cy='140' r='1.6'/><circle cx='520' cy='60' r='2.4'/><circle cx='240' cy='230' r='1.5'/></g><circle cx='430' cy='200' r='58' fill='%23f5f3ce'/><circle cx='412' cy='186' r='10' fill='%23ddd8b0'/><circle cx='446' cy='216' r='7' fill='%23ddd8b0'/><path d='M0 560 Q150 530 300 560 T600 550 V800 H0 Z' fill='%23143a4d'/><path d='M0 640 Q150 610 300 640 T600 630 V800 H0 Z' fill='%230e2a38'/><path d='M0 720 Q150 695 300 720 T600 712 V800 H0 Z' fill='%23082228'/></svg>" },
+  { ar:'16:9', src:"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='960' height='540'><defs><linearGradient id='d' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%232193b0'/><stop offset='1' stop-color='%23a8e6cf'/></linearGradient></defs><rect width='960' height='540' fill='url(%23d)'/><circle cx='760' cy='130' r='52' fill='%23fff9db'/><ellipse cx='200' cy='430' rx='320' ry='130' fill='%232d6a4f'/><ellipse cx='760' cy='460' rx='360' ry='140' fill='%2340916c'/><ellipse cx='480' cy='520' rx='420' ry='110' fill='%231b4332'/></svg>" },
+];
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -253,6 +355,7 @@ const dim = (y, m) => new Date(y, m, 0).getDate();
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 const shortDay = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+const fmtDue = k => parse(k).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
 const levelOf = n => n === 0 ? 0 : n <= 2 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4;
 function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
@@ -305,6 +408,20 @@ function generate() {
         raw: rawOf(text, mode, r),
       });
     }
+    // Deadlines: sparse and deterministic, without touching the shared rng (keeps every other entry stable).
+    const di = Object.keys(days).length;
+    if (di % 11 === 5) {
+      const pool = SAMPLES.deadline;
+      const text = pool[di % pool.length];
+      const due = iso(addDays(d, [3, 7, 14, 21][di % 4]));
+      list.push({
+        id: `${k}-dl`,
+        time: `${pad(9 + (di % 9))}:${pad((di * 7) % 60)}`,
+        cat: 'deadline', mode: 'refined', src: 'tag',
+        text, raw: text, due,
+        done: due < TODAY ? (di % 3 !== 0) : false,
+      });
+    }
     list.sort((a, b) => a.time.localeCompare(b.time));
     days[k] = list;
   }
@@ -315,6 +432,10 @@ function loadState() {
   return { days: generate() };
 }
 let state = loadState();
+// Photo flags arrived with the ledger view. Backfill stored days deterministically.
+const hash = str => [...str].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0);
+let _photoSeed = 0;
+Object.values(state.days).flat().forEach(it => { if (it.pic === undefined) it.pic = Math.abs(hash(it.id)) % 25 === 0; if (it.sec === undefined) it.sec = Math.abs(hash(it.id + 's')) % 60; if (it.cat === 'deadline') { if (it.due === undefined) it.due = TODAY; if (it.done === undefined) it.done = false; } if (it.pic && !it.photo) it.photo = _photoSeed < PHOTOS.length ? PHOTOS[_photoSeed++] : PHOTOS[Math.abs(hash(it.id)) % PHOTOS.length]; });
 const saveState = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {} };
 const items = k => state.days[k] || [];
 const tallyInto = (c, list) => list.forEach(it => { c[it.cat] = (c[it.cat] || 0) + 1; });
@@ -341,7 +462,7 @@ function setMenu(open) {
   $('#theme-btn').setAttribute('aria-expanded', String(open));
 }
 
-const ui = { range:'month', anchor:TODAY, tab:'all', openRaw:new Set(), openMove:new Set() };
+const ui = { range:'month', anchor:TODAY, tab:'all', layout:'ledger', openNote:null, moveMenu:false, moveConfirm:null, openRaw:new Set(), openMove:new Set(), openFull:new Set(), duePick:'', dueCal:TODAY.slice(0,7), dueOpen:false };
 
 function route() {
   const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -505,6 +626,7 @@ function monthSummary(y, m) {
 
 function viewHome() {
   const y = parse(ui.anchor).getFullYear();
+  const openDl = Object.values(state.days).flat().filter(it => it.cat === 'deadline' && !it.done).length;
   const rItems = rangeItems();
   const counts = {}; tallyInto(counts, rItems);
   const activeDays = new Set(rItems.map(it => it.id.slice(0,10))).size;
@@ -522,6 +644,7 @@ function viewHome() {
     <div class="kpi"><b>${counts.thought||0}</b><span>thoughts</span></div>
     <div class="kpi"><b>${counts.learning||0}</b><span>learnings</span></div>
     <div class="kpi"><b>${counts.class||0}</b><span>class notes</span></div>
+    <div class="kpi"><b>${openDl}</b><span>open deadlines</span></div>
     <div class="kpi"><b>${activeDays}</b><span>active days</span></div>
   </section>
   <section class="card">
@@ -537,11 +660,19 @@ function viewHome() {
     ${stackChart(buckets(), 'Activity by category')}
     ${compHTML(counts)}
   </section>
-  <section class="grid2">
-    <div class="card"><span class="kicker">Calendar</span><h2>${y} at a glance</h2>${yearHeat(y)}</div>
-    <div class="card"><span class="kicker">When you write</span><h2>Hour of day · all time</h2>${hourHistogram()}</div>
-  </section>
+  <section class="card"><span class="kicker">Calendar</span><h2>${y} at a glance</h2>${yearHeat(y)}</section>
+  <section class="card"><span class="kicker">When you write</span><h2>Hour of day · all time</h2>${hourHistogram()}</section>
   <section class="card"><span class="kicker">Folders</span><h2>${y}</h2><div class="folders">${months}</div></section>`;
+}
+
+function monthLedger(y, m) {
+  const its = [];
+  for (let d = 1; d <= dim(y, m); d++) { const k = `${y}-${pad(m)}-${pad(d)}`; items(k).forEach(it => its.push({ ...it, k })); }
+  if (!its.length) return '<p class="muted">Nothing here yet.</p>';
+  return CATS.filter(c => its.some(it => it.cat === c.id)).map(c => {
+    const rows = its.filter(it => it.cat === c.id).sort((a, b) => a.k === b.k ? a.time.localeCompare(b.time) : (a.k < b.k ? -1 : 1));
+    return `<div class="lgrp"><i class="gdot" style="background:${c.color}"></i>${c.label} <span class="n">(${rows.length})</span></div><div class="ledg">${rows.map(it => ledgerRowHTML(it, it.k, true)).join('')}</div>`;
+  }).join('');
 }
 
 function viewMonth(y, m) {
@@ -565,9 +696,29 @@ function viewMonth(y, m) {
     <div class="card"><span class="kicker">Mix</span><h2>Categories this month</h2>${donut(counts)}</div>
   </section>
   <section class="card"><span class="kicker">Summary</span><h2>${MONTHS[m-1]} in review</h2>${monthSummary(y, m)}</section>
+  <section class="card"><span class="kicker">Ledger</span><h2>Everything this month, by category</h2>${monthLedger(y, m)}</section>
   <section class="card"><span class="kicker">Days</span><h2>Folders</h2><div class="folders">${folders}</div></section>`;
 }
 
+/* Deadlines carry their own schema: a due date plus done flag, rendered as status pills. */
+function dueDays(due) { return Math.round((parse(due) - parse(TODAY)) / 864e5); }
+function duePill(it) {
+  if (it.cat !== 'deadline') return '';
+  if (it.done) return '<span class="due done">Done</span>';
+  if (!it.due) return '';
+  const n = dueDays(it.due);
+  if (n < 0) return `<span class="due over">Overdue ${-n}d</span>`;
+  if (n === 0) return '<span class="due soon">Due today</span>';
+  if (n === 1) return '<span class="due soon">Due tomorrow</span>';
+  return `<span class="due soon">Due in ${n}d</span>`;
+}
+function dueLine(it) {
+  if (it.cat !== 'deadline') return '';
+  const when = it.due ? fmtDay(parse(it.due)) : 'No due date';
+  const n = it.due ? dueDays(it.due) : null;
+  const st = it.done ? 'Done' : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
+  return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span></div>`;
+}
 function entryHTML(it, k) {
   const c = CAT[it.cat];
   const rawOpen = ui.openRaw.has(it.id), moveOpen = ui.openMove.has(it.id);
@@ -575,7 +726,7 @@ function entryHTML(it, k) {
   return `
     <article class="entry" style="--c:${c.color}">
       <div class="meta">
-        <span class="time">${it.time}</span><span class="chip">${c.label}</span><span class="mode">${MODE_LABEL[it.mode]}</span>
+        <span class="time">${it.time}</span><span class="chip">${c.label}</span><span class="mode">${MODE_LABEL[it.mode]}</span>${duePill(it)}
         <button class="rawtag" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}">Raw</button>
       </div>
       <p>${esc(it.text)}</p>
@@ -589,6 +740,67 @@ function entryHTML(it, k) {
     </article>`;
 }
 
+function ledgerRowHTML(it, k, withDay = false) {
+  return `<div class="lrow clickable" data-action="open" data-v="${k}|${it.id}" tabindex="0" role="button" title="Open note">
+      <span class="ltime${withDay ? ' wide' : ''}">${withDay ? `${+it.k.slice(8)} ${it.time}` : it.time}</span>
+      <span class="ltxt clamp">${esc(it.text)}</span>${duePill(it)}
+    </div>`;
+}
+function findNote(ref) {
+  const i = ref.indexOf('|');
+  const k = ref.slice(0, i), id = ref.slice(i + 1);
+  const it = (items(k) || []).find(x => x.id === id);
+  return it ? { k, it } : null;
+}
+function doMove(k, id, cat) {
+  const it = (items(k) || []).find(x => x.id === id);
+  if (it) { it.cat = cat; it.src = 'manual'; if (cat === 'deadline' && !it.due) { it.due = iso(addDays(parse(k), 7)); it.done = false; } saveState(); }
+}
+function splitTitle(t) {
+  const s = String(t || '');
+  const nl = s.indexOf('\n');
+  if (nl > 0) {
+    const head = s.slice(0, nl).trim();
+    const rest = s.slice(nl + 1).trim();
+    if (head && head.length <= 120 && rest) return { title: head, body: rest };
+  }
+  const m = s.match(/^([^:\n\.?!]{3,48}):\s+(.{20,})$/s);
+  if (m) return { title: m[1].trim(), body: m[2].trim() };
+  return { title: '', body: s };
+}
+function noteTitleBody(t) {
+  const { title, body } = splitTitle(t);
+  return (title ? `<h3 class="stitle">${esc(title)}</h3>` : '') + `<p class="sfull">${esc(body)}</p>`;
+}
+function noteHTML(ref) {
+  const found = findNote(ref);
+  if (!found) return '';
+  const { k, it } = found;
+  const c = CAT[it.cat];
+  const hasRaw = it.raw && it.raw !== it.text;
+  const rawOpen = ui.openRaw.has(it.id);
+  const opts = CATS.map(x => `<option value="${x.id}"${x.id === it.cat ? ' selected' : ''}>${x.label}</option>`).join('');
+  const moveOpen = ui.moveMenu;
+  return `<div class="overlay"><div class="backdrop" data-action="close-note"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Note">
+      <div class="shead"><span class="sdot" style="background:${c.color}"></span><strong>${c.label}</strong><span class="mode">${MODE_LABEL[it.mode]}</span><span class="spacer"></span>${hasRaw ? `<button class="hbtn" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}" title="${rawOpen ? 'Hide raw' : 'Show raw'}">&lt;/&gt;</button>` : ''}<button class="hbtn" data-action="move-menu" aria-expanded="${moveOpen}" title="Move to another category"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14l3 3 3-3"/></svg></button><button class="xbtn" data-action="close-note" aria-label="Close">\u00d7</button></div>
+      ${moveOpen ? `<div class="mmenu" role="menu">${ui.moveConfirm ? `<div class="mconf"><span>Move to <b>${CAT[ui.moveConfirm].label}</b>?</span><span class="row"><button class="btn" data-action="move-yes">Yes</button><button class="btn" data-action="move-no">No</button></span></div>` : CATS.map(x => `<button data-action="move-to" data-v="${x.id}" aria-checked="${x.id === it.cat}"><i style="background:${x.color}"></i>${x.label}</button>`).join('')}</div>` : ''}
+      <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}:${pad(it.sec || 0)}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : 'Auto filed'}</div>
+      ${dueLine(it)}
+      ${noteTitleBody(it.text)}
+      ${it.photo ? `<figure class="sfigure"><img src="${it.photo.src}" alt="Attached photo" loading="lazy" /></figure>` : ''}
+      ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
+    </div></div>`;
+}
+function ledgerHTML(list, k) {
+  if (!list.length) return '<p class="muted">Nothing here yet.</p>';
+  if (ui.tab !== 'all') return `<div class="ledg">${list.map(it => ledgerRowHTML(it, k)).join('')}</div>`;
+  return CATS.filter(c => list.some(it => it.cat === c.id)).map(c => {
+    const rows = list.filter(it => it.cat === c.id);
+    return `<div class="lgrp"><i class="gdot" style="background:${c.color}"></i>${c.label} <span class="n">(${rows.length})</span></div><div class="ledg">${rows.map(it => ledgerRowHTML(it, k)).join('')}</div>`;
+  }).join('');
+}
+
 function viewDay(y, m, d) {
   const k = `${y}-${pad(m)}-${pad(d)}`, date = parse(k), list = items(k);
   const counts = {}; tallyInto(counts, list);
@@ -599,7 +811,8 @@ function viewDay(y, m, d) {
     const n = list.filter(it => +it.time.slice(0,2) === h).length;
     return `<div class="${n ? 'has' : ''}" style="height:${n ? Math.min(100, 18 + n * 22) : 4}%" title="${pad(h)}:00 · ${n}"></div>`;
   }).join('');
-  const entries = shown.length ? shown.map(it => entryHTML(it, k)).join('') : '<p class="muted">Nothing here yet.</p>';
+  const laySeg = ['cards','ledger'].map(l => `<button data-action="layout" data-v="${l}" aria-pressed="${ui.layout===l}">${l[0].toUpperCase()+l.slice(1)}</button>`).join('');
+  const entries = shown.length ? (ui.layout === 'ledger' ? ledgerHTML(shown, k) : shown.map(it => entryHTML(it, k)).join('')) : '<p class="muted">Nothing here yet.</p>';
   const dayLink = dt => `#/y/${dt.getFullYear()}/m/${dt.getMonth()+1}/d/${dt.getDate()}`;
   return `
   <section class="hero"><span class="kicker">${list.length} items</span><h1>${fmtDay(date)}</h1>
@@ -608,7 +821,7 @@ function viewDay(y, m, d) {
       <a class="btn" href="${dayLink(addDays(date, 1))}">Next day ›</a>
     </div>
   </section>
-  <section class="card"><span class="kicker">Categories</span><div class="tabs" role="tablist">${tabs}</div>${entries}</section>
+  <section class="card"><div class="lhead"><span class="kicker">Categories</span><div class="seg">${laySeg}</div></div><div class="tabs" role="tablist">${tabs}</div>${entries}</section>
   <section class="grid2">
     <div class="card"><span class="kicker">Timeline</span><h2>Hours</h2><div class="strip">${strip}</div><div class="ticks">${Array.from({length:24},(_,h)=>`<span>${h%3===0?pad(h):''}</span>`).join('')}</div></div>
     <div class="card"><span class="kicker">New note</span><h2>Add an item</h2>
@@ -617,6 +830,11 @@ function viewDay(y, m, d) {
         <div class="row">
           <select id="add-mode"><option value="refined">Refined</option><option value="verbatim">Verbatim (/push)</option><option value="reason">Reason (/reason)</option><option value="think">Think (/think)</option></select>
           <select id="add-cat"><option value="">Auto (Inbox for now)</option>${CATS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}</select>
+          <span class="duewrap" hidden>
+            <button class="btn duebtn" type="button" data-action="due-toggle" aria-haspopup="dialog" aria-expanded="false" title="Pick a due date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="due-label">${ui.duePick ? esc(fmtDue(ui.duePick)) : 'Due date'}</span></button>
+            <input type="hidden" id="add-due" value="${ui.duePick || ''}" />
+            <div class="duepop" id="due-pop" role="dialog" aria-label="Pick a due date" hidden></div>
+          </span>
           <button class="btn" type="button" data-action="add">Add</button>
         </div>
       </form>
@@ -635,6 +853,8 @@ function render() {
   renderCrumbs(r);
   if (r.view === 'day') ui.anchor = `${r.y}-${pad(r.m)}-${pad(r.d)}`;
   $('#app').innerHTML = r.view === 'home' ? viewHome() : r.view === 'month' ? viewMonth(r.y, r.m) : viewDay(r.y, r.m, r.d);
+  document.querySelector('.overlay')?.remove();
+  if (ui.openNote) { const h = noteHTML(ui.openNote); if (h) document.body.insertAdjacentHTML('beforeend', h); else ui.openNote = null; }
 }
 function shiftAnchor(n) {
   const a = parse(ui.anchor);
@@ -643,6 +863,35 @@ function shiftAnchor(n) {
   else if (ui.range === 'month') ui.anchor = iso(new Date(a.getFullYear(), a.getMonth() + n, 1));
   else ui.anchor = `${a.getFullYear() + n}-01-01`;
   if (ui.anchor > TODAY) ui.anchor = TODAY;
+}
+/* Custom due-date picker in the site's own design language (replaces the native date popup). */
+function dueCalHTML() {
+  const [yy, mm] = ui.dueCal.split('-').map(Number);
+  const lead = (new Date(yy, mm - 1, 1).getDay() + 6) % 7;
+  let cells = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x => `<span class="dow">${x}</span>`).join('');
+  for (let i = 0; i < lead; i++) cells += '<span></span>';
+  for (let d = 1; d <= dim(yy, mm); d++) {
+    const k = `${yy}-${pad(mm)}-${pad(d)}`;
+    const cls = k === ui.duePick ? 'sel' : k === TODAY ? 'today' : '';
+    cells += `<button type="button" class="dbtn ${cls}" data-action="due-day" data-v="${k}">${d}</button>`;
+  }
+  return `<div class="dhead"><button type="button" class="btn" data-action="due-prev" aria-label="Previous month">‹</button><strong>${MONTHS[mm - 1]} ${yy}</strong><button type="button" class="btn" data-action="due-next" aria-label="Next month">›</button></div><div class="dgrid">${cells}</div><div class="dfoot"><button type="button" class="link" data-action="due-today">Today</button><button type="button" class="link" data-action="due-clear">Clear</button></div>`;
+}
+function renderDuePop() {
+  const pop = $('#due-pop'); if (!pop) return;
+  pop.innerHTML = dueCalHTML();
+  pop.hidden = !ui.dueOpen;
+  document.querySelector('.duebtn')?.setAttribute('aria-expanded', String(ui.dueOpen));
+}
+function setDuePick(v) {
+  ui.duePick = v || '';
+  const inp = $('#add-due'); if (inp) inp.value = ui.duePick;
+  const lab = $('#due-label'); if (lab) lab.textContent = ui.duePick ? fmtDue(ui.duePick) : 'Due date';
+}
+function shiftDueCal(n) {
+  const [yy, mm] = ui.dueCal.split('-').map(Number);
+  const d = new Date(yy, mm - 1 + n, 1);
+  ui.dueCal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }
 function addEntry() {
   const text = $('#add-text').value.trim();
@@ -659,7 +908,9 @@ function addEntry() {
     text,
     raw: text,
   };
+  if (it.cat === 'deadline') { it.due = $('#add-due').value || iso(addDays(new Date(), 7)); it.done = false; }
   state.days[k] = [...items(k), it].sort((a, b) => a.time.localeCompare(b.time));
+  ui.duePick = '';
   saveState(); render();
 }
 
@@ -674,17 +925,38 @@ document.addEventListener('click', e => {
   else if (a === 'tab') { ui.tab = v; render(); }
   else if (a === 'raw') { ui.openRaw.has(v) ? ui.openRaw.delete(v) : ui.openRaw.add(v); render(); }
   else if (a === 'move') { ui.openMove.add(v); render(); }
+  else if (a === 'layout') { ui.layout = v; render(); }
+  else if (a === 'more') { ui.openFull.has(v) ? ui.openFull.delete(v) : ui.openFull.add(v); render(); }
+  else if (a === 'open') { ui.openNote = v; ui.moveMenu = false; ui.moveConfirm = null; render(); }
+  else if (a === 'close-note') { ui.openNote = null; ui.moveMenu = false; ui.moveConfirm = null; render(); }
+  else if (a === 'move-menu') { ui.moveMenu = !ui.moveMenu; ui.moveConfirm = null; render(); }
+  else if (a === 'move-to') { ui.moveConfirm = v; render(); }
+  else if (a === 'move-no') { ui.moveConfirm = null; render(); }
+  else if (a === 'move-yes') { const f = ui.openNote && findNote(ui.openNote); if (f && ui.moveConfirm) doMove(f.k, f.it.id, ui.moveConfirm); ui.moveConfirm = null; ui.moveMenu = false; render(); }
+  else if (a === 'due-toggle') { ui.dueOpen = !ui.dueOpen; if (ui.dueOpen && !ui.dueCal) ui.dueCal = (ui.duePick || TODAY).slice(0, 7); renderDuePop(); }
+  else if (a === 'due-prev') { shiftDueCal(-1); renderDuePop(); }
+  else if (a === 'due-next') { shiftDueCal(1); renderDuePop(); }
+  else if (a === 'due-day') { setDuePick(v); ui.dueOpen = false; renderDuePop(); }
+  else if (a === 'due-today') { setDuePick(TODAY); ui.dueCal = TODAY.slice(0, 7); ui.dueOpen = false; renderDuePop(); }
+  else if (a === 'due-clear') { setDuePick(''); ui.dueOpen = false; renderDuePop(); }
   else if (a === 'add') addEntry();
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'add-cat') { const w = document.querySelector('.duewrap'); if (w) w.hidden = e.target.value !== 'deadline'; }
   const s = e.target.closest('[data-move]'); if (!s) return;
   const [k, id] = s.dataset.move.split('|');
   const it = items(k).find(x => x.id === id);
   if (it) { it.cat = s.value; it.src = 'manual'; ui.openMove.delete(id); saveState(); render(); }
 });
-document.addEventListener('click', e => { if (!e.target.closest('.theme-wrap')) setMenu(false); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
-window.addEventListener('hashchange', () => { ui.tab = 'all'; render(); window.scrollTo(0, 0); });
+document.addEventListener('click', e => { if (!e.target.closest('.theme-wrap')) setMenu(false); if (ui.dueOpen && e.target.isConnected && !e.target.closest('.duewrap')) { ui.dueOpen = false; renderDuePop(); } });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { setMenu(false); if (ui.dueOpen) { ui.dueOpen = false; renderDuePop(); } if (ui.openNote) { ui.openNote = null; render(); } return; }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target instanceof Element) {
+    const t = e.target.closest('[data-action="open"]');
+    if (t) { e.preventDefault(); ui.openNote = t.dataset.v; render(); }
+  }
+});
+window.addEventListener('hashchange', () => { ui.tab = 'all'; ui.openNote = null; render(); window.scrollTo(0, 0); });
 
 applyPrefs();
 if (!location.hash) history.replaceState(null, '', '#/');
