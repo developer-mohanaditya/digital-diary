@@ -88,6 +88,32 @@ function supabaseStore(env: Env): Store {
         body: JSON.stringify({ next_remind_at: nextIso, snooze_count: 1 }),
       }));
     },
+    async health(day) {
+      // Exact counts come back in the content-range header, so one row is enough.
+      const countOf = async (query: string) => {
+        const res = await check(await fetch(`${base}/${query}`, {
+          headers: { ...headers, Prefer: 'count=exact' },
+        }));
+        const total = Number((res.headers.get('content-range') ?? '').split('/')[1]);
+        return Number.isFinite(total) ? total : 0;
+      };
+      const captures = await countOf('captures?select=id&limit=1');
+      const thoughts = await countOf('thoughts?select=id&limit=1');
+      const todayThoughts = await countOf(`thoughts?day=eq.${day}&select=id&limit=1`);
+      const pendingReminders = await countOf('reminders?status=eq.pending&select=id&limit=1');
+      const lastRes = await check(await fetch(`${base}/captures?select=received_at&order=received_at.desc&limit=1`, { headers }));
+      const lastRows = (await lastRes.json()) as { received_at: string }[];
+      // The heartbeat is the write half of the check: a readable database can still
+      // reject inserts, and this table exists for exactly that signal.
+      await check(await fetch(`${base}/heartbeats`, {
+        method: 'POST', headers: { ...headers, Prefer: 'return=minimal' },
+        body: JSON.stringify([{ note: 'test' }]),
+      }));
+      return {
+        captures, thoughts, todayThoughts, pendingReminders,
+        lastCaptureAt: lastRows[0]?.received_at ?? null, heartbeatOk: true,
+      };
+    },
   };
 }
 

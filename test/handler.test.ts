@@ -29,6 +29,33 @@ describe('handleUpdate', () => {
     expect(n.reply.mock.calls[0][1]).toContain('Send any note');
   });
 
+  it('/test replies with database stats and stores nothing', async () => {
+    const store = fakeStore({
+      health: vi.fn(async () => ({
+        captures: 5, thoughts: 4, todayThoughts: 2, pendingReminders: 1,
+        lastCaptureAt: '2026-10-13T09:12:00Z', heartbeatOk: true,
+      })),
+    });
+    const n = fakeNotifier();
+    expect(await handleUpdate(update('/test'), store, n, SETTINGS, NOW)).toBe('ignored');
+    expect(store.insertCapture).not.toHaveBeenCalled();
+    const text = n.reply.mock.calls[0][1] as string;
+    expect(text).toContain('Database ok.');
+    expect(text).toContain('Entries 4 (2 today)');
+    expect(text).toContain('Reminders pending 1');
+    expect(text).toContain('Heartbeat written.');
+  });
+
+  it('/test reports the real error instead of staying silent', async () => {
+    const store = fakeStore({
+      health: vi.fn(async () => { throw new Error('Supabase 401: invalid api key'); }),
+    });
+    const n = fakeNotifier();
+    expect(await handleUpdate(update('/test'), store, n, SETTINGS, NOW)).toBe('ignored');
+    expect(n.reply.mock.calls[0][1]).toContain('Database check failed');
+    expect(n.reply.mock.calls[0][1]).toContain('Supabase 401');
+  });
+
   it('ignores messages from any chat other than the owner', async () => {
     const store = fakeStore(); const n = fakeNotifier();
     expect(await handleUpdate(update('hi', 999), store, n, SETTINGS, NOW)).toBe('ignored');
