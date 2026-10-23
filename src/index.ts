@@ -1,4 +1,5 @@
 import { handleUpdate, type TelegramUpdate, type Store, type Notifier } from './handler';
+import { groupByDay, type ThoughtRow } from './api';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -154,6 +155,46 @@ async function answerCallback(env: Env, id: string, text: string): Promise<void>
   }
 }
 
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+// Read API for the web interface. Cloudflare Access sits in front of the site and
+// adds this header once a request is authenticated; without it the API would hand
+// the whole diary to anyone who learns the workers.dev URL.
+async function entriesApi(request: Request, env: Env): Promise<Response> {
+  if (!request.headers.get('Cf-Access-Jwt-Assertion')) {
+    return json({ ok: false, error: 'Not signed in. This page sits behind Cloudflare Access.' }, 401);
+  }
+
+  const url = new URL(request.url);
+  const tz = env.DIARY_TZ || 'UTC';
+  const isDay = (v: string | null): v is string => v !== null && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const today = new Date().toISOString().slice(0, 10);
+  const from = isDay(url.searchParams.get('from')) ? url.searchParams.get('from')! : '2020-01-01';
+  const to = isDay(url.searchParams.get('to')) ? url.searchParams.get('to')! : today;
+
+  const base = `${env.SUPABASE_URL}/rest/v1`;
+  const headers = { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` };
+  try {
+    const [thoughtsRes, remindersRes] = await Promise.all([
+      fetch(`${base}/thoughts?day=gte.${from}&day=lte.${to}&select=id,day,category,category_source,mode,clean_text,raw_text,created_at&order=day.asc&limit=1000`, { headers }),
+      fetch(`${base}/reminders?status=eq.pending&select=id,kind,title,due_at,next_remind_at&order=next_remind_at.asc&limit=20`, { headers }),
+    ]);
+    if (!thoughtsRes.ok) {
+      return json({ ok: false, error: `Supabase ${thoughtsRes.status}: ${await thoughtsRes.text()}` }, 502);
+    }
+    const rows = (await thoughtsRes.json()) as ThoughtRow[];
+    const reminders = remindersRes.ok ? await remindersRes.json() : [];
+    return json({ ok: true, timeZone: tz, today, total: rows.length, days: groupByDay(rows, tz), reminders });
+  } catch (err) {
+    return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
+  }
+}
+
 async function webhook(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('unauthorized', { status: 401 });
@@ -225,6 +266,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env);
+    if (url.pathname === '/api/entries' && request.method === 'GET') return entriesApi(request, env);
     return env.ASSETS.fetch(request);
   },
   async scheduled(_event: unknown, env: Env): Promise<void> {

@@ -194,37 +194,18 @@ const CATS = [
   { id:'project',  label:'Project',  color:'#8b5cf6' },
   { id:'life',     label:'Life',     color:'#f0643c' },
   { id:'task',     label:'Task',     color:'#0ea5b7' },
+  { id:'deadline', label:'Deadline', color:'#e05a4f' },
   { id:'inbox',    label:'Inbox',    color:'#9ca3af' },
 ];
 const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 const MODE_LABEL = { refined:'Refined', verbatim:'Verbatim', reason:'Reason', think:'Think' };
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const START = '2026-01-01', TODAY = '2026-10-13';
-const STORE_KEY = 'diary-preview-v4';
-
-const SAMPLES = {
-  class: ['Lecture on indexing: B-trees keep keys sorted, so range queries stay fast.',
-          'Seminar notes: the speaker framed trust as consistency over time.',
-          'Lab: wrote a small parser and broke it three times before it worked.',
-          'Algorithms: amortized analysis of dynamic arrays.'],
-  learning: ['A hash index cannot answer range queries. Obvious now, not at 2am.',
-             'Practiced SQL joins until LEFT JOIN stopped confusing me.',
-             'Read about backpressure: the queue size is the real knob.'],
-  thought: ['Real progress comes from small, repeated steps, not the one big push I keep waiting for.',
-            'I keep building tools before I know the problem. Slow down.',
-            'Maybe a diary is just a memory that answers back.',
-            'Most of my good ideas arrive after I stop trying.'],
-  quote: ['"Stay hungry, stay foolish."', '"The obstacle is the way."', '"Make it work, make it right, make it fast."'],
-  work: ['Shipped the onboarding fix; two support tickets closed.', 'Stand-up: blocked on API keys, unblocked by lunch.'],
-  project: ['Digital Diary: settled on a Cloudflare Worker and Supabase Postgres.', 'Life Board: drafted the widget contract.', 'Diary schema: added the categories table.'],
-  life: ['Gym, slept seven hours. Energy felt steady.', 'Long call with a friend; felt lighter afterwards.', 'Felt scattered in the evening, too many tabs open.'],
-  task: ['Email the professor about the project deadline.', 'Renew the DNS records before Friday.'],
-  inbox: ['Unsorted idea about a monthly review ritual.'],
-};
+let TODAY = '2026-10-13'; // set properly just below, once iso() exists
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+TODAY = iso(new Date());
 const parse = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y, m-1, d); };
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
 const dim = (y, m) => new Date(y, m, 0).getDate();
@@ -232,69 +213,22 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const fmtDay = d => d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 const shortDay = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
 const levelOf = n => n === 0 ? 0 : n <= 2 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4;
-function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-
-function pickCat(r) {
-  const w = { thought:3, learning:2, class:2, quote:1, work:2, project:2, life:2, task:1, inbox:1 };
-  const total = Object.values(w).reduce((a,b) => a+b, 0);
-  let x = r() * total;
-  for (const k in w) { x -= w[k]; if (x < 0) return k; }
-  return 'inbox';
-}
-function pickHour(r) {
-  const x = r();
-  if (x < 0.04) return Math.floor(r() * 5);
-  if (x < 0.55) return 9 + Math.floor(r() * 5);
-  if (x < 0.9)  return 19 + Math.floor(r() * 4);
-  return 12 + Math.floor(r() * 7);
-}
-function pickMode(cat, r) {
-  if (cat === 'quote') return 'verbatim';
-  if (cat === 'thought' && r() < 0.25) return 'reason';
-  if (r() < 0.06) return 'think';
-  if (r() < 0.1) return 'verbatim';
-  return 'refined';
-}
-// Raw = what was spoken or typed before cleanup (sample fillers for the preview).
-function rawOf(text, mode, r) {
-  if (mode === 'verbatim') return text;
-  const fillers = ['um, ', 'so like ', 'uh, ', 'you know, ', 'I mean, '];
-  const f = fillers[Math.floor(r() * fillers.length)];
-  return f + text.toLowerCase().replace(/[.!?]+$/, '').replace(/[,"]/g, '').replace(/\s+/g, ' ') + ' and yeah';
-}
-function generate() {
-  const r = rng(20261013);
-  const days = {};
-  for (let d = parse(START); iso(d) <= TODAY; d = addDays(d, 1)) {
-    const k = iso(d);
-    const n = r() < 0.12 ? 0 : Math.floor(r() * 8) + 1;
-    const list = [];
-    for (let i = 0; i < n; i++) {
-      const cat = pickCat(r);
-      const mode = pickMode(cat, r);
-      const pool = SAMPLES[cat];
-      const text = pool[Math.floor(r() * pool.length)];
-      list.push({
-        id: `${k}-${i}`,
-        time: `${pad(pickHour(r))}:${pad(Math.floor(r() * 60))}`,
-        cat, mode,
-        src: r() < 0.15 ? 'tag' : 'auto',
-        text,
-        raw: rawOf(text, mode, r),
-      });
-    }
-    list.sort((a, b) => a.time.localeCompare(b.time));
-    days[k] = list;
-  }
-  return days;
-}
-function loadState() {
-  try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && s.days) return s; } catch (_) {}
-  return { days: generate() };
-}
-let state = loadState();
-const saveState = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {} };
+/* The diary comes from the Worker's read API; nothing is invented in the browser. */
+let state = { days: {} };
+const saveState = () => {};
 const items = k => state.days[k] || [];
+
+async function loadDiary() {
+  const from = iso(addDays(new Date(), -180));
+  let res;
+  try { res = await fetch(`/api/entries?from=${from}&to=${TODAY}`); }
+  catch (_) { return { error: 'Could not reach the diary API.' }; }
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok || !data || !data.ok) return { error: (data && data.error) || `The diary API answered ${res.status}.` };
+  state.days = data.days || {};
+  return { timeZone: data.timeZone, reminders: data.reminders || [] };
+}
 const tallyInto = (c, list) => list.forEach(it => { c[it.cat] = (c[it.cat] || 0) + 1; });
 
 /* Preferences: theme (Minimal default, Paper, Dark Journal) and light/dark mode. */
@@ -598,6 +532,7 @@ function viewDay(y, m, d) {
           <button class="btn" type="button" data-action="add">Add</button>
         </div>
       </form>
+      <p class="muted" style="margin:8px 0 0">Added here for this tab only. Send it in Telegram to keep it.</p>
     </div>
   </section>`;
 }
@@ -667,6 +602,10 @@ window.addEventListener('hashchange', () => { ui.tab = 'all'; render(); window.s
 applyPrefs();
 if (!location.hash) history.replaceState(null, '', '#/');
 render();
+loadDiary().then(r => {
+  render();
+  if (r.error) $('#app').insertAdjacentHTML('afterbegin', `<section class="card"><span class="kicker">Diary</span><p class="muted">${esc(r.error)}</p></section>`);
+});
 </script>
 </body>
 </html>
