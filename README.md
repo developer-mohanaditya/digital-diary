@@ -17,6 +17,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
   - Category tags: `/class`, `/learn`, `/thought`, `/quote`, `/work`, `/project`, `/life`, `/task`.
   - Tags can be combined with a space: `/push /thought Stay hungry, stay foolish`.
   - `/timezone Asia/Kolkata` sets the timezone used to decide which day an entry belongs to. `/timezone` on its own shows the current one. Older entries keep their day.
+  - `/test` replies with live database counts and writes one heartbeat row, so you can tell a quiet bot from an empty database. It is never saved as an entry.
 - Puts untagged text in Inbox for now.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
 - Serves a web interface from the same Worker (currently a preview with sample data, see `demo/`).
