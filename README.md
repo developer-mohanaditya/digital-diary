@@ -20,7 +20,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
   - `/test` replies with live database counts and writes one heartbeat row, so you can tell a quiet bot from an empty database. It is never saved as an entry.
 - Puts untagged text in Inbox for now.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
-- Serves a web interface from the same Worker (currently a preview with sample data, see `demo/`).
+- Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, behind Cloudflare Access. `public/demo/` keeps the sample-data preview.
 
 ## What is not built yet
 
@@ -43,8 +43,8 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 src/            Worker code: webhook entry point, update handler, command parser
 test/           Tests for the parser and the handler
 migrations/     Database schema, applied in order in the Supabase SQL editor
-public/         Web interface served by the Worker
-demo/           A standalone copy of the interface with sample data
+public/         The web app served by the Worker: index.html, app.js, logo/
+public/demo/    Sample-data preview, kept for design work
 wrangler.toml   Worker configuration (name, routes, cron, timezone)
 ```
 
