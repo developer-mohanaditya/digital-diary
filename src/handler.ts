@@ -1,5 +1,6 @@
 import { parseCommand, type Category, type Mode } from './parse';
 import { parseTimeZoneCommand } from './timezone';
+import { detectReminder, type DetectedReminder } from './reminders';
 
 // Telegram update shape (only the fields we use).
 export interface TelegramUpdate {
@@ -28,15 +29,30 @@ export interface ThoughtInput {
 }
 
 // Storage and reply ports. The Supabase and Telegram adapters implement these.
+export interface ReminderInput {
+  captureId: string;
+  thoughtId: string | null;
+  kind: 'deadline' | 'review';
+  title: string;
+  dueAt: string | null;
+  nextRemindAt: string;
+  source: 'explicit' | 'heuristic' | 'ai';
+}
+
 export interface Store {
   insertCapture(c: CaptureInput): Promise<{ inserted: boolean; id?: string }>;
   insertThought(t: ThoughtInput): Promise<void>;
+  insertReminder?(r: ReminderInput): Promise<void>;
+  listDueReminders?(nowIso: string): Promise<{ id: string; kind: string; title: string; due_at: string | null; snooze_count?: number }[]>;
+  markReminderDone?(id: string): Promise<void>;
+  snoozeReminder?(id: string, nextIso: string): Promise<void>;
   setCaptureStatus(id: string, status: 'done' | 'failed', error?: string): Promise<void>;
   getTimeZone(): Promise<string | null>;
   setTimeZone(zone: string): Promise<void>;
 }
 export interface Notifier {
   reply(chatId: number, text: string): Promise<void>;
+  remind?(chatId: number, reminderId: string, text: string): Promise<void>;
 }
 
 export interface Settings {
@@ -53,7 +69,7 @@ export function localDay(date: Date, timeZone: string): string {
 
 const CATEGORY_LABEL: Record<Category, string> = {
   class: 'Class', learning: 'Learning', thought: 'Thought', quote: 'Quote', work: 'Work',
-  project: 'Project', life: 'Life', task: 'Task', inbox: 'Inbox',
+  project: 'Project', life: 'Life', task: 'Task', inbox: 'Inbox', deadline: 'Deadline',
 };
 
 /**
@@ -119,19 +135,43 @@ export async function handleUpdate(
     return 'rejected';
   }
 
-  // Auto-classification and cleanup come later. Until then, untagged text goes to Inbox.
-  const category: Category = parsed.category ?? 'inbox';
+  // Deadlines + reviews: detect from explicit /deadline, due-words, or review phrases.
+  // Heuristic now, AI upgrade later without schema change.
+  const tz = (await store.getTimeZone()) ?? settings.timeZone;
+  const detected: DetectedReminder | null = detectReminder(msg.text, now, tz);
+  const category: Category = detected?.categoryHint ?? parsed.category ?? 'inbox';
   await store.insertThought({
     capture_id: capture.id,
-    day: localDay(now, (await store.getTimeZone()) ?? settings.timeZone),
+    day: localDay(now, tz),
     captured_at: new Date(msg.date * 1000).toISOString(),
     category,
-    category_source: parsed.categorySource === 'tag' ? 'tag' : 'auto',
+    category_source: parsed.categorySource === 'tag' ? 'tag' : detected ? 'auto' : 'auto',
     mode: parsed.mode,
     clean_text: parsed.body,
     raw_text: parsed.body,
   });
+  if (detected && store.insertReminder) {
+    try {
+      await store.insertReminder({
+        captureId: capture.id,
+        thoughtId: null,
+        kind: detected.kind,
+        title: detected.title,
+        dueAt: detected.dueAt,
+        nextRemindAt: detected.nextRemindAt,
+        source: detected.source,
+      });
+    } catch (err) {
+      console.error('reminder insert failed', err);
+    }
+  }
   await store.setCaptureStatus(capture.id, 'done');
-  await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}.`);
+  if (detected?.kind === 'deadline') {
+    await notifier.reply(msg.chat.id, `Saved to Deadline. I'll ping you daily from 3 days before.`);
+  } else if (detected?.kind === 'review') {
+    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}. I'll remind you to review it.`);
+  } else {
+    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}.`);
+  }
   return 'saved';
 }

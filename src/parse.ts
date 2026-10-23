@@ -3,7 +3,7 @@
 // The first word that is not a known command starts the body, so ordinary text is never swallowed.
 
 export const CATEGORIES = [
-  'class', 'learning', 'thought', 'quote', 'work', 'project', 'life', 'task', 'inbox',
+  'class', 'learning', 'thought', 'quote', 'work', 'project', 'life', 'task', 'inbox', 'deadline',
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
@@ -20,6 +20,7 @@ const CATEGORY_COMMANDS: Record<string, Category> = {
   project: 'project',
   life: 'life',
   task: 'task',
+  deadline: 'deadline',
 };
 
 // Command word -> mode. No tag means "refine".
