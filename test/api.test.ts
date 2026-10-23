@@ -50,4 +50,16 @@ describe('groupByDay', () => {
     expect(days['2026-10-23'].map((e) => e.id)).toEqual(['early', 'late']);
     expect(days['2026-10-22']).toHaveLength(1);
   });
+
+  it('attaches the due date and done flag from the reminder on the same capture', () => {
+    const days = groupByDay(
+      [row({ id: 'a', capture_id: 'cap-1', category: 'deadline' }), row({ id: 'b', capture_id: 'cap-2' })],
+      'UTC',
+      { 'cap-1': { due: '2026-11-03', done: false } },
+    );
+    const [first, second] = days['2026-10-23'];
+    expect(first.due).toBe('2026-11-03');
+    expect(first.done).toBe(false);
+    expect(second.due).toBeUndefined();
+  });
 });

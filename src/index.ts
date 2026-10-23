@@ -1,5 +1,5 @@
 import { handleUpdate, type TelegramUpdate, type Store, type Notifier } from './handler';
-import { groupByDay, type ThoughtRow } from './api';
+import { groupByDay, type DeadlineMark, type ThoughtRow } from './api';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -181,15 +181,23 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
   const headers = { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` };
   try {
     const [thoughtsRes, remindersRes] = await Promise.all([
-      fetch(`${base}/thoughts?day=gte.${from}&day=lte.${to}&select=id,day,category,category_source,mode,clean_text,raw_text,created_at&order=day.asc&limit=1000`, { headers }),
-      fetch(`${base}/reminders?status=eq.pending&select=id,kind,title,due_at,next_remind_at&order=next_remind_at.asc&limit=20`, { headers }),
+      fetch(`${base}/thoughts?day=gte.${from}&day=lte.${to}&select=id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id&order=day.asc&limit=1000`, { headers }),
+      fetch(`${base}/reminders?select=capture_id,kind,title,due_at,next_remind_at,status&order=next_remind_at.asc&limit=200`, { headers }),
     ]);
     if (!thoughtsRes.ok) {
       return json({ ok: false, error: `Supabase ${thoughtsRes.status}: ${await thoughtsRes.text()}` }, 502);
     }
     const rows = (await thoughtsRes.json()) as ThoughtRow[];
-    const reminders = remindersRes.ok ? await remindersRes.json() : [];
-    return json({ ok: true, timeZone: tz, today, total: rows.length, days: groupByDay(rows, tz), reminders });
+    type ReminderRow = { capture_id: string | null; kind: string; title: string; due_at: string | null; next_remind_at: string; status: string };
+    const allReminders = remindersRes.ok ? (await remindersRes.json()) as ReminderRow[] : [];
+    // Deadlines ride along with the note that created them, so the page can show a due badge.
+    const deadlines: Record<string, DeadlineMark> = {};
+    for (const r of allReminders) {
+      if (!r.capture_id) continue;
+      deadlines[r.capture_id] = { due: r.due_at ? r.due_at.slice(0, 10) : null, done: r.status === 'done' };
+    }
+    const reminders = allReminders.filter((r) => r.status === 'pending');
+    return json({ ok: true, timeZone: tz, today, total: rows.length, days: groupByDay(rows, tz, deadlines), reminders });
   } catch (err) {
     return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
   }
