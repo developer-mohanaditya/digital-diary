@@ -18,3 +18,6 @@ crons = ["0 6 * * *", "30 12 * * *"]
 [vars]
 DIARY_TZ = "Europe/Paris"
 ALLOWED_CHAT_ID = "1353449143"
+# Not a secret: RLS keeps the data private, and the service key stays a secret.
+# Kept here so every deploy carries it, instead of depending on dashboard state.
+SUPABASE_URL = "https://rniszgdbwkelkjhnmvgt.supabase.co"
