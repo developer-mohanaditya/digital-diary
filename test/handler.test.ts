@@ -56,6 +56,20 @@ describe('handleUpdate', () => {
     expect(n.reply.mock.calls[0][1]).toContain('Supabase 401');
   });
 
+  it('/test still replies when reading the timezone fails', async () => {
+    const store = fakeStore({
+      getTimeZone: vi.fn(async () => { throw new Error('fetch failed: invalid URL'); }),
+      health: vi.fn(async () => ({
+        captures: 0, thoughts: 0, todayThoughts: 0, pendingReminders: 0,
+        lastCaptureAt: null, heartbeatOk: true,
+      })),
+    });
+    const n = fakeNotifier();
+    expect(await handleUpdate(update('/test'), store, n, SETTINGS, NOW)).toBe('ignored');
+    expect(n.reply.mock.calls[0][1]).toContain('Database check failed');
+    expect(n.reply.mock.calls[0][1]).toContain('invalid URL');
+  });
+
   it('ignores messages from any chat other than the owner', async () => {
     const store = fakeStore(); const n = fakeNotifier();
     expect(await handleUpdate(update('hi', 999), store, n, SETTINGS, NOW)).toBe('ignored');

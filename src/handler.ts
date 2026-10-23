@@ -130,12 +130,12 @@ export async function handleUpdate(
   // stored as a diary entry: the reply is the whole point, and a failure is replied
   // with the real error instead of a silent 500.
   if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/test') {
-    if (!store.health) {
-      await notifier.reply(msg.chat.id, 'Database check is not available in this build.');
-      return 'ignored';
-    }
-    const tz = (await store.getTimeZone()) ?? settings.timeZone;
+    // Everything, the timezone read included, sits inside the try: a diagnostic that
+    // dies silently is worse than no diagnostic at all.
+    let tz = settings.timeZone;
     try {
+      if (!store.health) throw new Error('database check is not available in this build');
+      tz = (await store.getTimeZone()) ?? settings.timeZone;
       const stats = await store.health(localDay(now, tz));
       await notifier.reply(msg.chat.id, formatHealth(stats, tz));
     } catch (err) {
