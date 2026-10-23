@@ -59,33 +59,100 @@ function supabaseStore(env: Env): Store {
         body: JSON.stringify({ status, last_error: error ?? null }),
       }));
     },
+    async insertReminder(r) {
+      await check(await fetch(`${base}/reminders`, {
+        method: 'POST', headers: { ...headers, Prefer: 'return=minimal' },
+        body: JSON.stringify([{
+          capture_id: r.captureId, thought_id: r.thoughtId, kind: r.kind,
+          title: r.title, due_at: r.dueAt, next_remind_at: r.nextRemindAt,
+          status: 'pending', source: r.source,
+        }]),
+      }));
+    },
+    async listDueReminders(nowIso) {
+      const res = await check(await fetch(
+        `${base}/reminders?status=eq.pending&next_remind_at=lte.${encodeURIComponent(nowIso)}&select=id,kind,title,due_at,snooze_count&order=next_remind_at.asc&limit=50`,
+        { headers },
+      ));
+      return (await res.json()) as { id: string; kind: string; title: string; due_at: string | null; snooze_count?: number }[];
+    },
+    async markReminderDone(id) {
+      await check(await fetch(`${base}/reminders?id=eq.${id}`, {
+        method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'done', done_at: new Date().toISOString() }),
+      }));
+    },
+    async snoozeReminder(id, nextIso) {
+      await check(await fetch(`${base}/reminders?id=eq.${id}`, {
+        method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+        body: JSON.stringify({ next_remind_at: nextIso, snooze_count: 1 }),
+      }));
+    },
   };
 }
 
 // Telegram Bot API adapter.
 function telegramNotifier(env: Env): Notifier {
+  const send = async (payload: Record<string, unknown>) => {
+    try {
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.error('telegram reply failed', err);
+    }
+  };
   return {
     async reply(chatId, text) {
-      try {
-        await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text }),
-        });
-      } catch (err) {
-        // A failed reply must not fail the update: the capture is already saved.
-        console.error('telegram reply failed', err);
-      }
+      await send({ chat_id: chatId, text });
+    },
+    async remind(chatId, reminderId, text) {
+      await send({
+        chat_id: chatId,
+        text,
+        reply_markup: { inline_keyboard: [[{ text: 'Done', callback_data: `done:${reminderId}` }]] },
+      });
     },
   };
+}
+
+async function answerCallback(env: Env, id: string, text: string): Promise<void> {
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: id, text }),
+    });
+  } catch (err) {
+    console.error('callback answer failed', err);
+  }
 }
 
 async function webhook(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('unauthorized', { status: 401 });
   }
-  const update = (await request.json()) as TelegramUpdate;
+  const update = (await request.json()) as TelegramUpdate & {
+    callback_query?: { id: string; data?: string; message?: { chat: { id: number } } };
+  };
+  const store = supabaseStore(env);
+  const notifier = telegramNotifier(env);
   try {
-    await handleUpdate(update, supabaseStore(env), telegramNotifier(env), {
+    // Done button: done:<reminderId>
+    if (update.callback_query) {
+      const q = update.callback_query;
+      const chatId = q.message?.chat.id;
+      if (chatId !== Number(env.ALLOWED_CHAT_ID)) return new Response('ok');
+      if (q.data?.startsWith('done:')) {
+        const rid = q.data.slice(5);
+        if (store.markReminderDone) await store.markReminderDone(rid);
+        await answerCallback(env, q.id, 'Marked done. No more pings.');
+      } else {
+        await answerCallback(env, q.id, 'OK');
+      }
+      return new Response('ok');
+    }
+    await handleUpdate(update, store, notifier, {
       allowedChatId: Number(env.ALLOWED_CHAT_ID),
       timeZone: env.DIARY_TZ || 'UTC',
     });
@@ -97,10 +164,37 @@ async function webhook(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function runDue(env: Env): Promise<void> {
+  const store = supabaseStore(env);
+  const notifier = telegramNotifier(env);
+  const chatId = Number(env.ALLOWED_CHAT_ID);
+  if (!store.listDueReminders) return;
+  const due = await store.listDueReminders(new Date().toISOString());
+  for (const r of due) {
+    const label = r.kind === 'deadline' ? 'Deadline' : 'Review';
+    const dueTxt = r.due_at ? ` (due ${r.due_at.slice(0, 10)})` : '';
+    if (notifier.remind) await notifier.remind(chatId, r.id, `${label}${dueTxt}: ${r.title}`);
+    else await notifier.reply(chatId, `${label}${dueTxt}: ${r.title}`);
+    // Reschedule: deadlines daily until due+1d, reviews max 2 pings then done.
+    if (r.kind === 'deadline' && r.due_at && new Date(r.due_at).getTime() > Date.now() && store.snoozeReminder) {
+      const next = new Date(Date.now() + 86400000).toISOString();
+      await store.snoozeReminder(r.id, next);
+    } else if (r.kind === 'review' && (r.snooze_count ?? 0) < 1 && store.snoozeReminder) {
+      const next = new Date(Date.now() + 2 * 86400000).toISOString();
+      await store.snoozeReminder(r.id, next);
+    } else if (store.markReminderDone) {
+      await store.markReminderDone(r.id);
+    }
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env);
     return env.ASSETS.fetch(request);
+  },
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    await runDue(env);
   },
 };
