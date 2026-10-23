@@ -163,6 +163,8 @@ async function webhook(request: Request, env: Env): Promise<Response> {
   };
   const store = supabaseStore(env);
   const notifier = telegramNotifier(env);
+  const ownerId = Number(env.ALLOWED_CHAT_ID);
+  const chatId = update.callback_query ? update.callback_query.message?.chat.id : update.message?.chat.id;
   try {
     // Done button: done:<reminderId>
     if (update.callback_query) {
@@ -184,9 +186,14 @@ async function webhook(request: Request, env: Env): Promise<Response> {
     });
     return new Response('ok');
   } catch (err) {
-    // 500 makes Telegram retry this update later; the unique key prevents duplicates.
+    // Tell the owner instead of failing silently. Answering 200 stops Telegram from
+    // retrying the same update every few minutes for a day, which would turn one
+    // failure into dozens of identical error messages.
     console.error('update failed', err);
-    return new Response('retry', { status: 500 });
+    const reason = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
+    if (chatId !== ownerId) return new Response('retry', { status: 500 });
+    await notifier.reply(ownerId, `Something failed. ${reason}`);
+    return new Response('ok');
   }
 }
 
