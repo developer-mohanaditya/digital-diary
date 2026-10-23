@@ -1,5 +1,5 @@
-// Digital Diary: the served application.
-// Reads the journal from /api/entries (behind Cloudflare Access) and renders it.
+// Digital Diary: the served application (markup lives in index.html).
+// Reads the journal from /api/entries, which sits behind Cloudflare Access.
 const CATS = [
   { id:'class',    label:'Class',    color:'#4f6ef7' },
   { id:'learning', label:'Learning', color:'#14a37f' },
@@ -9,13 +9,13 @@ const CATS = [
   { id:'project',  label:'Project',  color:'#8b5cf6' },
   { id:'life',     label:'Life',     color:'#f0643c' },
   { id:'task',     label:'Task',     color:'#0ea5b7' },
-  { id:'deadline', label:'Deadline', color:'#e05a4f' },
+  { id:'deadline', label:'Deadline', color:'#e5484d' },
   { id:'inbox',    label:'Inbox',    color:'#9ca3af' },
 ];
 const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 const MODE_LABEL = { refined:'Refined', verbatim:'Verbatim', reason:'Reason', think:'Think' };
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-let TODAY = '2026-10-13'; // set properly just below, once iso() exists
+let TODAY = '2026-10-13'; // set from the real clock once iso() exists
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -27,24 +27,30 @@ const dim = (y, m) => new Date(y, m, 0).getDate();
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 const shortDay = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+const fmtDue = k => parse(k).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+const fmtShort2y = k => { const d = parse(k); return `${pad(d.getDate())} ${MONTHS[d.getMonth()].slice(0,3)} ${String(d.getFullYear()).slice(2)}`; };
 const levelOf = n => n === 0 ? 0 : n <= 2 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4;
-/* The diary comes from the Worker's read API; nothing is invented in the browser. */
+/* The diary is read from the Worker's API; nothing here is invented. */
 let state = { days: {} };
 const saveState = () => {};
 const items = k => state.days[k] || [];
+const tallyInto = (c, list) => list.forEach(it => { c[it.cat] = (c[it.cat] || 0) + 1; });
 
 async function loadDiary() {
-  const from = iso(addDays(new Date(), -180));
+  const from = iso(addDays(new Date(), -365));
   let res;
   try { res = await fetch(`/api/entries?from=${from}&to=${TODAY}`); }
   catch (_) { return { error: 'Could not reach the diary API.' }; }
   let data = null;
   try { data = await res.json(); } catch (_) {}
   if (!res.ok || !data || !data.ok) return { error: (data && data.error) || `The diary API answered ${res.status}.` };
-  state.days = data.days || {};
-  return { timeZone: data.timeZone, reminders: data.reminders || [] };
+  const days = {};
+  for (const [k, list] of Object.entries(data.days || {})) {
+    days[k] = list.map(it => ({ sec: 0, pic: false, ...it, k }));
+  }
+  state.days = days;
+  return { timeZone: data.timeZone };
 }
-const tallyInto = (c, list) => list.forEach(it => { c[it.cat] = (c[it.cat] || 0) + 1; });
 
 /* Preferences: theme (Minimal default, Paper, Dark Journal) and light/dark mode. */
 const SUN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
@@ -60,15 +66,113 @@ function applyPrefs() {
   const mb = $('#mode-btn');
   mb.innerHTML = prefs.mode === 'light' ? MOON_ICON : SUN_ICON;
   mb.setAttribute('aria-label', prefs.mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
-  document.querySelectorAll('[role="menuitemradio"]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === prefs.theme)));
 }
 function savePrefs() { try { localStorage.setItem('diary-prefs-v2', JSON.stringify(prefs)); } catch (_) {} }
-function setMenu(open) {
-  $('#theme-menu').hidden = !open;
-  $('#theme-btn').setAttribute('aria-expanded', String(open));
-}
+/* Setup page (setup.html) is the source of truth when present: theme, font, accent, category colors, chip variant. */
+let chipVariant = 'pills';
+try {
+  const sc = JSON.parse(localStorage.getItem('diary-setup-v1'));
+  if (sc) {
+    if (sc.theme) prefs.theme = sc.theme;
+    if (sc.mode) prefs.mode = sc.mode;
+    if (sc.font) document.body.dataset.font = sc.font;
+    if (sc.accent) document.body.style.setProperty('--accent', sc.accent);
+    if (sc.cats) CATS.forEach(c => { if (sc.cats[c.id]) c.color = sc.cats[c.id]; });
+    if (sc.chips) chipVariant = sc.chips;
+  }
+} catch (_) {}
 
-const ui = { range:'month', anchor:TODAY, tab:'all', openRaw:new Set(), openMove:new Set() };
+const ui = { range:'month', anchor:TODAY, tab:'all', layout:'ledger', openNote:null, moveMenu:false, moveConfirm:null, openRaw:new Set(), openMove:new Set(), openFull:new Set(), duePick:'', dueCal:TODAY.slice(0,7), dueOpen:false };
+let pendingNote = null;
+
+/* ---------- Live search (tolerant, no Enter needed) ---------- */
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+function lev(a, b) {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return Math.max(a.length, b.length);
+  if (Math.abs(a.length - b.length) > 1) return 2;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+function tokenScore(qt, words, hay) {
+  if (hay.includes(qt)) return qt.length >= 4 ? 3 : 2;                    // exact substring
+  for (const w of words) {
+    if (w.startsWith(qt)) return 2;                                       // prefix of a word
+    if (qt.length >= 4 && w.length >= 4 && lev(qt, w) <= 1) return 1;     // one typo off
+  }
+  return 0;
+}
+function scoreNote(qtoks, it, k) {
+  const hay = norm(`${it.text} ${CAT[it.cat] ? CAT[it.cat].label : ''} ${MODE_LABEL[it.mode] || ''} ${k} ${fmtDay(parse(k))}`);
+  const words = hay.split(' ');
+  let s = 0;
+  for (const qt of qtoks) {
+    const v = tokenScore(qt, words, hay);
+    if (!v) return -1;                                                    // every token must match somewhere
+    s += v + (norm(it.text).startsWith(qt) ? 1 : 0);
+  }
+  if (norm(it.text).includes(qtoks.join(' '))) s += 3;                    // whole-phrase bonus
+  return s;
+}
+function doSearch(q) {
+  const qtoks = norm(q).split(' ').filter(Boolean);
+  if (!qtoks.length) return [];
+  const out = [];
+  for (const [k, list] of Object.entries(state.days)) for (const it of list) {
+    const s = scoreNote(qtoks, it, k);
+    if (s >= 0) out.push({ k, it, s });
+  }
+  out.sort((a, b) => b.s - a.s || (a.k < b.k ? 1 : -1) || b.it.time.localeCompare(a.it.time));
+  const seen = new Set();
+  return out.filter(r => { const t = norm(r.it.text); if (seen.has(t)) return false; seen.add(t); return true; }).slice(0, 8);
+}
+function hiMark(text, qtoks) {
+  let h = esc(text);
+  for (const qt of qtoks.sort((a, b) => b.length - a.length)) {
+    if (qt.length < 2) continue;
+    try { h = h.replace(new RegExp(`(${qt.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})`, 'ig'), '<mark>$1</mark>'); }
+    catch (_) {}
+  }
+  return h;
+}
+let searchActive = -1;
+function renderSearchPop() {
+  const inp = $('#search'), pop = $('#search-pop');
+  if (!inp || !pop) return;
+  const q = inp.value;
+  if (!norm(q)) { pop.hidden = true; pop.innerHTML = ''; searchActive = -1; return; }
+  const res = doSearch(q), qtoks = norm(q).split(' ').filter(Boolean);
+  searchActive = res.length ? Math.min(Math.max(searchActive, -1), res.length - 1) : -1;
+  pop.innerHTML = res.length ? res.map((r, i) => {
+    const c = CAT[r.it.cat];
+    const { title, body } = splitTitle(r.it.text);
+    const rawTitle = (title || r.it.text.split('\n')[0]).trim();
+    const tShort = rawTitle.length > 64 ? rawTitle.slice(0, 64).trimEnd() + '…' : rawTitle;
+    const rawSnip = (title ? body : r.it.text).replace(/\s+/g, ' ').trim();
+    const snip = rawSnip.length > 110 ? rawSnip.slice(0, 110).trimEnd() + '…' : rawSnip;
+    return `<button type="button" class="srow${i === searchActive ? ' active' : ''}" data-action="search-open" data-v="${r.k}|${r.it.id}" role="option" aria-selected="${i === searchActive}">
+      <span class="sdot" style="background:${c.color}"></span>
+      <span class="stxt"><span class="st1">${hiMark(tShort, qtoks)}</span><span class="sline"><span class="ssnip">${hiMark(snip, qtoks)}</span><span class="smeta2">${c.label} · ${fmtShort2y(r.k)}</span></span></span></button>`;
+  }).join('') : '<div class="sempty">No matches. Try fewer or different words.</div>';
+  pop.hidden = false;
+}
+function hideSearch() { const pop = $('#search-pop'); if (pop) { pop.hidden = true; pop.innerHTML = ''; } searchActive = -1; }
+function openSearchResult(ref) {
+  const i = ref.indexOf('|'), k = ref.slice(0, i);
+  const d = parse(k);
+  const target = `#/y/${d.getFullYear()}/m/${d.getMonth()+1}/d/${d.getDate()}`;
+  hideSearch();
+  const inp = $('#search'); if (inp) inp.value = '';
+  if (location.hash === target) { ui.openNote = ref; ui.moveMenu = false; ui.moveConfirm = null; render(); }
+  else { pendingNote = ref; location.hash = target; }
+  window.scrollTo(0, 0);
+}
 
 function route() {
   const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -232,6 +336,7 @@ function monthSummary(y, m) {
 
 function viewHome() {
   const y = parse(ui.anchor).getFullYear();
+  const openDl = Object.values(state.days).flat().filter(it => it.cat === 'deadline' && !it.done).length;
   const rItems = rangeItems();
   const counts = {}; tallyInto(counts, rItems);
   const activeDays = new Set(rItems.map(it => it.id.slice(0,10))).size;
@@ -249,26 +354,35 @@ function viewHome() {
     <div class="kpi"><b>${counts.thought||0}</b><span>thoughts</span></div>
     <div class="kpi"><b>${counts.learning||0}</b><span>learnings</span></div>
     <div class="kpi"><b>${counts.class||0}</b><span>class notes</span></div>
+    <div class="kpi"><b>${openDl}</b><span>open deadlines</span></div>
     <div class="kpi"><b>${activeDays}</b><span>active days</span></div>
   </section>
   <section class="card">
-    <div class="navrow">
-      <div><span class="kicker">Activity</span><h2 style="margin:2px 0 0">${rangeLabel()}</h2></div>
-      <div class="navrow" style="margin:0;gap:8px">
+    <div class="navrow act-head">
+      <div class="act-title"><span class="kicker">Activity</span><h2 style="margin:2px 0 0">${rangeLabel()}</h2></div>
+      <div class="act-datenav">
         <button class="btn" data-action="shift" data-v="-1" aria-label="Previous">‹</button>
         <button class="btn" data-action="shift" data-v="0">Today</button>
         <button class="btn" data-action="shift" data-v="1" aria-label="Next">›</button>
-        <div class="seg">${seg}</div>
       </div>
+      <div class="seg act-seg">${seg}</div>
     </div>
     ${stackChart(buckets(), 'Activity by category')}
     ${compHTML(counts)}
   </section>
-  <section class="grid2">
-    <div class="card"><span class="kicker">Calendar</span><h2>${y} at a glance</h2>${yearHeat(y)}</div>
-    <div class="card"><span class="kicker">When you write</span><h2>Hour of day · all time</h2>${hourHistogram()}</div>
-  </section>
+  <section class="card"><span class="kicker">Calendar</span><h2>${y} at a glance</h2>${yearHeat(y)}</section>
+  <section class="card"><span class="kicker">When you write</span><h2>Hour of day · all time</h2>${hourHistogram()}</section>
   <section class="card"><span class="kicker">Folders</span><h2>${y}</h2><div class="folders">${months}</div></section>`;
+}
+
+function monthLedger(y, m) {
+  const its = [];
+  for (let d = 1; d <= dim(y, m); d++) { const k = `${y}-${pad(m)}-${pad(d)}`; items(k).forEach(it => its.push({ ...it, k })); }
+  if (!its.length) return '<p class="muted">Nothing here yet.</p>';
+  return CATS.filter(c => its.some(it => it.cat === c.id)).map(c => {
+    const rows = its.filter(it => it.cat === c.id).sort((a, b) => a.k === b.k ? a.time.localeCompare(b.time) : (a.k < b.k ? -1 : 1));
+    return `<div class="lgrp"><i class="gdot" style="background:${c.color}"></i>${c.label} <span class="n">(${rows.length})</span></div><div class="ledg">${rows.map(it => ledgerRowHTML(it, it.k, true)).join('')}</div>`;
+  }).join('');
 }
 
 function viewMonth(y, m) {
@@ -292,9 +406,29 @@ function viewMonth(y, m) {
     <div class="card"><span class="kicker">Mix</span><h2>Categories this month</h2>${donut(counts)}</div>
   </section>
   <section class="card"><span class="kicker">Summary</span><h2>${MONTHS[m-1]} in review</h2>${monthSummary(y, m)}</section>
+  <section class="card"><span class="kicker">Ledger</span><h2>Everything this month, by category</h2>${monthLedger(y, m)}</section>
   <section class="card"><span class="kicker">Days</span><h2>Folders</h2><div class="folders">${folders}</div></section>`;
 }
 
+/* Deadlines carry their own schema: a due date plus done flag, rendered as status pills. */
+function dueDays(due) { return Math.round((parse(due) - parse(TODAY)) / 864e5); }
+function duePill(it) {
+  if (it.cat !== 'deadline') return '';
+  if (it.done) return '<span class="due done">Done</span>';
+  if (!it.due) return '';
+  const n = dueDays(it.due);
+  if (n < 0) return `<span class="due over">Overdue ${-n}d</span>`;
+  if (n === 0) return '<span class="due soon">Due today</span>';
+  if (n === 1) return '<span class="due soon">Due tomorrow</span>';
+  return `<span class="due soon">Due in ${n}d</span>`;
+}
+function dueLine(it) {
+  if (it.cat !== 'deadline') return '';
+  const when = it.due ? fmtDay(parse(it.due)) : 'No due date';
+  const n = it.due ? dueDays(it.due) : null;
+  const st = it.done ? 'Done' : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
+  return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span></div>`;
+}
 function entryHTML(it, k) {
   const c = CAT[it.cat];
   const rawOpen = ui.openRaw.has(it.id), moveOpen = ui.openMove.has(it.id);
@@ -302,7 +436,7 @@ function entryHTML(it, k) {
   return `
     <article class="entry" style="--c:${c.color}">
       <div class="meta">
-        <span class="time">${it.time}</span><span class="chip">${c.label}</span><span class="mode">${MODE_LABEL[it.mode]}</span>
+        <span class="time">${it.time}</span><span class="chip">${c.label}</span><span class="mode">${MODE_LABEL[it.mode]}</span>${duePill(it)}
         <button class="rawtag" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}">Raw</button>
       </div>
       <p>${esc(it.text)}</p>
@@ -316,26 +450,115 @@ function entryHTML(it, k) {
     </article>`;
 }
 
+function ledgerRowHTML(it, k, withDay = false) {
+  return `<div class="lrow clickable" data-action="open" data-v="${k}|${it.id}" tabindex="0" role="button" title="Open note">
+      <span class="ltime${withDay ? ' wide' : ''}">${withDay ? `${+it.k.slice(8)} ${it.time}` : it.time}</span>
+      <span class="ltxt clamp">${esc(it.text)}</span>${duePill(it)}
+    </div>`;
+}
+function findNote(ref) {
+  const i = ref.indexOf('|');
+  const k = ref.slice(0, i), id = ref.slice(i + 1);
+  const it = (items(k) || []).find(x => x.id === id);
+  return it ? { k, it } : null;
+}
+function doMove(k, id, cat) {
+  const it = (items(k) || []).find(x => x.id === id);
+  if (it) { it.cat = cat; it.src = 'manual'; if (cat === 'deadline' && !it.due) { it.due = iso(addDays(parse(k), 7)); it.done = false; } saveState(); }
+}
+function splitTitle(t) {
+  const s = String(t || '');
+  const nl = s.indexOf('\n');
+  if (nl > 0) {
+    const head = s.slice(0, nl).trim();
+    const rest = s.slice(nl + 1).trim();
+    if (head && head.length <= 120 && rest) return { title: head, body: rest };
+  }
+  const m = s.match(/^([^:\n\.?!]{3,48}):\s+(.{20,})$/s);
+  if (m) return { title: m[1].trim(), body: m[2].trim() };
+  return { title: '', body: s };
+}
+function noteTitleBody(t) {
+  const { title, body } = splitTitle(t);
+  return (title ? `<h3 class="stitle">${esc(title)}</h3>` : '') + `<p class="sfull">${esc(body)}</p>`;
+}
+function noteHTML(ref) {
+  const found = findNote(ref);
+  if (!found) return '';
+  const { k, it } = found;
+  const c = CAT[it.cat];
+  const hasRaw = it.raw && it.raw !== it.text;
+  const rawOpen = ui.openRaw.has(it.id);
+  const opts = CATS.map(x => `<option value="${x.id}"${x.id === it.cat ? ' selected' : ''}>${x.label}</option>`).join('');
+  const moveOpen = ui.moveMenu;
+  return `<div class="overlay"><div class="backdrop" data-action="close-note"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Note">
+      <div class="shead"><span class="sdot" style="background:${c.color}"></span><strong>${c.label}</strong><span class="mode">${MODE_LABEL[it.mode]}</span><span class="spacer"></span>${hasRaw ? `<button class="hbtn" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}" title="${rawOpen ? 'Hide raw' : 'Show raw'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6"/></svg></button>` : ''}<button class="hbtn" data-action="move-menu" aria-expanded="${moveOpen}" title="Move to another category"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14l3 3 3-3"/></svg></button><button class="xbtn" data-action="close-note" aria-label="Close">\u00d7</button></div>
+      ${moveOpen ? `<div class="mmenu" role="menu">${ui.moveConfirm ? `<div class="mconf"><span>Move to <b>${CAT[ui.moveConfirm].label}</b>?</span><span class="row"><button class="btn" data-action="move-yes">Yes</button><button class="btn" data-action="move-no">No</button></span></div>` : CATS.map(x => `<button data-action="move-to" data-v="${x.id}" aria-checked="${x.id === it.cat}"><i style="background:${x.color}"></i>${x.label}</button>`).join('')}</div>` : ''}
+      <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}:${pad(it.sec || 0)}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : 'Auto filed'}</div>
+      ${dueLine(it)}
+      ${noteTitleBody(it.text)}
+      ${it.photo ? `<figure class="sfigure"><img src="${it.photo.src}" alt="Attached photo" loading="lazy" /></figure>` : ''}
+      ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
+    </div></div>`;
+}
+function dayTabsHTML(tabDefs) {
+  const col = id => id === 'all' ? 'var(--accent)' : CAT[id].color;
+  const btn = (t, cls = '', extra = '') => `<button${cls ? ` class="${cls}"` : ''} role="tab" data-action="tab" data-v="${t.id}" aria-selected="${ui.tab===t.id}"${extra}>`;
+  if (chipVariant === 'underline' || chipVariant === 'colorline') {
+    const colorful = chipVariant === 'colorline' ? ' colorful' : '';
+    return `<div class="utabs${colorful}" role="tablist">` + tabDefs.map(t =>
+      `${btn(t, '', colorful ? ` style="--c:${col(t.id)}"` : '')}${t.label}<sup>${t.n}</sup></button>`).join('') + '</div>';
+  }
+  if (chipVariant === 'dotchips') {
+    return `<div class="ctabs" role="tablist">` + tabDefs.map(t =>
+      `${btn(t, '', ` style="--c:${col(t.id)}"`)}<i style="background:${col(t.id)}"></i>${t.label}<em>${t.n}</em></button>`).join('') + '</div>';
+  }
+  if (chipVariant === 'segmented') {
+    return `<div class="segbar" role="tablist">` + tabDefs.map(t => `${btn(t)}${t.label}<small> ${t.n}</small></button>`).join('') + '</div>';
+  }
+  if (chipVariant === 'dropdown') {
+    return `<div class="dday" style="margin:0 0 0 auto"><select id="daycat-sel" aria-label="Filter by category">` +
+      tabDefs.map(t => `<option value="${t.id}"${ui.tab===t.id ? ' selected' : ''}>${t.label} · ${t.n}</option>`).join('') + '</select></div>';
+  }
+  return `<div class="tabs tabs-inline" role="tablist">` + tabDefs.map(t =>
+    `${btn(t, 'tab')}${t.label}<small>${t.n}</small></button>`).join('') + '</div>';
+}
+function ledgerHTML(list, k) {
+  if (!list.length) return '<p class="muted">Nothing here yet.</p>';
+  if (ui.tab !== 'all') return `<div class="ledg">${list.map(it => ledgerRowHTML(it, k)).join('')}</div>`;
+  return CATS.filter(c => list.some(it => it.cat === c.id)).map(c => {
+    const rows = list.filter(it => it.cat === c.id);
+    return `<div class="lgrp"><i class="gdot" style="background:${c.color}"></i>${c.label} <span class="n">(${rows.length})</span></div><div class="ledg">${rows.map(it => ledgerRowHTML(it, k)).join('')}</div>`;
+  }).join('');
+}
+
 function viewDay(y, m, d) {
   const k = `${y}-${pad(m)}-${pad(d)}`, date = parse(k), list = items(k);
+  const dow = date.toLocaleDateString('en-GB', { weekday:'long' });
+  const narrow = (typeof matchMedia === 'function') && matchMedia('(max-width:600px)').matches;
+  const mon = narrow ? MONTHS[date.getMonth()].slice(0, 3) : MONTHS[date.getMonth()];
+  const dmy = `${date.getDate()} ${mon} ${String(date.getFullYear()).slice(2)}`;
   const counts = {}; tallyInto(counts, list);
+  if (ui.tab !== 'all' && !(counts[ui.tab] > 0)) ui.tab = 'all';
   const shown = ui.tab === 'all' ? list : list.filter(it => it.cat === ui.tab);
-  const tabDefs = [{ id:'all', label:'All', n:list.length }, ...CATS.map(c => ({ id:c.id, label:c.label, n:counts[c.id]||0 }))];
-  const tabs = tabDefs.map(t => `<button class="tab${t.n ? '' : ' zero'}" role="tab" data-action="tab" data-v="${t.id}" aria-selected="${ui.tab===t.id}">${t.label}<small>${t.n}</small></button>`).join('');
+  const tabDefs = [{ id:'all', label:'All', n:list.length }, ...CATS.filter(c => counts[c.id] > 0).map(c => ({ id:c.id, label:c.label, n:counts[c.id] }))];
+  const tabs = dayTabsHTML(tabDefs);
   const strip = Array.from({ length:24 }, (_, h) => {
     const n = list.filter(it => +it.time.slice(0,2) === h).length;
     return `<div class="${n ? 'has' : ''}" style="height:${n ? Math.min(100, 18 + n * 22) : 4}%" title="${pad(h)}:00 · ${n}"></div>`;
   }).join('');
-  const entries = shown.length ? shown.map(it => entryHTML(it, k)).join('') : '<p class="muted">Nothing here yet.</p>';
+  const entries = shown.length ? ledgerHTML(shown, k) : '<p class="muted">Nothing here yet.</p>';
   const dayLink = dt => `#/y/${dt.getFullYear()}/m/${dt.getMonth()+1}/d/${dt.getDate()}`;
   return `
-  <section class="hero"><span class="kicker">${list.length} items</span><h1>${fmtDay(date)}</h1>
-    <div class="navrow" style="margin-top:10px;gap:8px">
-      <a class="btn" href="${dayLink(addDays(date, -1))}">‹ Previous day</a>
-      <a class="btn" href="${dayLink(addDays(date, 1))}">Next day ›</a>
+  <section class="hero dayhead">
+    <div class="daynav">
+      <a class="btn" href="${dayLink(addDays(date, -1))}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span class="bl-full">Previous day</span><span class="bl-short">Previous</span></a>
+      <h1 class="daytitle"><span class="dow">${dow}</span><span class="dmy">${dmy}</span></h1>
+      <a class="btn" href="${dayLink(addDays(date, 1))}"><span class="bl-full">Next day</span><span class="bl-short">Next</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a>
     </div>
   </section>
-  <section class="card"><span class="kicker">Categories</span><div class="tabs" role="tablist">${tabs}</div>${entries}</section>
+  <section class="card"><div class="lhead"><span class="kicker">Categories</span>${tabs}</div>${entries}</section>
   <section class="grid2">
     <div class="card"><span class="kicker">Timeline</span><h2>Hours</h2><div class="strip">${strip}</div><div class="ticks">${Array.from({length:24},(_,h)=>`<span>${h%3===0?pad(h):''}</span>`).join('')}</div></div>
     <div class="card"><span class="kicker">New note</span><h2>Add an item</h2>
@@ -344,10 +567,14 @@ function viewDay(y, m, d) {
         <div class="row">
           <select id="add-mode"><option value="refined">Refined</option><option value="verbatim">Verbatim (/push)</option><option value="reason">Reason (/reason)</option><option value="think">Think (/think)</option></select>
           <select id="add-cat"><option value="">Auto (Inbox for now)</option>${CATS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}</select>
+          <span class="duewrap" hidden>
+            <button class="btn duebtn" type="button" data-action="due-toggle" aria-haspopup="dialog" aria-expanded="false" title="Pick a due date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="due-label">${ui.duePick ? esc(fmtDue(ui.duePick)) : 'Due date'}</span></button>
+            <input type="hidden" id="add-due" value="${ui.duePick || ''}" />
+            <div class="duepop" id="due-pop" role="dialog" aria-label="Pick a due date" hidden></div>
+          </span>
           <button class="btn" type="button" data-action="add">Add</button>
         </div>
       </form>
-      <p class="muted" style="margin:8px 0 0">Added here for this tab only. Send it in Telegram to keep it.</p>
     </div>
   </section>`;
 }
@@ -355,7 +582,7 @@ function viewDay(y, m, d) {
 function renderCrumbs(r) {
   let html = '<a href="#/">Home</a>';
   if (r.view !== 'home') html += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
-  if (r.view === 'day') html += `<span class="sep">/</span><span>${r.d}</span>`;
+  if (r.view === 'day') html += `<span class="sep">/</span><span>${r.d}</span><span class="c-count">${items(`${r.y}-${pad(r.m)}-${pad(r.d)}`).length} items</span>`;
   $('#crumbs').innerHTML = html;
 }
 function render() {
@@ -363,6 +590,8 @@ function render() {
   renderCrumbs(r);
   if (r.view === 'day') ui.anchor = `${r.y}-${pad(r.m)}-${pad(r.d)}`;
   $('#app').innerHTML = r.view === 'home' ? viewHome() : r.view === 'month' ? viewMonth(r.y, r.m) : viewDay(r.y, r.m, r.d);
+  document.querySelector('.overlay')?.remove();
+  if (ui.openNote) { const h = noteHTML(ui.openNote); if (h) document.body.insertAdjacentHTML('beforeend', h); else ui.openNote = null; }
 }
 function shiftAnchor(n) {
   const a = parse(ui.anchor);
@@ -371,6 +600,35 @@ function shiftAnchor(n) {
   else if (ui.range === 'month') ui.anchor = iso(new Date(a.getFullYear(), a.getMonth() + n, 1));
   else ui.anchor = `${a.getFullYear() + n}-01-01`;
   if (ui.anchor > TODAY) ui.anchor = TODAY;
+}
+/* Custom due-date picker in the site's own design language (replaces the native date popup). */
+function dueCalHTML() {
+  const [yy, mm] = ui.dueCal.split('-').map(Number);
+  const lead = (new Date(yy, mm - 1, 1).getDay() + 6) % 7;
+  let cells = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x => `<span class="dow">${x}</span>`).join('');
+  for (let i = 0; i < lead; i++) cells += '<span></span>';
+  for (let d = 1; d <= dim(yy, mm); d++) {
+    const k = `${yy}-${pad(mm)}-${pad(d)}`;
+    const cls = k === ui.duePick ? 'sel' : k === TODAY ? 'today' : '';
+    cells += `<button type="button" class="dbtn ${cls}" data-action="due-day" data-v="${k}">${d}</button>`;
+  }
+  return `<div class="dhead"><button type="button" class="btn" data-action="due-prev" aria-label="Previous month">‹</button><strong>${MONTHS[mm - 1]} ${yy}</strong><button type="button" class="btn" data-action="due-next" aria-label="Next month">›</button></div><div class="dgrid">${cells}</div><div class="dfoot"><button type="button" class="link" data-action="due-today">Today</button><button type="button" class="link" data-action="due-clear">Clear</button></div>`;
+}
+function renderDuePop() {
+  const pop = $('#due-pop'); if (!pop) return;
+  pop.innerHTML = dueCalHTML();
+  pop.hidden = !ui.dueOpen;
+  document.querySelector('.duebtn')?.setAttribute('aria-expanded', String(ui.dueOpen));
+}
+function setDuePick(v) {
+  ui.duePick = v || '';
+  const inp = $('#add-due'); if (inp) inp.value = ui.duePick;
+  const lab = $('#due-label'); if (lab) lab.textContent = ui.duePick ? fmtDue(ui.duePick) : 'Due date';
+}
+function shiftDueCal(n) {
+  const [yy, mm] = ui.dueCal.split('-').map(Number);
+  const d = new Date(yy, mm - 1 + n, 1);
+  ui.dueCal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }
 function addEntry() {
   const text = $('#add-text').value.trim();
@@ -387,7 +645,9 @@ function addEntry() {
     text,
     raw: text,
   };
+  if (it.cat === 'deadline') { it.due = $('#add-due').value || iso(addDays(new Date(), 7)); it.done = false; }
   state.days[k] = [...items(k), it].sort((a, b) => a.time.localeCompare(b.time));
+  ui.duePick = '';
   saveState(); render();
 }
 
@@ -395,29 +655,71 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-action]'); if (!t) return;
   const a = t.dataset.action, v = t.dataset.v;
   if (a === 'mode-toggle') { prefs.mode = prefs.mode === 'light' ? 'dark' : 'light'; applyPrefs(); savePrefs(); }
-  else if (a === 'theme-menu') setMenu($('#theme-menu').hidden);
-  else if (a === 'theme') { prefs.theme = v; applyPrefs(); savePrefs(); setMenu(false); }
   else if (a === 'range') { ui.range = v; render(); }
   else if (a === 'shift') { if (v === '0') ui.anchor = TODAY; else shiftAnchor(+v); render(); }
   else if (a === 'tab') { ui.tab = v; render(); }
-  else if (a === 'raw') { ui.openRaw.has(v) ? ui.openRaw.delete(v) : ui.openRaw.add(v); render(); }
+  else if (a === 'raw') { if (ui.moveMenu) { ui.moveMenu = false; ui.moveConfirm = null; } ui.openRaw.has(v) ? ui.openRaw.delete(v) : ui.openRaw.add(v); render(); }
   else if (a === 'move') { ui.openMove.add(v); render(); }
+  else if (a === 'more') { ui.openFull.has(v) ? ui.openFull.delete(v) : ui.openFull.add(v); render(); }
+  else if (a === 'open') { ui.openNote = v; ui.moveMenu = false; ui.moveConfirm = null; render(); }
+  else if (a === 'close-note') { ui.openNote = null; ui.moveMenu = false; ui.moveConfirm = null; render(); }
+  else if (a === 'move-menu') { ui.moveMenu = !ui.moveMenu; ui.moveConfirm = null; render(); }
+  else if (a === 'move-to') { ui.moveConfirm = v; render(); }
+  else if (a === 'move-no') { ui.moveConfirm = null; render(); }
+  else if (a === 'move-yes') { const f = ui.openNote && findNote(ui.openNote); if (f && ui.moveConfirm) doMove(f.k, f.it.id, ui.moveConfirm); ui.moveConfirm = null; ui.moveMenu = false; render(); }
+  else if (a === 'due-toggle') { ui.dueOpen = !ui.dueOpen; if (ui.dueOpen && !ui.dueCal) ui.dueCal = (ui.duePick || TODAY).slice(0, 7); renderDuePop(); }
+  else if (a === 'due-prev') { shiftDueCal(-1); renderDuePop(); }
+  else if (a === 'due-next') { shiftDueCal(1); renderDuePop(); }
+  else if (a === 'due-day') { setDuePick(v); ui.dueOpen = false; renderDuePop(); }
+  else if (a === 'due-today') { setDuePick(TODAY); ui.dueCal = TODAY.slice(0, 7); ui.dueOpen = false; renderDuePop(); }
+  else if (a === 'due-clear') { setDuePick(''); ui.dueOpen = false; renderDuePop(); }
   else if (a === 'add') addEntry();
+  else if (a === 'search-open') openSearchResult(v);
+});
+document.addEventListener('input', e => { if (e.target && e.target.id === 'search') { searchActive = -1; renderSearchPop(); } });
+document.addEventListener('keydown', e => {
+  const inp = e.target && e.target.id === 'search' ? e.target : null;
+  if (!inp) return;
+  const pop = $('#search-pop');
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const n = pop ? pop.querySelectorAll('[data-action="search-open"]').length : 0;
+    if (!n) return;
+    e.preventDefault();
+    searchActive = e.key === 'ArrowDown' ? (searchActive + 1) % n : (searchActive - 1 + n) % n;
+    renderSearchPop();
+  } else if (e.key === 'Enter') {
+    const first = pop ? pop.querySelector(searchActive >= 0 ? `[data-action="search-open"]:nth-child(${searchActive + 1})` : '[data-action="search-open"]') : null;
+    if (first) { e.preventDefault(); openSearchResult(first.dataset.v); }
+  }
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'daycat-sel') { ui.tab = e.target.value; render(); return; }
+  if (e.target.id === 'add-cat') { const w = document.querySelector('.duewrap'); if (w) w.hidden = e.target.value !== 'deadline'; }
   const s = e.target.closest('[data-move]'); if (!s) return;
   const [k, id] = s.dataset.move.split('|');
   const it = items(k).find(x => x.id === id);
   if (it) { it.cat = s.value; it.src = 'manual'; ui.openMove.delete(id); saveState(); render(); }
 });
-document.addEventListener('click', e => { if (!e.target.closest('.theme-wrap')) setMenu(false); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
-window.addEventListener('hashchange', () => { ui.tab = 'all'; render(); window.scrollTo(0, 0); });
+document.addEventListener('click', e => { if (ui.dueOpen && e.target.isConnected && !e.target.closest('.duewrap')) { ui.dueOpen = false; renderDuePop(); } if (!e.target.closest('.search-wrap')) hideSearch(); });
+/* Move menu is transient: any click outside it (or on RAW) collapses it. RAW itself stays put. */
+document.addEventListener('click', e => {
+  if (!ui.moveMenu || !ui.openNote) return;
+  if (e.target.closest('.mmenu, [data-action="move-menu"], [data-action="move-to"], [data-action="move-yes"], [data-action="move-no"]')) return;
+  ui.moveMenu = false; ui.moveConfirm = null; render();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if (ui.dueOpen) { ui.dueOpen = false; renderDuePop(); } if (ui.openNote) { ui.openNote = null; render(); } return; }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target instanceof Element) {
+    const t = e.target.closest('[data-action="open"]');
+    if (t) { e.preventDefault(); ui.openNote = t.dataset.v; render(); }
+  }
+});
+window.addEventListener('hashchange', () => { ui.tab = 'all'; ui.openNote = pendingNote; pendingNote = null; render(); window.scrollTo(0, 0); });
 
 applyPrefs();
 if (!location.hash) history.replaceState(null, '', '#/');
 render();
 loadDiary().then(r => {
   render();
-  if (r.error) $('#app').insertAdjacentHTML('afterbegin', `<section class="card"><span class="kicker">Diary</span><p class="muted">${esc(r.error)}</p></section>`);
+  if (r.error) $('#app').insertAdjacentHTML('afterbegin', `<div class="muted" style="padding:16px 0">${esc(r.error)}</div>`);
 });
