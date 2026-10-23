@@ -39,6 +39,16 @@ export interface ReminderInput {
   source: 'explicit' | 'heuristic' | 'ai';
 }
 
+// Result of the /test database round-trip: reads plus one heartbeat write.
+export interface HealthStats {
+  captures: number;
+  thoughts: number;
+  todayThoughts: number;
+  pendingReminders: number;
+  lastCaptureAt: string | null;
+  heartbeatOk: boolean;
+}
+
 export interface Store {
   insertCapture(c: CaptureInput): Promise<{ inserted: boolean; id?: string }>;
   insertThought(t: ThoughtInput): Promise<void>;
@@ -46,6 +56,7 @@ export interface Store {
   listDueReminders?(nowIso: string): Promise<{ id: string; kind: string; title: string; due_at: string | null; snooze_count?: number }[]>;
   markReminderDone?(id: string): Promise<void>;
   snoozeReminder?(id: string, nextIso: string): Promise<void>;
+  health?(day: string): Promise<HealthStats>;
   setCaptureStatus(id: string, status: 'done' | 'failed', error?: string): Promise<void>;
   getTimeZone(): Promise<string | null>;
   setTimeZone(zone: string): Promise<void>;
@@ -65,6 +76,22 @@ export type Outcome = 'saved' | 'rejected' | 'duplicate' | 'ignored';
 // Local calendar day (YYYY-MM-DD) for a timestamp in the given IANA timezone.
 export function localDay(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+// The /test reply: what the database actually holds, so a silent bot is distinguishable
+// from an empty database.
+export function formatHealth(stats: HealthStats, timeZone: string): string {
+  const last = stats.lastCaptureAt
+    ? new Intl.DateTimeFormat('en-GB', { timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(stats.lastCaptureAt))
+    : null;
+  return [
+    'Database ok.',
+    `Entries ${stats.thoughts} (${stats.todayThoughts} today)`,
+    `Messages captured ${stats.captures}`,
+    `Reminders pending ${stats.pendingReminders}`,
+    last ? `Last note ${last} (${timeZone})` : 'Last note: none yet',
+    stats.heartbeatOk ? 'Heartbeat written.' : 'Heartbeat not written.',
+  ].join('\n');
 }
 
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -94,8 +121,27 @@ export async function handleUpdate(
   if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/start') {
     await notifier.reply(
       msg.chat.id,
-      'Send any note and it goes into your diary. Start with /push, /learn, /thought, /quote, /work, /project, /life or /task to pick a category. Use /reason or /think for a longer take. Set your timezone with /timezone Europe/Paris.',
+      'Send any note and it goes into your diary. Start with /push, /learn, /thought, /quote, /work, /project, /life or /task to pick a category. Use /reason or /think for a longer take. Set your timezone with /timezone Europe/Paris. Send /test to check the database connection.',
     );
+    return 'ignored';
+  }
+
+  // /test: read a few counts and write one heartbeat, then report them. It is never
+  // stored as a diary entry: the reply is the whole point, and a failure is replied
+  // with the real error instead of a silent 500.
+  if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/test') {
+    if (!store.health) {
+      await notifier.reply(msg.chat.id, 'Database check is not available in this build.');
+      return 'ignored';
+    }
+    const tz = (await store.getTimeZone()) ?? settings.timeZone;
+    try {
+      const stats = await store.health(localDay(now, tz));
+      await notifier.reply(msg.chat.id, formatHealth(stats, tz));
+    } catch (err) {
+      const reason = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
+      await notifier.reply(msg.chat.id, `Database check failed. ${reason}`);
+    }
     return 'ignored';
   }
 
