@@ -15,6 +15,13 @@ export interface ThoughtRow {
   clean_text: string;
   raw_text?: string | null;
   created_at: string;
+  capture_id?: string | null;
+}
+
+// A reminder attached to the note that created it, keyed by capture id.
+export interface DeadlineMark {
+  due: string | null;   // YYYY-MM-DD
+  done: boolean;
 }
 
 export interface UiEntry {
@@ -25,6 +32,8 @@ export interface UiEntry {
   src: string;
   text: string;
   raw: string;
+  due?: string | null;
+  done?: boolean;
 }
 
 // Stored modes are the command names; the interface shows the friendlier label.
@@ -42,8 +51,8 @@ export function clock(stamp: string, timeZone: string): string {
   }).format(new Date(stamp));
 }
 
-export function toUiEntry(row: ThoughtRow, timeZone: string): UiEntry {
-  return {
+export function toUiEntry(row: ThoughtRow, timeZone: string, deadline?: DeadlineMark): UiEntry {
+  const entry: UiEntry = {
     id: row.id,
     time: clock(row.created_at, timeZone),
     // A category the interface has no colour for would crash its renderer.
@@ -53,12 +62,22 @@ export function toUiEntry(row: ThoughtRow, timeZone: string): UiEntry {
     text: row.clean_text,
     raw: row.raw_text || row.clean_text,
   };
+  if (deadline) {
+    entry.due = deadline.due;
+    entry.done = deadline.done;
+  }
+  return entry;
 }
 
-export function groupByDay(rows: ThoughtRow[], timeZone: string): Record<string, UiEntry[]> {
+export function groupByDay(
+  rows: ThoughtRow[],
+  timeZone: string,
+  deadlines: Record<string, DeadlineMark> = {},
+): Record<string, UiEntry[]> {
   const days: Record<string, UiEntry[]> = {};
   for (const row of rows) {
-    (days[row.day] ||= []).push(toUiEntry(row, timeZone));
+    const mark = row.capture_id ? deadlines[row.capture_id] : undefined;
+    (days[row.day] ||= []).push(toUiEntry(row, timeZone, mark));
   }
   for (const list of Object.values(days)) list.sort((a, b) => a.time.localeCompare(b.time));
   return days;
