@@ -33,7 +33,7 @@ describe('handleUpdate', () => {
     expect(n.reply.mock.calls[0][1]).toContain('Send any note');
   });
 
-  it('/test replies with database stats and stores nothing', async () => {
+  it('/heartbeat replies with database stats and stores nothing', async () => {
     const store = fakeStore({
       health: vi.fn(async () => ({
         captures: 5, thoughts: 4, todayThoughts: 2, pendingReminders: 1,
@@ -41,7 +41,7 @@ describe('handleUpdate', () => {
       })),
     });
     const n = fakeNotifier();
-    expect(await handleUpdate(update('/test'), store, n, SETTINGS, NOW)).toBe('ignored');
+    expect(await handleUpdate(update('/heartbeat'), store, n, SETTINGS, NOW)).toBe('ignored');
     expect(store.insertCapture).not.toHaveBeenCalled();
     const text = n.reply.mock.calls[0][1] as string;
     expect(text).toContain('Database ok.');
@@ -50,17 +50,17 @@ describe('handleUpdate', () => {
     expect(text).toContain('Heartbeat written.');
   });
 
-  it('/test reports the real error instead of staying silent', async () => {
+  it('/heartbeat reports the real error instead of staying silent', async () => {
     const store = fakeStore({
       health: vi.fn(async () => { throw new Error('Supabase 401: invalid api key'); }),
     });
     const n = fakeNotifier();
-    expect(await handleUpdate(update('/test'), store, n, SETTINGS, NOW)).toBe('ignored');
+    expect(await handleUpdate(update('/heartbeat'), store, n, SETTINGS, NOW)).toBe('ignored');
     expect(n.reply.mock.calls[0][1]).toContain('Database check failed');
     expect(n.reply.mock.calls[0][1]).toContain('Supabase 401');
   });
 
-  it('/test still replies when reading the timezone fails', async () => {
+  it('/heartbeat still replies when reading the timezone fails', async () => {
     const store = fakeStore({
       getTimeZone: vi.fn(async () => { throw new Error('fetch failed: invalid URL'); }),
       health: vi.fn(async () => ({
@@ -69,7 +69,7 @@ describe('handleUpdate', () => {
       })),
     });
     const n = fakeNotifier();
-    expect(await handleUpdate(update('/test'), store, n, SETTINGS, NOW)).toBe('ignored');
+    expect(await handleUpdate(update('/heartbeat'), store, n, SETTINGS, NOW)).toBe('ignored');
     expect(n.reply.mock.calls[0][1]).toContain('Database check failed');
     expect(n.reply.mock.calls[0][1]).toContain('invalid URL');
   });

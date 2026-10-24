@@ -40,7 +40,7 @@ export interface ReminderInput {
   source: 'explicit' | 'heuristic' | 'ai';
 }
 
-// Result of the /test database round-trip: reads plus one heartbeat write.
+// Result of the /heartbeat database round-trip: reads plus one heartbeat write.
 export interface HealthStats {
   captures: number;
   thoughts: number;
@@ -97,7 +97,7 @@ export function localDay(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
-// The /test reply: what the database actually holds, so a silent bot is distinguishable
+// The /heartbeat reply: what the database actually holds, so a silent bot is distinguishable
 // from an empty database.
 export function formatHealth(stats: HealthStats, timeZone: string): string {
   const last = stats.lastCaptureAt
@@ -145,7 +145,7 @@ export function cleanupLine(r: CleanupReport): string {
 }
 
 // Messages that are instructions rather than notes: they get a reply and never touch the
-// database, so the diary cannot fill up with /start and /test rows. A bare slash word is
+// database, so the diary cannot fill up with /start and /heartbeat rows. A bare slash word is
 // treated the same way, because a mistyped command is not a diary entry either.
 export function isInstruction(text: string): boolean {
   return /^\s*\/[A-Za-z][\w]*\s*$/.test(text);
@@ -180,15 +180,15 @@ export async function handleUpdate(
   if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/start') {
     await notifier.reply(
       msg.chat.id,
-      'Send any note and it goes into your diary. Start with /push, /learn, /thought, /quote, /work, /project, /life or /task to pick a category. Use /reason or /think for a longer take. Set your timezone with /timezone Europe/Paris. Send /test to check the database connection.',
+      'Send any note and it goes into your diary. Start with /push, /learn, /thought, /quote, /work, /project, /life or /task to pick a category. Use /reason or /think for a longer take. Set your timezone with /timezone Europe/Paris. Send /heartbeat to check the database connection.',
     );
     return 'ignored';
   }
 
-  // /test: read a few counts and write one heartbeat, then report them. It is never
+  // /heartbeat: read a few counts and write one heartbeat, then report them. It is never
   // stored as a diary entry: the reply is the whole point, and a failure is replied
   // with the real error instead of a silent 500.
-  if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/test') {
+  if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/heartbeat') {
     // Everything, the timezone read included, sits inside the try: a diagnostic that
     // dies silently is worse than no diagnostic at all.
     let tz = settings.timeZone;
