@@ -13,11 +13,20 @@ leaves the page. Clearing site data resets them.
 Serve this folder (`python3 ../../dev-server.py` from the repo root, which is what the preview panel
 uses) and open the root. On the Worker it is `/demo/`; on GitHub Pages it is the site root. Opening `index.html` directly also works; the fonts need a connection.
 
+The **second home layout** lives in [`v2/`](v2/index.html) and opens at `/v2/`. It keeps the same
+design system and data, and changes only the home page: no breadcrumb, the day's entries first, the
+stats as chips in the header, the composer as a sheet, and the month heatmap in the rail. The two
+share sample data through the same browser key but keep tabs separately, so they can sit open side by
+side.
+
 ## What is here
 
 - **Home (`#/`)** is today, pinned: the day header with previous/next, the composer, the entries as
   the grouped ledger with category tabs, the hours strip, and a right rail with today's numbers,
   the deadlines that are due or overdue, and links out.
+- **Home v2 (`v2/#/`)** is the same day without the composer card: stat chips and a **New note**
+  button in the header (the note opens in a sheet), the entries card first, the hours band under it,
+  and a rail of this month's heatmap, the deadlines, the hours you write at, and links out.
 - **Dashboard (`#/dashboard`)** shows one month: KPIs, the month heatmap in **both** shapes
   (weeks table / calendar grid, switchable and remembered), activity day by day, when you write,
   AI usage with tokens and estimated neurons per note and per model, the year at a glance, folders,
