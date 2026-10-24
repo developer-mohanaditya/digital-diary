@@ -74,6 +74,7 @@
   .sempty { padding:12px 14px; font-size:.85rem; color:var(--muted); }
   .theme-wrap { position:relative; }
   /* Liquid glass controls: tinted gradient + blur/saturate frost + rim light + specular curve (CSS translation of the liquid-glass-js recipe). */
+  .iconbtn[hidden] { display:none; }
   .iconbtn { position:relative; width:38px; height:38px; border-radius:999px; display:grid; place-items:center; cursor:pointer; color:#f5f5ff; padding:0; overflow:hidden;
     background:linear-gradient(135deg, rgba(255,255,255,.24), rgba(255,255,255,.07) 45%, rgba(255,255,255,.15));
     -webkit-backdrop-filter:blur(20px) saturate(1.8); backdrop-filter:blur(20px) saturate(1.8);
@@ -383,6 +384,17 @@
   .smeta { margin:8px 0 12px; font-size:.78rem; color:var(--muted); font-variant-numeric:tabular-nums; }
   .smeta i { font-style:normal; margin:0 10px; opacity:.55; }
 
+  .signin { display:grid; place-items:center; padding:44px 0 60px; }
+  .signin[hidden] { display:none; }
+  .signin-card { width:min(420px,100%); background:var(--card); border:2px solid var(--edge); box-shadow:5px 5px 0 var(--shadow);
+    border-radius:18px; padding:26px 24px; display:grid; gap:12px; text-align:center; }
+  .signin-card img { margin:0 auto; }
+  .signin-card h1 { font-family:var(--head); font-size:1.25rem; margin:0; letter-spacing:-.01em; }
+  .signin-card input { width:100%; font:inherit; padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); background:var(--bg); color:var(--ink); }
+  .signin-card input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .signin-card .btn { justify-self:stretch; padding:10px; font-weight:700; }
+  .signin-err { min-height:1.2em; margin:0; font-size:.84rem; color:var(--alert); }
+
   footer.foot { border-top:1px solid var(--line); padding:18px 24px; color:var(--muted); font-size:.85rem; text-align:center; }
 </style>
 </head>
@@ -395,11 +407,22 @@
     <div class="search-pop" id="search-pop" hidden></div>
   </div>
   <div class="tools">
+    <button class="iconbtn" id="signout-btn" hidden title="Sign out" aria-label="Sign out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>
     <button class="iconbtn" id="mode-btn" data-action="mode-toggle" aria-label="Switch to dark mode" title="Light / dark"></button>
     <a class="iconbtn setup-btn" href="/demo/setup.html" title="Setup" aria-label="Setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></a>
   </div>
 </div></header>
 <main>
+  <section class="signin" id="signin" hidden>
+    <form class="signin-card" id="signin-form">
+      <img src="logo/mark.svg" width="42" height="42" alt="" />
+      <h1>Your diary is locked</h1>
+      <p class="muted" style="margin:0">Enter your passphrase to read your notes.</p>
+      <input id="signin-pass" type="password" autocomplete="current-password" placeholder="Passphrase" aria-label="Passphrase" required />
+      <button class="btn" type="submit">Unlock</button>
+      <p class="signin-err" id="signin-err" role="alert"></p>
+    </form>
+  </section>
   <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
   <div id="app"></div>
 </main>

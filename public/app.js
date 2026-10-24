@@ -43,6 +43,7 @@ async function loadDiary() {
   catch (_) { return { error: 'Could not reach the diary API.' }; }
   let data = null;
   try { data = await res.json(); } catch (_) {}
+  if (res.status === 401) return { needLogin: true };
   if (!res.ok || !data || !data.ok) return { error: (data && data.error) || `The diary API answered ${res.status}.` };
   const days = {};
   for (const [k, list] of Object.entries(data.days || {})) {
@@ -716,10 +717,62 @@ document.addEventListener('keydown', e => {
 });
 window.addEventListener('hashchange', () => { ui.tab = 'all'; ui.openNote = pendingNote; pendingNote = null; render(); window.scrollTo(0, 0); });
 
+/* ---------- Passphrase sign-in ---------- */
+function showSignin(message) {
+  $('#signin').hidden = false;
+  $('#app').hidden = true;
+  $('#signout-btn').hidden = true;
+  $('#signin-err').textContent = message || '';
+  setTimeout(() => $('#signin-pass').focus(), 0);
+}
+function showDiary() {
+  $('#signin').hidden = true;
+  $('#app').hidden = false;
+  $('#signout-btn').hidden = false;
+}
+async function refresh() {
+  const r = await loadDiary();
+  if (r.needLogin) { showSignin(); return; }
+  showDiary();
+  render();
+  if (r.error) $('#app').insertAdjacentHTML('afterbegin', `<div class="muted" style="padding:16px 0">${esc(r.error)}</div>`);
+}
+$('#signin-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = $('#signin-pass'), btn = $('#signin-form button'), err = $('#signin-err');
+  if (!input.value) return;
+  btn.disabled = true;
+  err.textContent = '';
+  let data = null, status = 0;
+  try {
+    const res = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase: input.value }),
+    });
+    status = res.status;
+    data = await res.json().catch(() => null);
+  } catch (_) {
+    btn.disabled = false;
+    err.textContent = 'Could not reach the diary.';
+    return;
+  }
+  btn.disabled = false;
+  if (!data || !data.ok) {
+    err.textContent = (data && data.error) || `Sign-in answered ${status}.`;
+    input.select();
+    return;
+  }
+  input.value = '';
+  await refresh();
+});
+$('#signout-btn').addEventListener('click', async () => {
+  try { await fetch('/api/session', { method: 'DELETE' }); } catch (_) {}
+  state.days = {};
+  location.reload();
+});
+
 applyPrefs();
 if (!location.hash) history.replaceState(null, '', '#/');
 render();
-loadDiary().then(r => {
-  render();
-  if (r.error) $('#app').insertAdjacentHTML('afterbegin', `<div class="muted" style="padding:16px 0">${esc(r.error)}</div>`);
-});
+refresh();
