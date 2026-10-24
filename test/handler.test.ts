@@ -178,6 +178,8 @@ describe('cleanup', () => {
     }));
     expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done');
     expect(n.reply.mock.calls[0][1]).toContain('Cleanup failed');
+    // The reason travels with the reply: "failed" alone cannot be diagnosed from a phone.
+    expect(n.reply.mock.calls[0][1]).toContain('AI quota exhausted');
   });
 
   it('keeps the original silently when the model returns nothing', async () => {

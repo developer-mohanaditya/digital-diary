@@ -192,13 +192,15 @@ export async function handleUpdate(
   // Cleanup. The raw text is what gets stored alongside the result, so a model that
   // fails or answers with nothing at all costs a tidy line, never the note.
   let clean = parsed.body;
-  let refineFailed = false;
+  let refineError: string | null = null;
   if (refiner && parsed.mode !== 'verbatim') {
     try {
       const out = await refiner.refine({ text: parsed.body, mode: parsed.mode, category });
       if (out) clean = out;
     } catch (err) {
-      refineFailed = true;
+      // The message goes into the reply: a failed cleanup that reports only "failed"
+      // leaves the owner with no way to tell a missing model from a missing binding.
+      refineError = err instanceof Error ? err.message.split('\n')[0].slice(0, 160) : 'unknown error';
       console.error('refine failed', err);
     }
   }
@@ -231,7 +233,9 @@ export async function handleUpdate(
   await store.setCaptureStatus(capture.id, 'done');
   // A failed cleanup is said out loud: otherwise the note just looks unrefined, which
   // is the same thing the diary looked like when the step did not exist at all.
-  const fallback = refineFailed ? ' Cleanup failed, so it is saved exactly as you wrote it.' : '';
+  const fallback = refineError
+    ? ` Cleanup failed (${refineError}), so it is saved exactly as you wrote it.`
+    : '';
   if (detected?.kind === 'deadline') {
     await notifier.reply(msg.chat.id, `Saved to Deadline. I'll ping you daily from 3 days before.${fallback}`);
   } else if (detected?.kind === 'review') {
