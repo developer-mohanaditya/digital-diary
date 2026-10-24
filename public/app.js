@@ -119,7 +119,7 @@ try {
   }
 } catch (_) {}
 
-const ui = { range:'month', anchor:TODAY, tab:'all', layout:'ledger', openNote:null, moveMenu:false, moveConfirm:null, openRaw:new Set(), openMove:new Set(), openFull:new Set(), duePick:'', dueCal:TODAY.slice(0,7), dueOpen:false };
+const ui = { range:'month', anchor:TODAY, tab:'all', layout:'ledger', openNote:null, moveMenu:false, moveConfirm:null, openRaw:new Set(), openMove:new Set(), openFull:new Set(), duePick:'', dueCal:TODAY.slice(0,7), dueOpen:false, addMsg:'' };
 let pendingNote = null;
 
 /* ---------- Live search (tolerant, no Enter needed) ---------- */
@@ -466,11 +466,11 @@ function dueLine(it) {
   const st = it.done ? 'Done' : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
   return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span></div>`;
 }
-// Raw is the note before cleanup, so it is only offered when cleanup produced a
-// different text. A verbatim note is stored twice identically on purpose: there is
-// nothing behind the control, and the mode chip already says the words are exact.
+// Every note that went through the cleanup offers Raw, even when the cleanup left the
+// words alone: being able to see the original is the point. Verbatim notes are stored
+// twice identically on purpose, so the control would show nothing new.
 function hasRawText(it) {
-  return it.mode !== 'verbatim' && !!it.raw && it.raw !== it.text;
+  return it.mode !== 'verbatim' && !!it.raw;
 }
 function entryHTML(it, k) {
   const c = CAT[it.cat];
@@ -609,6 +609,7 @@ function viewDay(y, m, d) {
     <div class="card"><span class="kicker">New note</span><h2>Add an item</h2>
       <form class="add" onsubmit="return false">
         <textarea id="add-text" placeholder="Type a thought, quote or note…"></textarea>
+        <div class="addmsg" id="add-msg" role="status" aria-live="polite">${esc(ui.addMsg || '')}</div>
         <div class="row">
           <select id="add-mode"><option value="refined">Refined</option><option value="verbatim">Verbatim (/push)</option><option value="reason">Reason (/reason)</option><option value="think">Think (/think)</option></select>
           <select id="add-cat"><option value="">Auto (Inbox for now)</option>${CATS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}</select>
@@ -675,25 +676,43 @@ function shiftDueCal(n) {
   const d = new Date(yy, mm - 1 + n, 1);
   ui.dueCal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }
-function addEntry() {
+/* A note typed on the page is saved by the Worker, through the same cleanup as a
+   Telegram note. Until this posted to the API it was added to browser memory only and
+   vanished on the next load, while still claiming to be "refined". */
+async function addEntry() {
   const text = $('#add-text').value.trim();
-  if (!text) return;
-  const now = new Date();
-  const k = route().view === 'day' ? ui.anchor : TODAY;
+  if (!text) { ui.addMsg = 'Write something first.'; render(); return; }
   const chosen = $('#add-cat').value;
-  const it = {
-    id: `${k}-${Date.now()}`,
-    time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-    cat: chosen || 'inbox',
-    mode: $('#add-mode').value,
-    src: chosen ? 'manual' : 'auto',
-    text,
-    raw: text,
-  };
-  if (it.cat === 'deadline') { it.due = $('#add-due').value || iso(addDays(new Date(), 7)); it.done = false; }
-  state.days[k] = [...items(k), it].sort((a, b) => a.time.localeCompare(b.time));
-  ui.duePick = '';
-  saveState(); render();
+  const mode = $('#add-mode').value === 'refined' ? 'refine' : $('#add-mode').value;
+  const due = chosen === 'deadline' ? ($('#add-due').value || iso(addDays(new Date(), 7))) : null;
+  const btn = document.querySelector('[data-action="add"]');
+  if (btn) btn.disabled = true;
+  ui.addMsg = 'Saving…';
+  render();
+  try {
+    const res = await fetch('/api/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, mode, category: chosen || null, due }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      ui.addMsg = (data && data.error) || `The diary API answered ${res.status}.`;
+      render();
+      return;
+    }
+    const loaded = await loadDiary();
+    ui.duePick = '';
+    ui.addMsg = data.cleanup === 'formatted' ? 'Saved and formatted.'
+      : data.cleanup === 'unchanged' ? 'Saved. The cleanup found nothing to change.'
+      : data.cleanup === 'verbatim' ? 'Saved as written.'
+      : `Saved. Cleanup did not run${data.error ? ` (${data.error})` : ''}.`;
+    if (loaded && loaded.error) ui.addMsg = `Saved, but reloading failed: ${loaded.error}`;
+    render();
+  } catch (_) {
+    ui.addMsg = 'Could not reach the diary API. Nothing was saved.';
+    render();
+  }
 }
 
 document.addEventListener('click', e => {

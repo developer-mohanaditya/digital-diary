@@ -38,9 +38,14 @@ describe('toUiEntry', () => {
     expect(toUiEntry(row({ raw_text: null }), 'UTC').raw).toBe('A thought');
   });
 
-  it('labels a note the cleanup left untouched as verbatim, not refined', () => {
-    expect(toUiEntry(row({ clean_text: 'a thought', raw_text: 'a thought' }), 'UTC').mode).toBe('verbatim');
-    expect(toUiEntry(row({ clean_text: 'a thought', raw_text: ' a  thought\n' }), 'UTC').mode).toBe('verbatim');
+  // The ground rule: the chip says what the note went through, and every mode except
+  // verbatim offers Raw. A cleanup that left the words alone is still a refined note,
+  // and Raw is how that becomes visible instead of invisible.
+  it('keeps the label and the raw text when the cleanup left the words alone', () => {
+    const same = toUiEntry(row({ clean_text: 'a thought', raw_text: 'a thought' }), 'UTC');
+    expect(same.mode).toBe('refined');
+    expect(same.raw).toBe('a thought');
+    expect(toUiEntry(row({ clean_text: 'a thought', raw_text: ' a  thought\n' }), 'UTC').raw).toBe(' a  thought\n');
   });
 
   it('keeps reason and think labels when the cleanup did change the note', () => {

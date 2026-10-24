@@ -226,6 +226,99 @@ describe('/api/reclean', () => {
   });
 });
 
+describe('/api/note', () => {
+  // Records each write so the row the page produced can be read back, exactly as the
+  // Telegram tests read the row a message produced.
+  const wire = () => {
+    const bodies: { url: string; body: { [k: string]: unknown }[] | null }[] = [];
+    const stub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      bodies.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.includes('/captures?')) return new Response(JSON.stringify([{ id: 'cap-9' }]), { headers: { 'Content-Type': 'application/json' } });
+      if (url.endsWith('/thoughts')) return new Response(JSON.stringify([{ id: 'th-9' }]), { headers: { 'Content-Type': 'application/json' } });
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', stub);
+    return bodies;
+  };
+  const note = (payload: Record<string, unknown>) => request('/api/note', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  it('stores a note typed on the page through the same cleanup as a message', async () => {
+    const bodies = wire();
+    const AI = { run: vi.fn(async () => ({ response: 'I am not going to that party this weekend.' })) };
+    const res = await worker.fetch(note({
+      text: 'hell no, am not going to that party this weekend', mode: 'refine', category: null, due: null,
+    }), env({ AI, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, cleanup: 'formatted', category: 'inbox', mode: 'refine' });
+
+    const capture = bodies.find((b) => b.url.includes('/captures?'))?.body?.[0];
+    expect(capture).toMatchObject({
+      source: 'web', kind: 'text', raw_text: 'hell no, am not going to that party this weekend',
+      command_mode: 'refine', command_category: null,
+    });
+    const thought = bodies.find((b) => b.url.endsWith('/thoughts'))?.body?.[0];
+    expect(thought).toMatchObject({
+      clean_text: 'I am not going to that party this weekend.',
+      raw_text: 'hell no, am not going to that party this weekend',
+      mode: 'refine', category: 'inbox', category_source: 'auto',
+    });
+  });
+
+  it('keeps a failed cleanup as a refined note with its raw text, and says what failed', async () => {
+    const bodies = wire();
+    const AI = { run: vi.fn(async () => { throw new Error('Workers AI binding not available'); }) };
+    const res = await worker.fetch(note({ text: 'a plain note', mode: 'refine' }), env({ AI, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, cleanup: 'failed' });
+    expect((await Promise.resolve(bodies)).find((b) => b.url.endsWith('/thoughts'))?.body?.[0]).toMatchObject({
+      clean_text: 'a plain note', raw_text: 'a plain note', mode: 'refine',
+    });
+  });
+
+  it('does not call the model for a verbatim note and files it where it was asked', async () => {
+    const bodies = wire();
+    const AI = { run: vi.fn() };
+    const res = await worker.fetch(
+      note({ text: 'the exact words', mode: 'verbatim', category: 'quote' }),
+      env({ AI, DIARY_PASSPHRASE: undefined }),
+    );
+    expect(AI.run).not.toHaveBeenCalled();
+    expect(await res.json()).toMatchObject({ ok: true, cleanup: 'verbatim', category: 'quote' });
+    expect(bodies.find((b) => b.url.endsWith('/thoughts'))?.body?.[0]).toMatchObject({
+      clean_text: 'the exact words', raw_text: 'the exact words', mode: 'verbatim', category_source: 'tag',
+    });
+  });
+
+  it('creates the deadline reminder for a due date picked on the page', async () => {
+    const bodies = wire();
+    const res = await worker.fetch(note({
+      text: 'send the proposal', mode: 'verbatim', category: 'deadline', due: '2026-11-03',
+    }), env({ DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(200);
+    const reminder = bodies.find((b) => b.url.endsWith('/reminders'))?.body?.[0];
+    expect(reminder).toMatchObject({ kind: 'deadline', due_at: '2026-11-03T09:00:00.000Z', status: 'pending' });
+  });
+
+  it('is behind the passphrase and writes nothing without a session', async () => {
+    const bodies = wire();
+    const res = await worker.fetch(note({ text: 'a note' }), env());
+    expect(res.status).toBe(401);
+    expect(bodies).toHaveLength(0);
+  });
+
+  it('refuses an empty note instead of storing a blank row', async () => {
+    const bodies = wire();
+    const res = await worker.fetch(note({ text: '   ' }), env({ DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(400);
+    expect(bodies).toHaveLength(0);
+  });
+});
+
 describe('/api/entries', () => {
   it('serves the diary openly when no passphrase is configured', async () => {
     supabaseStub();
