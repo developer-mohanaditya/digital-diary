@@ -55,6 +55,12 @@ export function pickModel(text: string): string {
   return text.length > BIG_TEXT_CHARS ? BIG_MODEL : SMALL_MODEL;
 }
 
+// The order to try. If one model is retired, overloaded or not enabled on the account,
+// the other still cleans the note: a single bad id must not take the feature down.
+export function modelOrder(text: string): string[] {
+  return text.length > BIG_TEXT_CHARS ? [BIG_MODEL, SMALL_MODEL] : [SMALL_MODEL, BIG_MODEL];
+}
+
 export function buildMessages(req: RefineRequest): { role: string; content: string }[] {
   return [
     { role: 'system', content: SYSTEM },
@@ -91,12 +97,19 @@ export function workersAiRefiner(ai: AiRunner): Refiner {
       if (req.mode === 'verbatim') return null;
       const text = req.text.trim();
       if (text === '') return null;
-      const out = await ai.run(pickModel(text), {
-        messages: buildMessages({ ...req, text }),
-        max_tokens: 512,
-        temperature: 0.2,
-      });
-      return readOutput(out);
+      const messages = buildMessages({ ...req, text });
+      let failure: unknown = null;
+      for (const model of modelOrder(text)) {
+        try {
+          const out = await ai.run(model, { messages, max_tokens: 512, temperature: 0.2 });
+          const cleaned = readOutput(out);
+          if (cleaned) return cleaned;
+          failure ??= new Error(`${model} answered with nothing`);
+        } catch (err) {
+          failure ??= err;
+        }
+      }
+      throw failure instanceof Error ? failure : new Error('every cleanup model failed');
     },
   };
 }

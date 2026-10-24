@@ -84,9 +84,24 @@ describe('workersAiRefiner', () => {
     expect(ai.run).not.toHaveBeenCalled();
   });
 
-  it('lets a model failure reach the caller, which saves the note as written', async () => {
+  it('falls back to the other model when the first one is unavailable', async () => {
+    const seen: string[] = [];
+    const ai = {
+      run: vi.fn(async (model: string) => {
+        seen.push(model);
+        if (model === SMALL_MODEL) throw new Error('Model not found');
+        return { response: 'Had coffee with Ram.' };
+      }),
+    };
+    expect(await workersAiRefiner(ai).refine({ text: 'um so coffee with ram', mode: 'refine', category: 'life' }))
+      .toBe('Had coffee with Ram.');
+    expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
+  });
+
+  it('lets a failure reach the caller only after both models fail', async () => {
     const ai = { run: vi.fn(async () => { throw new Error('AI quota exhausted'); }) };
     await expect(workersAiRefiner(ai).refine({ text: 'hi', mode: 'refine', category: 'inbox' }))
       .rejects.toThrow('AI quota exhausted');
+    expect(ai.run).toHaveBeenCalledTimes(2);
   });
 });

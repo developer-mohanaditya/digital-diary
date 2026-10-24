@@ -32,6 +32,8 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 | up to 1000 characters | `@cf/zai-org/glm-4.7-flash` |
 | longer | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
 
+If the first model throws or answers with nothing, the other is tried before the note is given up on, so one retired or blocked model does not turn cleanup off.
+
 Both are in the current catalog. Workers AI retired eighteen older models on 30 May 2026, including `@cf/meta/llama-3.1-8b-instruct`, and a retired id fails only at runtime: check [the catalog](https://developers.cloudflare.com/workers-ai/models/) before changing these.
 
 - `/push` (verbatim) never reaches the model: those words are the point.
