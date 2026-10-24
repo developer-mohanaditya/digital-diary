@@ -37,6 +37,18 @@ describe('toUiEntry', () => {
     expect(toUiEntry(row(), 'UTC').raw).toBe('a thought, and yeah');
     expect(toUiEntry(row({ raw_text: null }), 'UTC').raw).toBe('A thought');
   });
+
+  it('labels a note the cleanup left untouched as verbatim, not refined', () => {
+    expect(toUiEntry(row({ clean_text: 'a thought', raw_text: 'a thought' }), 'UTC').mode).toBe('verbatim');
+    expect(toUiEntry(row({ clean_text: 'a thought', raw_text: ' a  thought\n' }), 'UTC').mode).toBe('verbatim');
+  });
+
+  it('keeps reason and think labels when the cleanup did change the note', () => {
+    expect(toUiEntry(row({ mode: 'reason' }), 'UTC').mode).toBe('reason');
+    expect(toUiEntry(row({ mode: 'think' }), 'UTC').mode).toBe('think');
+    expect(toUiEntry(row({ mode: 'verbatim', clean_text: 'a thought', raw_text: 'a thought' }), 'UTC').mode)
+      .toBe('verbatim');
+  });
 });
 
 describe('groupByDay', () => {

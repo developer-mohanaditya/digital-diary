@@ -1,6 +1,6 @@
 import { handleUpdate, type TelegramUpdate, type Store, type Notifier } from './handler';
 import { groupByDay, type DeadlineMark, type ThoughtRow } from './api';
-import { SMALL_MODEL, readOutput, workersAiRefiner, type AiRunner } from './refine';
+import { BACKUP_MODEL, BIG_MODEL, SMALL_MODEL, readOutput, workersAiRefiner, type AiRunner } from './refine';
 import {
   SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
 } from './session';
@@ -209,27 +209,70 @@ async function signIn(request: Request, env: Env): Promise<Response> {
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(token) });
 }
 
-// GET /api/ai-check: one tiny inference. A cleanup that fails can be a missing binding, a
-// retired model id or an account that cannot use Workers AI, and only the error tells
-// them apart. This answers that without writing a test note into the diary.
+// GET /api/ai-check: one tiny inference per cleanup model. A cleanup that fails can be a
+// missing binding, a retired model id or an account that cannot use Workers AI, and only
+// the error tells them apart. It answers that with no test note written to the diary.
 async function aiCheck(request: Request, env: Env): Promise<Response> {
   if (!(await signedIn(request, env))) return json({ ok: false, need: 'login' }, 401);
-  const started = Date.now();
   if (!env.AI) {
-    return json({ ok: false, binding: false, model: SMALL_MODEL, error: 'No AI binding on this Worker.' }, 503);
+    return json({ ok: false, binding: false, error: 'No AI binding on this Worker.' }, 503);
   }
-  try {
-    const out = await env.AI.run(SMALL_MODEL, {
-      messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
-      max_tokens: 8,
-    });
-    return json({ ok: true, binding: true, model: SMALL_MODEL, ms: Date.now() - started, output: readOutput(out) });
-  } catch (err) {
-    return json({
-      ok: false, binding: true, model: SMALL_MODEL, ms: Date.now() - started,
-      error: err instanceof Error ? err.message : String(err),
-    }, 502);
+  const models: { model: string; ok: boolean; ms: number; output?: string | null; error?: string }[] = [];
+  for (const model of [SMALL_MODEL, BIG_MODEL, BACKUP_MODEL]) {
+    const started = Date.now();
+    try {
+      const out = await env.AI.run(model, {
+        messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+        max_tokens: 8,
+      });
+      models.push({ model, ok: true, ms: Date.now() - started, output: readOutput(out) });
+    } catch (err) {
+      models.push({ model, ok: false, ms: Date.now() - started, error: err instanceof Error ? err.message : String(err) });
+    }
   }
+  const ok = models.some((m) => m.ok);
+  return json({ ok, binding: true, models }, ok ? 200 : 502);
+}
+
+// POST /api/reclean: runs the cleanup again over notes an earlier model left untouched.
+// Those rows have clean_text === raw_text, so they have no Raw control and nothing to
+// read: this is the one-time repair, not part of saving a note. The raw text is never
+// modified, so a bad rewrite is recoverable. Guarded by the webhook secret because it
+// spends AI credits and runs unattended.
+async function reclean(request: Request, env: Env): Promise<Response> {
+  if (!env.TELEGRAM_WEBHOOK_SECRET || request.headers.get('x-reclean-token') !== env.TELEGRAM_WEBHOOK_SECRET) {
+    return json({ ok: false, error: 'Send the Telegram webhook secret as x-reclean-token.' }, 401);
+  }
+  if (!env.AI) return json({ ok: false, error: 'No AI binding on this Worker.' }, 503);
+  const refiner = workersAiRefiner(env.AI);
+  const limit = Math.min(Number(new URL(request.url).searchParams.get('limit') ?? 25) || 25, 50);
+  const base = `${env.SUPABASE_URL}/rest/v1`;
+  const headers = { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` };
+  const rowsRes = await fetch(
+    `${base}/thoughts?mode=neq.verbatim&select=id,mode,category,clean_text,raw_text&order=created_at.desc&limit=200`,
+    { headers },
+  );
+  if (!rowsRes.ok) return json({ ok: false, error: `Supabase ${rowsRes.status}: ${await rowsRes.text()}` }, 502);
+  const rows = (await rowsRes.json()) as ThoughtRow[];
+  const untouched = rows.filter((r) => (r.raw_text ?? '').trim() !== '' && (r.clean_text ?? '') === (r.raw_text ?? '')).slice(0, limit);
+  let cleaned = 0;
+  const failed: string[] = [];
+  for (const r of untouched) {
+    try {
+      const out = await refiner.refine({ text: r.raw_text!, mode: r.mode as 'refine' | 'reason' | 'think', category: r.category });
+      if (!out || out === r.clean_text) continue;
+      const patch = await fetch(`${base}/thoughts?id=eq.${r.id}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ clean_text: out }),
+      });
+      if (!patch.ok) throw new Error(`Supabase ${patch.status}: ${await patch.text()}`);
+      cleaned++;
+    } catch (err) {
+      failed.push(`${r.id}: ${err instanceof Error ? err.message.split('\n')[0].slice(0, 160) : 'unknown error'}`);
+    }
+  }
+  return json({ ok: true, untouched: untouched.length, cleaned, skipped: untouched.length - cleaned - failed.length, failed });
 }
 
 // Read API for the web interface. Without a signed-in session (or Cloudflare Access,
@@ -350,6 +393,7 @@ export default {
     }
     if (url.pathname === '/api/entries' && request.method === 'GET') return entriesApi(request, env);
     if (url.pathname === '/api/ai-check' && request.method === 'GET') return aiCheck(request, env);
+    if (url.pathname === '/api/reclean' && request.method === 'POST') return reclean(request, env);
     return env.ASSETS.fetch(request);
   },
   async scheduled(_event: unknown, env: Env): Promise<void> {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  BIG_MODEL, BIG_TEXT_CHARS, MAX_INPUT_CHARS, SMALL_MODEL,
-  buildMessages, pickModel, readOutput, workersAiRefiner,
+  BACKUP_MODEL, BIG_MODEL, BIG_TEXT_CHARS, MAX_INPUT_CHARS, SMALL_MODEL,
+  buildMessages, isPlausible, pickModel, readOutput, sameWords, workersAiRefiner,
 } from '../src/refine';
 
 const run = (answer: unknown) => vi.fn(async () => answer);
@@ -22,12 +22,20 @@ describe('buildMessages', () => {
     const [, user] = buildMessages({ text: 'um so the lecture was about raft', mode: 'refine', category: 'class' });
     expect(user.content).toContain('Category: class');
     expect(user.content).toContain('um so the lecture was about raft');
-    expect(user.content).toContain('Clean the note up');
+    expect(user.content).toContain('reads cleanly');
   });
 
   it('asks for explicit reasoning in reason mode, and depth in think mode', () => {
     expect(buildMessages({ text: 'a', mode: 'reason', category: 'thought' })[1].content).toContain('reasoning explicit');
-    expect(buildMessages({ text: 'a', mode: 'think', category: 'thought' })[1].content).toContain('tighten the thinking');
+    expect(buildMessages({ text: 'a', mode: 'think', category: 'thought' })[1].content).toContain('sharpen the thinking');
+  });
+
+  it('tells the model which markup it may use, and that short notes stay plain', () => {
+    const [system] = buildMessages({ text: 'a', mode: 'refine', category: 'inbox' });
+    expect(system.content).toContain('"- "');
+    expect(system.content).toContain('**double asterisks**');
+    expect(system.content).toContain('==double equals==');
+    expect(system.content).toContain('stays one plain paragraph');
   });
 
   it('never sends more than the input cap', () => {
@@ -55,6 +63,29 @@ describe('readOutput', () => {
     expect(readOutput({})).toBeNull();
     expect(readOutput(null)).toBeNull();
     expect(readOutput({ response: 42 })).toBeNull();
+  });
+
+  it('drops a preamble and a surrounding quote the model added', () => {
+    expect(readOutput({ response: 'Here is the rewritten note: \"Had coffee.\"' })).toBe('Had coffee.');
+  });
+
+  it('collapses runs of blank lines so paragraphs stay paragraphs', () => {
+    expect(readOutput({ response: 'One.\n\n\n\nTwo.' })).toBe('One.\n\nTwo.');
+  });
+});
+
+describe('isPlausible', () => {
+  it('accepts a formatted note and rejects a lecture or a much longer answer', () => {
+    expect(isPlausible('**Deploy** went out.\n\n- Raw fixed', 'deploy went out and raw fixed')).toBe(true);
+    expect(isPlausible('As an AI language model, I cannot', 'a note')).toBe(false);
+    expect(isPlausible('word '.repeat(200), 'a short note')).toBe(false);
+  });
+});
+
+describe('sameWords', () => {
+  it('ignores whitespace, so a reflowed answer that changes nothing counts as unchanged', () => {
+    expect(sameWords('a note', '  a   note\n')).toBe(true);
+    expect(sameWords('a note', '**A** note')).toBe(false);
   });
 });
 
@@ -98,10 +129,30 @@ describe('workersAiRefiner', () => {
     expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
   });
 
-  it('lets a failure reach the caller only after both models fail', async () => {
+  it('rejects an answer that is not a cleanup and tries the next model', async () => {
+    const seen: string[] = [];
+    const ai = {
+      run: vi.fn(async (model: string) => {
+        seen.push(model);
+        if (model === SMALL_MODEL) return { response: 'As an AI language model, I cannot rewrite that.' };
+        return { response: 'Had coffee with Ram.' };
+      }),
+    };
+    expect(await workersAiRefiner(ai).refine({ text: 'um so coffee with ram', mode: 'refine', category: 'life' }))
+      .toBe('Had coffee with Ram.');
+    expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
+  });
+
+  it('tries every model and names all of them when the whole catalog is blocked', async () => {
     const ai = { run: vi.fn(async () => { throw new Error('AI quota exhausted'); }) };
-    await expect(workersAiRefiner(ai).refine({ text: 'hi', mode: 'refine', category: 'inbox' }))
-      .rejects.toThrow('AI quota exhausted');
-    expect(ai.run).toHaveBeenCalledTimes(2);
+    const error = await workersAiRefiner(ai)
+      .refine({ text: 'hi', mode: 'refine', category: 'inbox' })
+      .then(() => null, (err: Error) => err);
+    expect(error?.message).toContain(SMALL_MODEL);
+    expect(error?.message).toContain(BIG_MODEL);
+    expect(error?.message).toContain(BACKUP_MODEL);
+    expect(error?.message).toContain('AI quota exhausted');
+    const tried = (ai.run.mock.calls as unknown as [string][]).map(([m]) => m);
+    expect(tried).toEqual([SMALL_MODEL, BIG_MODEL, BACKUP_MODEL]);
   });
 });

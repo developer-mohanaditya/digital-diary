@@ -1,21 +1,27 @@
-// The cleanup step: turning a quickly typed Telegram message into a diary line.
+// The cleanup step: turning a quickly typed Telegram message into something that reads
+// like a written diary entry.
 //
-// The raw text is always kept by the handler and stored next to the result, so this
-// module never has the only copy: if the model fails, the note is saved as written.
+// Two things happen here, in one model call: the filler and false starts go, and the
+// result is laid out to be read (paragraphs, bullets where the note is really a list,
+// a little emphasis on the words that carry the point). The exact text is always kept
+// by the handler and stored next to the result, so this module never has the only copy:
+// if the model fails, the note is saved as written and the Raw control still shows it.
 
 import type { Mode } from './parse';
 
 // Workers AI models. Short notes go to the small model; long ones to the bigger one,
-// which follows "keep it short" far more reliably on a rambling paragraph.
-//
-// Both must exist in the current catalog: @cf/meta/llama-3.1-8b-instruct was retired on
-// 30 May 2026 along with seventeen other models, and a retired id fails at runtime with
-// no hint until the note comes back uncleaned. Check the catalog before changing these.
+// which follows formatting instructions far more reliably on a rambling paragraph.
+// A third, older model is the last resort so one blocked or retired id cannot switch
+// the cleanup off. All three are in the current catalog; a retired id fails only at
+// runtime, with no hint until the note comes back unformatted.
 export const SMALL_MODEL = '@cf/zai-org/glm-4.7-flash';
 export const BIG_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+export const BACKUP_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 export const BIG_TEXT_CHARS = 1000;
 // A pasted essay would cost tokens and time for no gain; the raw text is kept whole.
 export const MAX_INPUT_CHARS = 4000;
+// Room for paragraphs and bullets without letting a model ramble.
+export const MAX_TOKENS = 768;
 
 // The slice of the Workers AI binding this module uses.
 export interface AiRunner {
@@ -32,23 +38,36 @@ export interface Refiner {
   refine(req: RefineRequest): Promise<string | null>;
 }
 
+// The markup the web page can render: paragraphs, two kinds of list, and three kinds of
+// emphasis. Everything else is forbidden, because the page escapes the text first and
+// only rebuilds these markers: a note can never inject HTML.
 const SYSTEM = [
-  "You clean up one person's private diary notes. They type quickly on a phone, so the notes contain filler, false starts and repetition.",
-  'Rewrite the note so it reads as a clean diary line in the first person.',
-  'Rules:',
-  "- Keep the writer's voice and every fact, name, number and date exactly as written.",
-  '- Remove filler ("um", "like", "yeah", "i mean"), false starts, and ideas repeated twice.',
-  '- Fix punctuation, capitalisation and sentence breaks.',
-  '- Never add facts, opinions, advice, headings, bullets or a closing remark.',
-  '- Keep it as short as the content allows: a two-line thought stays two lines.',
-  '- Reply with the cleaned note only. No quotation marks around it, no preamble.',
+  "You tidy one person's private diary notes for them to read back later. They type quickly on a phone, so the notes are full of filler, false starts, repetition and run-on sentences.",
+  'Rewrite the note so it reads well, in the first person, in their voice.',
+  '',
+  'Always:',
+  '- Keep every fact, name, number, date, place and quotation exactly as written.',
+  '- Keep their opinions and feelings; never add facts, advice, interpretations or a closing remark.',
+  '- Remove filler and hesitation ("um", "uh", "like", "you know", "i mean", "so yeah"), false starts and anything said twice.',
+  '- Fix punctuation, capitalisation and sentence breaks. Split run-on sentences.',
+  '',
+  'Lay it out for reading, only where it helps:',
+  '- Start a new paragraph for a new idea. Separate paragraphs with one blank line.',
+  '- If the note is really a list (several tasks, items, people or points), put each one on its own line starting with "- ".',
+  '- Wrap the few words that carry the point in **double asterisks**; at most three per note, and none in a note that is only one sentence.',
+  '- Use *single asterisks* for a title, a book or film, or a phrase quoted inside a sentence.',
+  '- Wrap anything they must not forget (a date, a deadline, a number, a name) in ==double equals==; at most two per note.',
+  '- A short note about one thing stays one plain paragraph with no markup at all.',
+  '- Never use headings, tables, code blocks, emoji, or bold at the start of every line.',
+  '',
+  'Reply with the rewritten note only. No preamble, no explanation, no quotation marks around the whole note.',
 ].join('\n');
 
 const MODE_INSTRUCTION: Record<Mode, string> = {
-  refine: 'Clean the note up without changing its meaning or length much.',
+  refine: 'Rewrite it so it reads cleanly and is easy to scan.',
   verbatim: '',
-  reason: 'Clean it up, then make the reasoning explicit: state the point, then the reason for it, in one short paragraph.',
-  think: 'Clean it up and tighten the thinking: keep the observation, and make what it implies clear in one sentence. Add no new facts and no advice.',
+  reason: 'Rewrite it, then make the reasoning explicit: the point first, then why, in that order.',
+  think: 'Rewrite it and sharpen the thinking: keep the observation, and make what it implies clear. Add no new facts and no advice.',
 };
 
 export function pickModel(text: string): string {
@@ -56,9 +75,11 @@ export function pickModel(text: string): string {
 }
 
 // The order to try. If one model is retired, overloaded or not enabled on the account,
-// the other still cleans the note: a single bad id must not take the feature down.
+// the next still formats the note: a single bad id must not take the feature down.
 export function modelOrder(text: string): string[] {
-  return text.length > BIG_TEXT_CHARS ? [BIG_MODEL, SMALL_MODEL] : [SMALL_MODEL, BIG_MODEL];
+  return text.length > BIG_TEXT_CHARS
+    ? [BIG_MODEL, SMALL_MODEL, BACKUP_MODEL]
+    : [SMALL_MODEL, BIG_MODEL, BACKUP_MODEL];
 }
 
 export function buildMessages(req: RefineRequest): { role: string; content: string }[] {
@@ -71,8 +92,10 @@ export function buildMessages(req: RefineRequest): { role: string; content: stri
   ];
 }
 
-// Models answer either { response } or the OpenAI-style { choices }. A fence is the
-// one wrapper worth stripping: it would otherwise be stored as part of the note.
+const PREAMBLE = /^(here(?:'s| is) (?:the|your) (?:rewritten|cleaned|tidied|formatted) note:?|rewritten note:?)\s*/i;
+
+// A fence, a surrounding quote or a "Here is..." line would otherwise be stored as part
+// of the note. Blank-line runs are collapsed so the page's paragraph split stays honest.
 export function readOutput(raw: unknown): string | null {
   const text =
     typeof raw === 'string' ? raw
@@ -85,11 +108,34 @@ export function readOutput(raw: unknown): string | null {
         })()
       : null;
   if (text === null) return null;
-  const tidy = text.trim().replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '').trim();
+  const tidy = text
+    .replace(/^```[a-z]*\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim()
+    .replace(PREAMBLE, '')
+    .replace(/^"(.*)"$/s, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
   return tidy === '' ? null : tidy;
 }
 
-// Wraps the binding so the handler only ever sees "cleaned text or null". Verbatim
+// A model that lectures, answers in the third person, or writes three times as much as
+// the note is not cleaning anything up. The note is better served by the next model.
+export function isPlausible(cleaned: string, original: string): boolean {
+  if (cleaned.trim() === '') return false;
+  if (/\bas an ai\b/i.test(cleaned)) return false;
+  if (cleaned.length > original.length * 4 + 120) return false;
+  return true;
+}
+
+// Compares the words, not the whitespace: a model that only adds a trailing newline did
+// not change the note, and the handler labels those as verbatim.
+export function sameWords(a: string, b: string): boolean {
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+  return norm(a) === norm(b);
+}
+
+// Wraps the binding so the handler only ever sees "formatted text or null". Verbatim
 // notes never reach the model: that mode means the words are the point.
 export function workersAiRefiner(ai: AiRunner): Refiner {
   return {
@@ -98,18 +144,20 @@ export function workersAiRefiner(ai: AiRunner): Refiner {
       const text = req.text.trim();
       if (text === '') return null;
       const messages = buildMessages({ ...req, text });
-      let failure: unknown = null;
+      const failures: string[] = [];
       for (const model of modelOrder(text)) {
         try {
-          const out = await ai.run(model, { messages, max_tokens: 512, temperature: 0.2 });
+          const out = await ai.run(model, { messages, max_tokens: MAX_TOKENS, temperature: 0.2 });
           const cleaned = readOutput(out);
-          if (cleaned) return cleaned;
-          failure ??= new Error(`${model} answered with nothing`);
+          if (cleaned && isPlausible(cleaned, text)) return cleaned;
+          failures.push(`${model}: ${cleaned ? 'unusable answer' : 'empty answer'}`);
         } catch (err) {
-          failure ??= err;
+          // Every model is tried, and every reason is kept: the reply and the capture's
+          // last_error need to say which ids failed, not just that something did.
+          failures.push(`${model}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
-      throw failure instanceof Error ? failure : new Error('every cleanup model failed');
+      throw new Error(failures.join(' | ').slice(0, 400));
     },
   };
 }
