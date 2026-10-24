@@ -1,5 +1,9 @@
-import { handleUpdate, type TelegramUpdate, type Store, type Notifier, type RepairResult } from './handler';
-import { groupByDay, type DeadlineMark, type ThoughtRow } from './api';
+import {
+  handleUpdate, localDay, type TelegramUpdate, type Store, type Notifier, type RepairResult,
+} from './handler';
+import type { Category, Mode } from './parse';
+import { MAX_INPUT_CHARS, sameWords } from './refine';
+import { UI_CATEGORIES, groupByDay, type DeadlineMark, type ThoughtRow } from './api';
 import { BACKUP_MODEL, BIG_MODEL, SMALL_MODEL, readOutput, workersAiRefiner, type AiRunner } from './refine';
 import {
   SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
@@ -332,6 +336,142 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
   }
 }
 
+// What the page reports after a save, so the message under the box is about the note it
+// just typed rather than a generic "saved".
+type NoteCleanup = 'formatted' | 'unchanged' | 'verbatim' | 'unavailable' | 'failed';
+
+// POST /api/note: a note typed on the page. It takes the same path as a Telegram message
+// — storage, cleanup, then the result — so a note added here is the same kind of row as
+// one sent to the bot. Before this existed the page only pushed the note into browser
+// memory: it showed "Refined" without asking a model, and was gone on the next load.
+async function noteApi(request: Request, env: Env): Promise<Response> {
+  if (!(await signedIn(request, env))) {
+    return json({ ok: false, need: 'login', error: 'Sign in to add a note.' }, 401);
+  }
+  let body: { text?: unknown; mode?: unknown; category?: unknown; due?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: 'Send JSON: { "text": "..." }' }, 400);
+  }
+  const text = typeof body.text === 'string' ? body.text.trim() : '';
+  if (!text) return json({ ok: false, error: 'The note is empty.' }, 400);
+  if (text.length > MAX_INPUT_CHARS) {
+    return json({ ok: false, error: `That is longer than ${MAX_INPUT_CHARS} characters. Split it into two notes.` }, 400);
+  }
+  const mode: Mode =
+    body.mode === 'verbatim' || body.mode === 'reason' || body.mode === 'think' ? body.mode : 'refine';
+  const picked = typeof body.category === 'string' ? body.category : '';
+  const chosen = (UI_CATEGORIES as readonly string[]).includes(picked) ? picked : null;
+  const category = (chosen ?? 'inbox') as Category;
+
+  // The model runs before the insert so one request answers what was stored, but a
+  // failure only changes the wording: the raw text is saved either way.
+  let clean = text;
+  let cleanup: NoteCleanup = 'unavailable';
+  let refineError: string | null = null;
+  if (mode === 'verbatim') {
+    cleanup = 'verbatim';
+  } else if (env.AI) {
+    try {
+      const out = await workersAiRefiner(env.AI).refine({ text, mode, category });
+      if (out && !sameWords(out, text)) {
+        clean = out;
+        cleanup = 'formatted';
+      } else {
+        cleanup = 'unchanged';
+      }
+    } catch (err) {
+      cleanup = 'failed';
+      refineError = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
+      console.error('refine failed', err);
+    }
+  }
+
+  const base = `${env.SUPABASE_URL}/rest/v1`;
+  const headers = {
+    apikey: env.SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+  const now = new Date();
+  const tz = env.DIARY_TZ || 'UTC';
+  try {
+    // source_update_id is only unique per source, so the timestamp cannot collide with a
+    // Telegram update id; the random tail covers two notes in the same millisecond.
+    const updateId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    const captureRes = await fetch(`${base}/captures?on_conflict=source,source_update_id`, {
+      method: 'POST',
+      headers: { ...headers, Prefer: 'resolution=ignore-duplicates,return=representation' },
+      body: JSON.stringify([{
+        source: 'web',
+        source_update_id: updateId,
+        source_chat_id: 0,
+        kind: 'text',
+        raw_text: text,
+        command_mode: mode,
+        command_category: chosen,
+        status: 'received',
+      }]),
+    });
+    if (!captureRes.ok) {
+      return json({ ok: false, error: `Supabase ${captureRes.status}: ${await captureRes.text()}` }, 502);
+    }
+    const captureRows = (await captureRes.json()) as { id: string }[];
+    if (!captureRows.length) return json({ ok: false, error: 'The note was not stored.' }, 502);
+    const captureId = captureRows[0].id;
+
+    const thoughtRes = await fetch(`${base}/thoughts`, {
+      method: 'POST',
+      headers: { ...headers, Prefer: 'return=representation' },
+      body: JSON.stringify([{
+        capture_id: captureId,
+        day: localDay(now, tz),
+        captured_at: now.toISOString(),
+        category,
+        category_source: chosen ? 'tag' : 'auto',
+        mode,
+        clean_text: clean,
+        raw_text: text,
+      }]),
+    });
+    if (!thoughtRes.ok) {
+      return json({ ok: false, error: `Supabase ${thoughtRes.status}: ${await thoughtRes.text()}` }, 502);
+    }
+    const thoughtRows = (await thoughtRes.json()) as { id: string }[];
+    const thoughtId = thoughtRows[0]?.id ?? null;
+
+    // A deadline picked here gets the same reminder the bot would create: first ping three
+    // days before the due date, then daily until it is marked done.
+    const due = typeof body.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.due) ? body.due : null;
+    if (category === 'deadline' && due) {
+      const dueAt = new Date(`${due}T09:00:00.000Z`);
+      const first = new Date(dueAt.getTime() - 3 * 86400000);
+      const next = first.getTime() < now.getTime() ? now : first;
+      const reminderRes = await fetch(`${base}/reminders`, {
+        method: 'POST',
+        headers: { ...headers, Prefer: 'return=minimal' },
+        body: JSON.stringify([{
+          capture_id: captureId,
+          thought_id: thoughtId,
+          kind: 'deadline',
+          title: clean.slice(0, 140),
+          due_at: dueAt.toISOString(),
+          next_remind_at: next.toISOString(),
+          status: 'pending',
+          source: 'explicit',
+        }]),
+      });
+      // The note is already stored; a reminder that failed is reported without losing it.
+      if (!reminderRes.ok) refineError ??= `reminder not created (Supabase ${reminderRes.status})`;
+    }
+
+    return json({ ok: true, id: thoughtId, mode, category, cleanup, error: refineError });
+  } catch (err) {
+    return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
+  }
+}
+
 async function webhook(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('unauthorized', { status: 401 });
@@ -410,6 +550,7 @@ export default {
       if (request.method === 'DELETE') return json({ ok: true }, 200, { 'Set-Cookie': clearedCookie() });
     }
     if (url.pathname === '/api/entries' && request.method === 'GET') return entriesApi(request, env);
+    if (url.pathname === '/api/note' && request.method === 'POST') return noteApi(request, env);
     if (url.pathname === '/api/ai-check' && request.method === 'GET') return aiCheck(request, env);
     if (url.pathname === '/api/reclean' && request.method === 'POST') return reclean(request, env);
     return env.ASSETS.fetch(request);
