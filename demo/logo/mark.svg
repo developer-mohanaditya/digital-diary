@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Digital Diary">
-<defs><linearGradient id="dd-tile" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#15122b"/><stop offset="1" stop-color="#2e2870"/></linearGradient></defs><rect width="120" height="120" rx="28" fill="url(#dd-tile)"/>
-<path d="M34 22H76L90 36V98H34Z" fill="#ffffff"/><path d="M76 22V36H90Z" fill="#ddd6fe"/>
-<path d="M44 74C52 62 58 84 66 70" fill="none" stroke="#fbbf24" stroke-width="4" stroke-linecap="round"/>
-<line x1="44" y1="84" x2="74" y2="84" stroke="#c7c2f0" stroke-width="3" stroke-linecap="round"/>
-<path d="M95,19 Q95,27 103,27 Q95,27 95,35 Q95,27 87,27 Q95,27 95,19Z" fill="#fbbf24"/>
-</svg>
