@@ -1,6 +1,6 @@
 import { handleUpdate, type TelegramUpdate, type Store, type Notifier } from './handler';
 import { groupByDay, type DeadlineMark, type ThoughtRow } from './api';
-import { workersAiRefiner, type AiRunner } from './refine';
+import { SMALL_MODEL, readOutput, workersAiRefiner, type AiRunner } from './refine';
 import {
   SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
 } from './session';
@@ -209,6 +209,29 @@ async function signIn(request: Request, env: Env): Promise<Response> {
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(token) });
 }
 
+// GET /api/ai-check: one tiny inference. A cleanup that fails can be a missing binding, a
+// retired model id or an account that cannot use Workers AI, and only the error tells
+// them apart. This answers that without writing a test note into the diary.
+async function aiCheck(request: Request, env: Env): Promise<Response> {
+  if (!(await signedIn(request, env))) return json({ ok: false, need: 'login' }, 401);
+  const started = Date.now();
+  if (!env.AI) {
+    return json({ ok: false, binding: false, model: SMALL_MODEL, error: 'No AI binding on this Worker.' }, 503);
+  }
+  try {
+    const out = await env.AI.run(SMALL_MODEL, {
+      messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+      max_tokens: 8,
+    });
+    return json({ ok: true, binding: true, model: SMALL_MODEL, ms: Date.now() - started, output: readOutput(out) });
+  } catch (err) {
+    return json({
+      ok: false, binding: true, model: SMALL_MODEL, ms: Date.now() - started,
+      error: err instanceof Error ? err.message : String(err),
+    }, 502);
+  }
+}
+
 // Read API for the web interface. Without a signed-in session (or Cloudflare Access,
 // if it is ever enabled) the API would hand the whole diary to anyone who learns the
 // workers.dev URL, so it answers 401 and the page asks for the passphrase.
@@ -326,6 +349,7 @@ export default {
       if (request.method === 'DELETE') return json({ ok: true }, 200, { 'Set-Cookie': clearedCookie() });
     }
     if (url.pathname === '/api/entries' && request.method === 'GET') return entriesApi(request, env);
+    if (url.pathname === '/api/ai-check' && request.method === 'GET') return aiCheck(request, env);
     return env.ASSETS.fetch(request);
   },
   async scheduled(_event: unknown, env: Env): Promise<void> {

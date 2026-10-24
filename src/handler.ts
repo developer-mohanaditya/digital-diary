@@ -104,13 +104,22 @@ export function storedPreview(text: string, limit = PREVIEW_CHARS): string {
   return flat.length > limit ? `${flat.slice(0, limit).trimEnd()}...` : flat;
 }
 
-// What the cleanup did, in one line: the difference between a note that was never
-// cleaned and one the model chose not to change is worth showing.
-export function cleanupLine(raw: string, clean: string, mode: Mode, error: string | null): string {
-  if (error) return `Cleanup failed (${error}), saved as written.`;
-  if (mode === 'verbatim') return 'Saved as written, no cleanup.';
-  if (clean === raw) return 'Cleaned up, no change needed.';
-  return `Cleaned up, ${raw.length} -> ${clean.length} characters.`;
+export interface CleanupReport {
+  raw: string;
+  clean: string;
+  mode: Mode;
+  error: string | null;
+  ran: boolean; // false when there was no refiner at all: not the same as "no change"
+}
+
+// What the cleanup did, in one line. A missing model must never read as a successful
+// cleanup that found nothing to do, which is exactly how the bug hid the first time.
+export function cleanupLine(r: CleanupReport): string {
+  if (r.error) return `Cleanup failed (${r.error}), saved as written.`;
+  if (r.mode === 'verbatim') return 'Saved as written, no cleanup.';
+  if (!r.ran) return 'Cleanup unavailable, saved as written.';
+  if (r.clean === r.raw) return 'Cleaned up, no change needed.';
+  return `Cleaned up, ${r.raw.length} -> ${r.clean.length} characters.`;
 }
 
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -254,7 +263,13 @@ export async function handleUpdate(
   const reminder = detected?.kind === 'deadline' ? "I'll ping you daily from 3 days before."
     : detected?.kind === 'review' ? "I'll remind you to review it."
     : '';
-  const detail = [cleanupLine(parsed.body, clean, parsed.mode, refineError), reminder]
+  const detail = [cleanupLine({
+    raw: parsed.body,
+    clean,
+    mode: parsed.mode,
+    error: refineError,
+    ran: Boolean(refiner) && parsed.mode !== 'verbatim',
+  }), reminder]
     .filter(Boolean)
     .join(' ');
   await notifier.reply(

@@ -37,6 +37,7 @@ Both are in the current catalog. Workers AI retired eighteen older models on 30 
 - `/push` (verbatim) never reaches the model: those words are the point.
 - If the model fails or answers with nothing, the note is stored as written and the Telegram reply says `Cleanup failed (<reason>), so it is saved exactly as you wrote it.` Nothing is ever lost, and the reason is in the message instead of only in the Worker logs.
 - The binding is declared in `wrangler.toml` (`[ai] binding = "AI"`). Local `wrangler dev` cannot run it; Workers AI always runs remotely, so cleanup can only be tested after a deploy.
+- `GET /api/ai-check` runs one tiny inference and answers `{ ok, binding, model, output }` or `{ ok: false, error }`. It separates a missing binding from a retired model id from an account that cannot use Workers AI, without writing a test note into the diary.
 
 The reply is always three lines: where it was filed, what the cleanup did, and the start of what was stored (first 180 characters, cut with `...`).
 

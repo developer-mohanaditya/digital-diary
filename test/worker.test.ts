@@ -147,6 +147,40 @@ describe('/telegram/webhook cleanup', () => {
   });
 });
 
+describe('/api/ai-check', () => {
+  it('reports a working model with its output', async () => {
+    supabaseStub();
+    const AI = { run: vi.fn(async () => ({ response: 'ok' })) };
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, binding: true, output: 'ok' });
+  });
+
+  it('reports the real model error instead of a bare failure', async () => {
+    supabaseStub();
+    const AI = { run: vi.fn(async () => { throw new Error('Model not found: @cf/zai-org/glm-4.7-flash'); }) };
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(502);
+    const body = await res.json() as { ok: boolean; binding: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.binding).toBe(true);
+    expect(body.error).toContain('Model not found');
+  });
+
+  it('says the binding itself is missing when there is no AI on the Worker', async () => {
+    supabaseStub();
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI: undefined, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ ok: false, binding: false });
+  });
+
+  it('is behind the passphrase when one is set', async () => {
+    supabaseStub();
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI: { run: vi.fn() } }));
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('/api/entries', () => {
   it('serves the diary openly when no passphrase is configured', async () => {
     supabaseStub();

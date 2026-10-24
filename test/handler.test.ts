@@ -228,11 +228,19 @@ describe('reply format', () => {
   });
 
   it('reports the cleanup result, and never claims success after a failure', () => {
-    expect(cleanupLine('um so I had a coffee with ram', 'Had coffee with Ram.', 'refine', null))
+    expect(cleanupLine({ raw: 'um so I had a coffee with ram', clean: 'Had coffee with Ram.', mode: 'refine', error: null, ran: true }))
       .toBe('Cleaned up, 29 -> 20 characters.');
-    expect(cleanupLine('same', 'same', 'refine', null)).toBe('Cleaned up, no change needed.');
-    expect(cleanupLine('exact words', 'exact words', 'verbatim', null)).toBe('Saved as written, no cleanup.');
-    expect(cleanupLine('a note', 'a note', 'refine', 'Model not found: @cf/old')).toBe('Cleanup failed (Model not found: @cf/old), saved as written.');
+    expect(cleanupLine({ raw: 'same', clean: 'same', mode: 'refine', error: null, ran: true }))
+      .toBe('Cleaned up, no change needed.');
+    expect(cleanupLine({ raw: 'exact words', clean: 'exact words', mode: 'verbatim', error: null, ran: false }))
+      .toBe('Saved as written, no cleanup.');
+    expect(cleanupLine({ raw: 'a note', clean: 'a note', mode: 'refine', error: 'Model not found: @cf/old', ran: true }))
+      .toBe('Cleanup failed (Model not found: @cf/old), saved as written.');
+  });
+
+  it('says cleanup was unavailable rather than pretending nothing needed changing', () => {
+    expect(cleanupLine({ raw: 'a note', clean: 'a note', mode: 'refine', error: null, ran: false }))
+      .toBe('Cleanup unavailable, saved as written.');
   });
 });
 
