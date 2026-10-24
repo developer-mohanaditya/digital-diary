@@ -1,5 +1,6 @@
 import { handleUpdate, type TelegramUpdate, type Store, type Notifier } from './handler';
 import { groupByDay, type DeadlineMark, type ThoughtRow } from './api';
+import { workersAiRefiner, type AiRunner } from './refine';
 import {
   SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
 } from './session';
@@ -14,6 +15,7 @@ export interface Env {
   DIARY_TZ: string; // IANA timezone, e.g. "Asia/Kolkata"
   DIARY_PASSPHRASE?: string;     // secret: the one password that opens the diary page
   DIARY_SESSION_SECRET?: string; // secret: signs cookies; defaults to the passphrase
+  AI?: AiRunner;                 // Workers AI binding, wired up in wrangler.toml
 }
 
 // Supabase REST adapter (service key stays server-side in Worker secrets).
@@ -277,7 +279,7 @@ async function webhook(request: Request, env: Env): Promise<Response> {
     await handleUpdate(update, store, notifier, {
       allowedChatId: Number(env.ALLOWED_CHAT_ID),
       timeZone: env.DIARY_TZ || 'UTC',
-    });
+    }, new Date(), env.AI ? workersAiRefiner(env.AI) : undefined);
     return new Response('ok');
   } catch (err) {
     // Tell the owner instead of failing silently. Answering 200 stops Telegram from
