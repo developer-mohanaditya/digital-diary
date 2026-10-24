@@ -18,7 +18,8 @@ The longer goal is to keep a record of how I change over time: habits, projects,
   - Tags can be combined with a space: `/push /thought Stay hungry, stay foolish`.
   - `/timezone Asia/Kolkata` sets the timezone used to decide which day an entry belongs to. `/timezone` on its own shows the current one. Older entries keep their day.
   - `/test` replies with live database counts and writes one heartbeat row, so you can tell a quiet bot from an empty database. It is never saved as an entry.
-- Cleans each note up with Workers AI before storing it: filler and false starts out, punctuation and sentence breaks in, the writer's facts and voice untouched. The original stays in `raw_text` next to the cleaned `clean_text`, and the web page's Raw control shows it.
+- Rewrites each note with Workers AI before storing it: filler and false starts out, punctuation and sentence breaks in, and the result laid out to be read (paragraphs, bullets when the note is a list, a little emphasis on the words that carry the point). The original stays in `raw_text` next to the formatted `clean_text`, and the web page's Raw control shows it word for word.
+- Commands and empty messages (`/start`, `/test`, `/timezone`, a bare `/push`, a blank message) are answered and never written to the database.
 - Puts untagged text in Inbox for now.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
 - Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`. The page is open unless a passphrase secret is set.
@@ -27,26 +28,50 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 
 `src/refine.ts` holds the prompt and the model choice; `src/handler.ts` calls it after the day, category and reminder are worked out and before the row is written.
 
-| Note length | Model |
+The model does two jobs in one call: it removes filler, false starts and repetition, and it lays the note out for reading. The markup is deliberately small, because the page renders it and nothing else:
+
+| Written by the model | Shown as |
 | --- | --- |
-| up to 1000 characters | `@cf/zai-org/glm-4.7-flash` |
-| longer | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| a blank line between lines | a new paragraph |
+| lines starting `- ` | a bullet list |
+| lines starting `1. ` | a numbered list |
+| `**words**` | **bold** |
+| `*words*` | *italic* |
+| `==words==` | highlight |
+
+The page escapes every note before rebuilding those markers, so a note can never inject HTML. Headings, tables, code blocks and emoji are explicitly out.
+
+| Note length | Model order |
+| --- | --- |
+| up to 1000 characters | `@cf/zai-org/glm-4.7-flash`, then `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| longer | `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, then `@cf/zai-org/glm-4.7-flash` |
+| last resort, either length | `@cf/meta/llama-3.1-8b-instruct-fp8` |
+
+Each model is tried in turn; an answer that is empty, a lecture, or several times longer than the note is rejected and the next model gets a go. If all three fail, the note is stored as written and the reply says why.
+
+### What the labels mean
+
+- **Refined / Reason / Think** — the note went through the cleanup and came back different, so the Raw control is offered and shows the exact words that were sent.
+- **Verbatim** — either `/push` was used, or the cleanup found nothing to change. There is nothing behind a Raw control in that case, so it is not shown.
+- A note is never lost and never silently rewritten: `raw_text` always holds what was typed.
 
 Both are in the current catalog. Workers AI retired eighteen older models on 30 May 2026, including `@cf/meta/llama-3.1-8b-instruct`, and a retired id fails only at runtime: check [the catalog](https://developers.cloudflare.com/workers-ai/models/) before changing these.
 
 - `/push` (verbatim) never reaches the model: those words are the point.
-- If the model fails or answers with nothing, the note is stored as written and the Telegram reply says `Cleanup failed (<reason>), so it is saved exactly as you wrote it.` Nothing is ever lost, and the reason is in the message instead of only in the Worker logs.
+- If every model fails, the note is stored as written and the Telegram reply says `Cleanup failed (<reason>), saved as written.` Nothing is ever lost, the reason is in the message, and it is also kept on the capture (`captures.last_error`) so it can be read back without the phone.
 - The binding is declared in `wrangler.toml` (`[ai] binding = "AI"`). Local `wrangler dev` cannot run it; Workers AI always runs remotely, so cleanup can only be tested after a deploy.
+- `GET /api/ai-check` runs one tiny inference per cleanup model and answers `{ ok, binding, models: [{ model, ok, ms, output | error }] }`. It separates a missing binding from a retired model id from an account that cannot use Workers AI, without writing a test note into the diary.
+- `POST /api/reclean` re-runs the cleanup over notes an earlier, broken model left untouched (`clean_text` identical to `raw_text`). It only ever rewrites `clean_text`, never `raw_text`, and needs the Telegram webhook secret in an `x-reclean-token` header. `?limit=25` caps the work (maximum 50) because the call is synchronous.
 
 The reply is always three lines: where it was filed, what the cleanup did, and the start of what was stored (first 180 characters, cut with `...`).
 
 ```
 Saved to Work.
-Cleaned up, 233 -> 127 characters.
-The deploy went out, but Raw is still missing on the old notes: they predate the cleanup. I keep forgetting that order matters.
+Formatted, 233 -> 127 characters.
+The deploy went out, but **Raw** is still missing on the old notes: they predate the cleanup. I keep forgetting that order matters.
 ```
 
-Line two is one of `Cleaned up, <before> -> <after> characters.`, `Cleaned up, no change needed.`, `Saved as written, no cleanup.` for `/push`, or `Cleanup failed (<reason>), saved as written.`
+Line two is one of `Formatted, <before> -> <after> characters.`, `Cleaned up, no change needed.`, `Saved as written, no cleanup.` for `/push`, or `Cleanup failed (<reason>), saved as written.`
 
 ## What is not built yet
 
@@ -55,6 +80,14 @@ Line two is one of `Cleaned up, <before> -> <after> characters.`, `Cleaned up, n
 - Moving entries between categories on the web.
 - Link capture.
 - Anything that reads patterns or writes summaries.
+
+## Deployments and branches
+
+- `main` is the only branch that deploys. A push to `main` builds the Worker and the web app; nothing else reaches the live diary.
+- Work happens on a short-lived branch per change (`fix/raw-tag`, `feat/reclean`), merged into `main` by pull request.
+- Cloudflare Workers Builds still tries to build every pushed branch, and those preview builds fail because they have no production secrets. Turn that off in the dashboard: **Workers & Pages → awedityasdiary → Settings → Build → Branch control → Build production branch only**. Failed preview builds are not a problem with the code.
+- The demo in `public/demo/` is published to GitHub Pages from `main` only, by `.github/workflows/pages-demo.yml`.
+- Titles: the live site's tab reads **Digital Diary**; the demo reads **Preview · Digital Diary**, so a screenshot always says which one it is.
 
 ## Stack
 

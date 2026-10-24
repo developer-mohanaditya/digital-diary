@@ -1,10 +1,13 @@
 name: Deploy demo to GitHub Pages
 
+# The demo moved to public/demo, where the Worker serves it too. This workflow publishes
+# the same files to GitHub Pages, from main only: a branch that never deploys does not
+# need a deployment job that can fail.
 on:
   push:
-    branches: [developer-fb]
+    branches: [main]
     paths:
-      - "demo/**"
+      - "public/demo/**"
       - ".github/workflows/pages-demo.yml"
   workflow_dispatch:
 
@@ -30,6 +33,6 @@ jobs:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: demo
+          path: public/demo
       - id: deployment
         uses: actions/deploy-pages@v4

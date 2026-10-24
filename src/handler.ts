@@ -100,17 +100,37 @@ export function formatHealth(stats: HealthStats, timeZone: string): string {
 export const PREVIEW_CHARS = 180;
 
 export function storedPreview(text: string, limit = PREVIEW_CHARS): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
+  const flat = text
+    .replace(/\*\*|==/g, '')
+    .replace(/^\s*[-\u2022]\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   return flat.length > limit ? `${flat.slice(0, limit).trimEnd()}...` : flat;
 }
 
-// What the cleanup did, in one line: the difference between a note that was never
-// cleaned and one the model chose not to change is worth showing.
-export function cleanupLine(raw: string, clean: string, mode: Mode, error: string | null): string {
-  if (error) return `Cleanup failed (${error}), saved as written.`;
-  if (mode === 'verbatim') return 'Saved as written, no cleanup.';
-  if (clean === raw) return 'Cleaned up, no change needed.';
-  return `Cleaned up, ${raw.length} -> ${clean.length} characters.`;
+export interface CleanupReport {
+  raw: string;
+  clean: string;
+  mode: Mode;
+  error: string | null;
+  ran: boolean; // false when there was no refiner at all: not the same as "no change"
+}
+
+// What the cleanup did, in one line. A missing model must never read as a successful
+// cleanup that found nothing to do, which is exactly how the bug hid the first time.
+export function cleanupLine(r: CleanupReport): string {
+  if (r.error) return `Cleanup failed (${r.error}), saved as written.`;
+  if (r.mode === 'verbatim') return 'Saved as written, no cleanup.';
+  if (!r.ran) return 'Cleanup unavailable, saved as written.';
+  if (r.clean === r.raw) return 'Cleaned up, no change needed.';
+  return `Formatted, ${r.raw.length} -> ${r.clean.length} characters.`;
+}
+
+// Messages that are instructions rather than notes: they get a reply and never touch the
+// database, so the diary cannot fill up with /start and /test rows. A bare slash word is
+// treated the same way, because a mistyped command is not a diary entry either.
+export function isInstruction(text: string): boolean {
+  return /^\s*\/[A-Za-z][\w]*\s*$/.test(text);
 }
 
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -165,17 +185,8 @@ export async function handleUpdate(
     return 'ignored';
   }
 
-  const parsed = parseCommand(msg.text);
-  const capture = await store.insertCapture({
-    update_id: update.update_id,
-    chat_id: msg.chat.id,
-    raw_text: msg.text,
-    mode: parsed.ok ? parsed.mode : null,
-    category: parsed.ok ? parsed.category : null,
-    status: 'received',
-  });
-  if (!capture.inserted || !capture.id) return 'duplicate';
-
+  // The timezone command is an instruction, not a note: it is answered before anything
+  // is written, so "set my timezone" never shows up in the diary.
   const tzCommand = parseTimeZoneCommand(msg.text);
   if (tzCommand) {
     const current = (await store.getTimeZone()) ?? settings.timeZone;
@@ -187,19 +198,40 @@ export async function handleUpdate(
       await store.setTimeZone(tzCommand.zone);
       await notifier.reply(msg.chat.id, `Timezone set to ${tzCommand.zone}. New entries use it; older entries keep their day.`);
     }
-    await store.setCaptureStatus(capture.id, 'done');
     return 'saved';
   }
 
+  // A bare slash word (/push, /work, /nonsense) or an empty message is not a note.
+  // Nothing is captured, and the reply says so, because a row in the diary that only
+  // says "/start" is noise the owner has to clean up by hand later.
+  if (msg.text.trim() === '' || isInstruction(msg.text)) {
+    await notifier.reply(
+      msg.chat.id,
+      'Nothing saved: that is a command, not a note. Send the note after the command, like /push /thought the exact words.',
+    );
+    return 'rejected';
+  }
+
+  const parsed = parseCommand(msg.text);
   if (!parsed.ok) {
-    await store.setCaptureStatus(capture.id, 'failed', parsed.error);
     const text =
-      parsed.error === 'empty' ? 'Nothing to save after the command. Add your text after it.'
-      : parsed.error === 'conflict_mode' ? `Pick one mode: ${parsed.options.map((o) => `/${o === 'verbatim' ? 'push' : o}`).join(' or ')}.`
-      : `Pick one category: ${parsed.options.map((o) => `/${o === 'learning' ? 'learn' : o}`).join(' or ')}.`;
+      parsed.error === 'empty' ? 'Nothing saved: no note text after the command. Add your text after it.'
+      : parsed.error === 'conflict_mode' ? `Nothing saved. Pick one mode: ${parsed.options.map((o) => `/${o === 'verbatim' ? 'push' : o}`).join(' or ')}.`
+      : `Nothing saved. Pick one category: ${parsed.options.map((o) => `/${o === 'learning' ? 'learn' : o}`).join(' or ')}.`;
     await notifier.reply(msg.chat.id, text);
     return 'rejected';
   }
+
+  // Only now, with a real note in hand, is anything written to the database.
+  const capture = await store.insertCapture({
+    update_id: update.update_id,
+    chat_id: msg.chat.id,
+    raw_text: msg.text,
+    mode: parsed.mode,
+    category: parsed.category,
+    status: 'received',
+  });
+  if (!capture.inserted || !capture.id) return 'duplicate';
 
   // Deadlines + reviews: detect from explicit /deadline, due-words, or review phrases.
   // Heuristic now, AI upgrade later without schema change.
@@ -248,13 +280,21 @@ export async function handleUpdate(
       console.error('reminder insert failed', err);
     }
   }
-  await store.setCaptureStatus(capture.id, 'done');
+  // A cleanup failure is kept next to the capture as well as in the reply: the reply is
+  // only seen once, and the reason is what makes the next fix possible.
+  await store.setCaptureStatus(capture.id, 'done', refineError ?? undefined);
   // Three lines: where it was filed, what the cleanup did (a failure is said out loud,
   // with its reason), and the start of what was actually stored.
   const reminder = detected?.kind === 'deadline' ? "I'll ping you daily from 3 days before."
     : detected?.kind === 'review' ? "I'll remind you to review it."
     : '';
-  const detail = [cleanupLine(parsed.body, clean, parsed.mode, refineError), reminder]
+  const detail = [cleanupLine({
+    raw: parsed.body,
+    clean,
+    mode: parsed.mode,
+    error: refineError,
+    ran: Boolean(refiner) && parsed.mode !== 'verbatim',
+  }), reminder]
     .filter(Boolean)
     .join(' ');
   await notifier.reply(

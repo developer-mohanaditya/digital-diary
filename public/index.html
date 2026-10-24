@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Digital Diary · preview</title>
+<title>Digital Diary</title>
 <link rel="icon" href="logo/mark.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -227,6 +227,16 @@
   .rawtag:hover { border-color:var(--accent); color:var(--accent); }
   .rawtag[aria-pressed="true"] { border-style:solid; border-color:var(--accent); color:var(--accent); }
   .entry p { margin:8px 0 0; font-size:1rem; white-space:pre-wrap; }
+  /* The formatted note: paragraphs and lists from the cleanup, never raw HTML. */
+  .rtext { margin-top:8px; font-size:1rem; line-height:1.55; }
+  .rtext p { margin:0 0 .6em; }
+  .rtext p:last-child { margin-bottom:0; }
+  .rtext ul, .rtext ol { margin:0 0 .7em; padding-left:1.2em; }
+  .rtext ul:last-child, .rtext ol:last-child { margin-bottom:0; }
+  .rtext li { margin:.18em 0; }
+  .rtext strong { font-weight:700; }
+  .rtext em { font-style:italic; }
+  .rtext mark { background:color-mix(in srgb, var(--accent) 26%, transparent); border-radius:3px; padding:0 2px; color:inherit; }
   .raw { margin-top:10px; padding:10px 12px; border-radius:12px; background:var(--bg); border:1.5px dashed var(--line); }
   .raw p { color:var(--ink); font-size:.94rem; }
   .actions { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; font-size:.8rem; color:var(--muted); }
@@ -349,7 +359,14 @@
   .xbtn { margin-left:auto; background:none; border:1.5px solid #cf7d7d; color:#b05050; border-radius:10px; width:32px; height:32px; cursor:pointer; font-size:1.35rem; line-height:1; flex-shrink:0; transition:background .15s, color .15s, border-color .15s; }
   .xbtn:hover { border-color:#a93e3e; color:#fff; background:#c05a5a; }
   .smeta { font-size:.8rem; color:var(--muted); margin:6px 0 10px; font-variant-numeric:tabular-nums; }
-  .sfull { font-size:1.05rem; margin:0 0 14px; white-space:pre-wrap; }
+  .sfull { font-size:1.05rem; margin:0 0 14px; line-height:1.6; }
+  .sfull p { margin:0 0 .7em; }
+  .sfull p:last-child { margin-bottom:0; }
+  .sfull ul, .sfull ol { margin:0 0 .8em; padding-left:1.25em; }
+  .sfull li { margin:.2em 0; }
+  .sfull strong { font-weight:700; }
+  .sfull em { font-style:italic; }
+  .sfull mark { background:color-mix(in srgb, var(--accent) 26%, transparent); border-radius:3px; padding:0 2px; color:inherit; }
   .due { display:inline-block; font-size:.72rem; font-weight:800; letter-spacing:.02em; border-radius:999px; padding:1px 9px; border:1.5px solid var(--line); color:var(--muted); white-space:nowrap; }
   .due.soon { border-color:#b7791f; color:#8a5a12; background:color-mix(in srgb, #e8a33d 14%, transparent); }
   .due.over { border-color:#c05a5a; color:#a93e3e; background:color-mix(in srgb, #e5484d 10%, transparent); }

@@ -51,16 +51,27 @@ export function clock(stamp: string, timeZone: string): string {
   }).format(new Date(stamp));
 }
 
+// The label on the chip. A note the cleanup left exactly as written is called verbatim,
+// because that is what it is on screen: the Raw control would show the same words twice.
+// Only notes that went through the formatting keep their refined/reason/think label.
+export function displayMode(stored: string, clean: string, raw: string): string {
+  if (stored === 'verbatim') return 'verbatim';
+  const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
+  if (flat(clean) === flat(raw)) return 'verbatim';
+  return MODE_UI[stored] ?? 'refined';
+}
+
 export function toUiEntry(row: ThoughtRow, timeZone: string, deadline?: DeadlineMark): UiEntry {
+  const raw = row.raw_text || row.clean_text;
   const entry: UiEntry = {
     id: row.id,
     time: clock(row.created_at, timeZone),
     // A category the interface has no colour for would crash its renderer.
     cat: (UI_CATEGORIES as readonly string[]).includes(row.category) ? row.category : 'inbox',
-    mode: MODE_UI[row.mode] ?? 'refined',
+    mode: displayMode(row.mode, row.clean_text, raw),
     src: row.category_source === 'tag' ? 'tag' : 'auto',
     text: row.clean_text,
-    raw: row.raw_text || row.clean_text,
+    raw,
   };
   if (deadline) {
     entry.due = deadline.due;

@@ -25,6 +25,42 @@ const parse = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
 const dim = (y, m) => new Date(y, m, 0).getDate();
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* The cleanup writes a small markup: blank-line paragraphs, "- " bullets, "1. " steps,
+   **bold**, *italic* and ==highlight==. The text is escaped first and only those markers
+   are rebuilt, so a note can never inject HTML. */
+function inlineHTML(s) {
+  return s
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>')
+    .replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+}
+function richHTML(text) {
+  const out = [];
+  let list = null, para = [];
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  const flushPara = () => { if (para.length) { out.push(`<p>${inlineHTML(para.join(' '))}</p>`); para = []; } };
+  for (const raw of String(text || '').split('\n')) {
+    const line = esc(raw).trim();
+    if (line === '') { flushPara(); closeList(); continue; }
+    const bullet = /^[-*\u2022]\s+(.*)$/.exec(line);
+    const step = /^\d+[.)]\s+(.*)$/.exec(line);
+    if (bullet || step) {
+      flushPara();
+      const kind = bullet ? 'ul' : 'ol';
+      if (list !== kind) { closeList(); out.push(`<${kind}>`); list = kind; }
+      out.push(`<li>${inlineHTML((bullet || step)[1])}</li>`);
+      continue;
+    }
+    closeList();
+    para.push(line);
+  }
+  flushPara();
+  closeList();
+  return out.join('');
+}
+// The one-line ledger and the search index want the words without the markers.
+const plainText = s => String(s || '').replace(/\*\*|==/g, '').replace(/\*/g, '').replace(/^[-\u2022]\s+/gm, '').replace(/\s+/g, ' ').trim();
 const fmtDay = d => d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 const shortDay = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
 const fmtDue = k => parse(k).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
@@ -447,7 +483,7 @@ function entryHTML(it, k) {
         <span class="time">${it.time}</span><span class="chip">${c.label}</span><span class="mode">${MODE_LABEL[it.mode]}</span>${duePill(it)}
         ${hasRaw ? `<button class="rawtag" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}">Raw</button>` : ''}
       </div>
-      <p>${esc(it.text)}</p>
+      <div class="rtext">${richHTML(it.text)}</div>
       ${rawOpen ? `<div class="raw"><span class="kicker">Raw</span><p>${esc(it.raw || it.text)}</p></div>` : ''}
       <div class="actions">
         ${moveOpen
@@ -461,7 +497,7 @@ function entryHTML(it, k) {
 function ledgerRowHTML(it, k, withDay = false) {
   return `<div class="lrow clickable" data-action="open" data-v="${k}|${it.id}" tabindex="0" role="button" title="Open note">
       <span class="ltime${withDay ? ' wide' : ''}">${withDay ? `${+it.k.slice(8)} ${it.time}` : it.time}</span>
-      <span class="ltxt clamp">${esc(it.text)}</span>${duePill(it)}
+      <span class="ltxt clamp">${esc(plainText(it.text))}</span>${duePill(it)}
     </div>`;
 }
 function findNote(ref) {
@@ -488,7 +524,8 @@ function splitTitle(t) {
 }
 function noteTitleBody(t) {
   const { title, body } = splitTitle(t);
-  return (title ? `<h3 class="stitle">${esc(title)}</h3>` : '') + `<p class="sfull">${esc(body)}</p>`;
+  const head = title ? `<h3 class="stitle">${inlineHTML(esc(title))}</h3>` : '';
+  return `${head}<div class="sfull">${richHTML(body)}</div>`;
 }
 function noteHTML(ref) {
   const found = findNote(ref);
