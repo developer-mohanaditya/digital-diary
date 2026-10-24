@@ -67,6 +67,24 @@ export interface Notifier {
   remind?(chatId: number, reminderId: string, text: string): Promise<void>;
 }
 
+// The one-time repair: re-run the cleanup over notes an earlier, broken model left with
+// clean_text identical to raw_text. Kept behind a port so the handler can offer it as a
+// command without knowing about Supabase or Workers AI.
+export interface RepairResult {
+  scanned: number;
+  cleaned: number;
+  failed: string[];
+}
+export interface Repairer {
+  repair(limit: number): Promise<RepairResult>;
+}
+
+export function repairLine(r: RepairResult): string {
+  if (r.scanned === 0) return 'Nothing to re-clean: every note has a formatted version already.';
+  const head = `Re-cleaned ${r.cleaned} of ${r.scanned} untouched note${r.scanned === 1 ? '' : 's'}.`;
+  return r.failed.length ? `${head}\nFailed: ${r.failed.slice(0, 3).join('; ')}` : head;
+}
+
 export interface Settings {
   allowedChatId: number;
   timeZone: string;
@@ -150,6 +168,7 @@ export async function handleUpdate(
   settings: Settings,
   now: Date = new Date(),
   refiner?: Refiner,
+  repairer?: Repairer,
 ): Promise<Outcome> {
   const msg = update.message;
   if (!msg || msg.chat.id !== settings.allowedChatId) return 'ignored';
@@ -181,6 +200,26 @@ export async function handleUpdate(
     } catch (err) {
       const reason = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
       await notifier.reply(msg.chat.id, `Database check failed. ${reason}`);
+    }
+    return 'ignored';
+  }
+
+  // /reclean re-runs the cleanup over notes an earlier model left untouched. It is the
+  // repair path for history, not something the normal flow needs, and it writes only
+  // clean_text: the raw text of every note is left exactly as it was.
+  if (msg.text.trim().split(/\s/)[0].split('@')[0] === '/reclean') {
+    if (!repairer) {
+      await notifier.reply(msg.chat.id, 'Re-clean is not available in this build.');
+      return 'ignored';
+    }
+    const asked = Number(msg.text.trim().split(/\s+/)[1]);
+    const limit = Number.isFinite(asked) && asked > 0 ? Math.min(Math.floor(asked), 25) : 5;
+    try {
+      const result = await repairer.repair(limit);
+      await notifier.reply(msg.chat.id, repairLine(result));
+    } catch (err) {
+      const reason = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
+      await notifier.reply(msg.chat.id, `Re-clean failed. ${reason}`);
     }
     return 'ignored';
   }

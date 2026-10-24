@@ -1,4 +1,6 @@
-import { handleUpdate, localDay, type TelegramUpdate, type Store, type Notifier } from './handler';
+import {
+  handleUpdate, localDay, type TelegramUpdate, type Store, type Notifier, type RepairResult,
+} from './handler';
 import type { Category, Mode } from './parse';
 import { MAX_INPUT_CHARS, sameWords } from './refine';
 import { UI_CATEGORIES, groupByDay, type DeadlineMark, type ThoughtRow } from './api';
@@ -236,27 +238,24 @@ async function aiCheck(request: Request, env: Env): Promise<Response> {
   return json({ ok, binding: true, models }, ok ? 200 : 502);
 }
 
-// POST /api/reclean: runs the cleanup again over notes an earlier model left untouched.
-// Those rows have clean_text === raw_text, so they have no Raw control and nothing to
-// read: this is the one-time repair, not part of saving a note. The raw text is never
-// modified, so a bad rewrite is recoverable. Guarded by the webhook secret because it
-// spends AI credits and runs unattended.
-async function reclean(request: Request, env: Env): Promise<Response> {
-  if (!env.TELEGRAM_WEBHOOK_SECRET || request.headers.get('x-reclean-token') !== env.TELEGRAM_WEBHOOK_SECRET) {
-    return json({ ok: false, error: 'Send the Telegram webhook secret as x-reclean-token.' }, 401);
-  }
-  if (!env.AI) return json({ ok: false, error: 'No AI binding on this Worker.' }, 503);
+// Runs the cleanup again over notes an earlier model left untouched: those rows have
+// clean_text === raw_text, so they have no Raw control and nothing to read. This is the
+// repair path for history, not part of saving a note. Only clean_text is ever written,
+// so a bad rewrite is always recoverable from raw_text.
+async function repairUntouched(env: Env, limit: number): Promise<RepairResult> {
+  if (!env.AI) throw new Error('No AI binding on this Worker.');
   const refiner = workersAiRefiner(env.AI);
-  const limit = Math.min(Number(new URL(request.url).searchParams.get('limit') ?? 25) || 25, 50);
   const base = `${env.SUPABASE_URL}/rest/v1`;
   const headers = { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` };
   const rowsRes = await fetch(
     `${base}/thoughts?mode=neq.verbatim&select=id,mode,category,clean_text,raw_text&order=created_at.desc&limit=200`,
     { headers },
   );
-  if (!rowsRes.ok) return json({ ok: false, error: `Supabase ${rowsRes.status}: ${await rowsRes.text()}` }, 502);
+  if (!rowsRes.ok) throw new Error(`Supabase ${rowsRes.status}: ${await rowsRes.text()}`);
   const rows = (await rowsRes.json()) as ThoughtRow[];
-  const untouched = rows.filter((r) => (r.raw_text ?? '').trim() !== '' && (r.clean_text ?? '') === (r.raw_text ?? '')).slice(0, limit);
+  const untouched = rows
+    .filter((r) => (r.raw_text ?? '').trim() !== '' && (r.clean_text ?? '') === (r.raw_text ?? ''))
+    .slice(0, limit);
   let cleaned = 0;
   const failed: string[] = [];
   for (const r of untouched) {
@@ -274,7 +273,26 @@ async function reclean(request: Request, env: Env): Promise<Response> {
       failed.push(`${r.id}: ${err instanceof Error ? err.message.split('\n')[0].slice(0, 160) : 'unknown error'}`);
     }
   }
-  return json({ ok: true, untouched: untouched.length, cleaned, skipped: untouched.length - cleaned - failed.length, failed });
+  return { scanned: untouched.length, cleaned, failed };
+}
+
+// POST /api/reclean: the same repair, for a machine. Guarded, because it spends AI
+// neurons and rewrites derived text: either the Telegram webhook secret or the database
+// service key is accepted as the bearer, since both are already Worker secrets and a
+// leak of either is worse than this route.
+async function reclean(request: Request, env: Env): Promise<Response> {
+  const given = request.headers.get('x-reclean-token') ?? '';
+  const accepted = [env.TELEGRAM_WEBHOOK_SECRET, env.SUPABASE_SERVICE_KEY].filter((v): v is string => Boolean(v));
+  if (!given || !accepted.some((candidate) => sameSecret(given, candidate))) {
+    return json({ ok: false, error: 'Send an accepted secret as x-reclean-token.' }, 401);
+  }
+  const asked = Number(new URL(request.url).searchParams.get('limit') ?? 5);
+  const limit = Number.isFinite(asked) && asked > 0 ? Math.min(Math.floor(asked), 25) : 5;
+  try {
+    return json({ ok: true, ...(await repairUntouched(env, limit)) });
+  } catch (err) {
+    return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
+  }
 }
 
 // Read API for the web interface. Without a signed-in session (or Cloudflare Access,
@@ -483,7 +501,9 @@ async function webhook(request: Request, env: Env): Promise<Response> {
     await handleUpdate(update, store, notifier, {
       allowedChatId: Number(env.ALLOWED_CHAT_ID),
       timeZone: env.DIARY_TZ || 'UTC',
-    }, new Date(), env.AI ? workersAiRefiner(env.AI) : undefined);
+    }, new Date(), env.AI ? workersAiRefiner(env.AI) : undefined, {
+      repair: (limit: number) => repairUntouched(env, limit),
+    });
     return new Response('ok');
   } catch (err) {
     // Tell the owner instead of failing silently. Answering 200 stops Telegram from
