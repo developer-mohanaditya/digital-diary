@@ -119,7 +119,11 @@ describe('/telegram/webhook cleanup', () => {
       raw_text: 'um so I had a coffee with ram',
       mode: 'refine',
     });
-    expect(telegram(bodies)?.text).toBe('Saved to Inbox.');
+    expect((telegram(bodies)?.text ?? '').split('\n')).toEqual([
+      'Saved to Inbox.',
+      'Cleaned up, 29 -> 20 characters.',
+      'Had coffee with Ram.',
+    ]);
   });
 
   it('saves the note as written when the model is unavailable, and says so', async () => {

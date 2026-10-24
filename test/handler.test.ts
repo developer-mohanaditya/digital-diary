@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleUpdate, localDay, type Store, type Notifier, type TelegramUpdate } from '../src/handler';
+import {
+  PREVIEW_CHARS, cleanupLine, handleUpdate, localDay, storedPreview,
+  type Store, type Notifier, type TelegramUpdate,
+} from '../src/handler';
 import type { Refiner } from '../src/refine';
 
 const SETTINGS = { allowedChatId: 42, timeZone: 'UTC' };
@@ -95,7 +98,10 @@ describe('handleUpdate', () => {
       capture_id: 'cap-1', day: '2026-10-13', category: 'thought', category_source: 'tag',
       mode: 'verbatim', clean_text: 'Stay hungry, stay foolish', raw_text: 'Stay hungry, stay foolish',
     }));
-    expect(n.reply).toHaveBeenCalledWith(42, 'Saved to Thought.');
+    expect(n.reply).toHaveBeenCalledWith(
+      42,
+      'Saved to Thought.\nSaved as written, no cleanup.\nStay hungry, stay foolish',
+    );
   });
 
   it('untagged text goes to Inbox with source "auto"', async () => {
@@ -149,7 +155,12 @@ describe('cleanup', () => {
       clean_text: 'Had coffee with Ram.',
       raw_text: 'um so i had a coffee with ram, yeah',
     }));
-    expect(n.reply).toHaveBeenCalledWith(42, 'Saved to Inbox.');
+    // Three lines: filed under, what cleanup did, what was stored.
+    expect(n.reply.mock.calls[0][1].split('\n')).toEqual([
+      'Saved to Inbox.',
+      'Cleaned up, 35 -> 20 characters.',
+      'Had coffee with Ram.',
+    ]);
   });
 
   it('sends the tagged category and the mode it was sent with', async () => {
@@ -178,6 +189,8 @@ describe('cleanup', () => {
     }));
     expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done');
     expect(n.reply.mock.calls[0][1]).toContain('Cleanup failed');
+    // The reason travels with the reply: "failed" alone cannot be diagnosed from a phone.
+    expect(n.reply.mock.calls[0][1]).toContain('AI quota exhausted');
   });
 
   it('keeps the original silently when the model returns nothing', async () => {
@@ -196,6 +209,30 @@ describe('cleanup', () => {
     expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
       clean_text: 'no model here', raw_text: 'no model here',
     }));
+  });
+});
+
+describe('reply format', () => {
+  it('keeps a short note as it is', () => {
+    expect(storedPreview('Had coffee with Ram.')).toBe('Had coffee with Ram.');
+  });
+
+  it('cuts a long note and marks the cut with three dots', () => {
+    const out = storedPreview('a'.repeat(PREVIEW_CHARS + 50));
+    expect(out).toHaveLength(PREVIEW_CHARS + 3);
+    expect(out.endsWith('...')).toBe(true);
+  });
+
+  it('flattens line breaks so the preview stays on one line', () => {
+    expect(storedPreview('first line\n\nsecond   line')).toBe('first line second line');
+  });
+
+  it('reports the cleanup result, and never claims success after a failure', () => {
+    expect(cleanupLine('um so I had a coffee with ram', 'Had coffee with Ram.', 'refine', null))
+      .toBe('Cleaned up, 29 -> 20 characters.');
+    expect(cleanupLine('same', 'same', 'refine', null)).toBe('Cleaned up, no change needed.');
+    expect(cleanupLine('exact words', 'exact words', 'verbatim', null)).toBe('Saved as written, no cleanup.');
+    expect(cleanupLine('a note', 'a note', 'refine', 'Model not found: @cf/old')).toBe('Cleanup failed (Model not found: @cf/old), saved as written.');
   });
 });
 

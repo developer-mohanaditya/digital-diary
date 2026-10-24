@@ -29,12 +29,24 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 
 | Note length | Model |
 | --- | --- |
-| up to 1000 characters | `@cf/meta/llama-3.1-8b-instruct` |
+| up to 1000 characters | `@cf/zai-org/glm-4.7-flash` |
 | longer | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
 
+Both are in the current catalog. Workers AI retired eighteen older models on 30 May 2026, including `@cf/meta/llama-3.1-8b-instruct`, and a retired id fails only at runtime: check [the catalog](https://developers.cloudflare.com/workers-ai/models/) before changing these.
+
 - `/push` (verbatim) never reaches the model: those words are the point.
-- If the model fails or answers with nothing, the note is stored as written and the Telegram reply says `Cleanup failed, so it is saved exactly as you wrote it.` Nothing is ever lost.
+- If the model fails or answers with nothing, the note is stored as written and the Telegram reply says `Cleanup failed (<reason>), so it is saved exactly as you wrote it.` Nothing is ever lost, and the reason is in the message instead of only in the Worker logs.
 - The binding is declared in `wrangler.toml` (`[ai] binding = "AI"`). Local `wrangler dev` cannot run it; Workers AI always runs remotely, so cleanup can only be tested after a deploy.
+
+The reply is always three lines: where it was filed, what the cleanup did, and the start of what was stored (first 180 characters, cut with `...`).
+
+```
+Saved to Work.
+Cleaned up, 233 -> 127 characters.
+The deploy went out, but Raw is still missing on the old notes: they predate the cleanup. I keep forgetting that order matters.
+```
+
+Line two is one of `Cleaned up, <before> -> <after> characters.`, `Cleaned up, no change needed.`, `Saved as written, no cleanup.` for `/push`, or `Cleanup failed (<reason>), saved as written.`
 
 ## What is not built yet
 

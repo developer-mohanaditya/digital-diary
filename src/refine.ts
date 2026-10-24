@@ -7,7 +7,11 @@ import type { Mode } from './parse';
 
 // Workers AI models. Short notes go to the small model; long ones to the bigger one,
 // which follows "keep it short" far more reliably on a rambling paragraph.
-export const SMALL_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+//
+// Both must exist in the current catalog: @cf/meta/llama-3.1-8b-instruct was retired on
+// 30 May 2026 along with seventeen other models, and a retired id fails at runtime with
+// no hint until the note comes back uncleaned. Check the catalog before changing these.
+export const SMALL_MODEL = '@cf/zai-org/glm-4.7-flash';
 export const BIG_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 export const BIG_TEXT_CHARS = 1000;
 // A pasted essay would cost tokens and time for no gain; the raw text is kept whole.
