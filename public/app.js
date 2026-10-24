@@ -430,15 +430,22 @@ function dueLine(it) {
   const st = it.done ? 'Done' : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
   return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span></div>`;
 }
+// Raw is the note before cleanup, so it is only offered when cleanup produced a
+// different text. A verbatim note is stored twice identically on purpose: there is
+// nothing behind the control, and the mode chip already says the words are exact.
+function hasRawText(it) {
+  return it.mode !== 'verbatim' && !!it.raw && it.raw !== it.text;
+}
 function entryHTML(it, k) {
   const c = CAT[it.cat];
-  const rawOpen = ui.openRaw.has(it.id), moveOpen = ui.openMove.has(it.id);
+  const hasRaw = hasRawText(it);
+  const rawOpen = hasRaw && ui.openRaw.has(it.id), moveOpen = ui.openMove.has(it.id);
   const opts = CATS.map(x => `<option value="${x.id}"${x.id === it.cat ? ' selected' : ''}>${x.label}</option>`).join('');
   return `
     <article class="entry" style="--c:${c.color}">
       <div class="meta">
         <span class="time">${it.time}</span><span class="chip">${c.label}</span><span class="mode">${MODE_LABEL[it.mode]}</span>${duePill(it)}
-        <button class="rawtag" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}">Raw</button>
+        ${hasRaw ? `<button class="rawtag" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}">Raw</button>` : ''}
       </div>
       <p>${esc(it.text)}</p>
       ${rawOpen ? `<div class="raw"><span class="kicker">Raw</span><p>${esc(it.raw || it.text)}</p></div>` : ''}
@@ -488,9 +495,7 @@ function noteHTML(ref) {
   if (!found) return '';
   const { k, it } = found;
   const c = CAT[it.cat];
-  // Always offered: before cleanup existed every note was stored with the same text
-  // twice, and a button that vanished made the raw copy look missing rather than equal.
-  const hasRaw = !!(it.raw || it.text);
+  const hasRaw = hasRawText(it);
   const rawOpen = ui.openRaw.has(it.id);
   const opts = CATS.map(x => `<option value="${x.id}"${x.id === it.cat ? ' selected' : ''}>${x.label}</option>`).join('');
   const moveOpen = ui.moveMenu;
@@ -502,7 +507,7 @@ function noteHTML(ref) {
       ${dueLine(it)}
       ${noteTitleBody(it.text)}
       ${it.photo ? `<figure class="sfigure"><img src="${it.photo.src}" alt="Attached photo" loading="lazy" /></figure>` : ''}
-      ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw || it.text)}</p>${(it.raw || it.text) === it.text ? '<span class="muted">Exactly as you sent it: the cleanup changed nothing.</span>' : ''}</div>` : ''}
+      ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
     </div></div>`;
 }
 function dayTabsHTML(tabDefs) {
