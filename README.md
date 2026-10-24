@@ -17,9 +17,9 @@ The longer goal is to keep a record of how I change over time: habits, projects,
   - Category tags: `/class`, `/learn`, `/thought`, `/quote`, `/work`, `/project`, `/life`, `/task`, `/deadline`.
   - Tags can be combined with a space: `/push /thought Stay hungry, stay foolish`.
   - `/timezone Asia/Kolkata` sets the timezone used to decide which day an entry belongs to. `/timezone` on its own shows the current one. Older entries keep their day.
-  - `/test` replies with live database counts and writes one heartbeat row, so you can tell a quiet bot from an empty database. It is never saved as an entry.
+  - `/heartbeat` replies with live database counts and writes one heartbeat row, so you can tell a quiet bot from an empty database. It is never saved as an entry.
 - Rewrites each note with Workers AI before storing it: filler and false starts out, punctuation and sentence breaks in, and the result laid out to be read (paragraphs, bullets when the note is a list, a little emphasis on the words that carry the point). The original stays in `raw_text` next to the formatted `clean_text`, and the web page's Raw control shows it word for word.
-- Commands and empty messages (`/start`, `/test`, `/timezone`, a bare `/push`, a blank message) are answered and never written to the database.
+- Commands and empty messages (`/start`, `/heartbeat`, `/timezone`, a bare `/push`, a blank message) are answered and never written to the database.
 - Puts untagged text in Inbox for now.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
 - Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`. The page is open unless a passphrase secret is set.
