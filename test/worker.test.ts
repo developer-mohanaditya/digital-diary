@@ -84,6 +84,65 @@ describe('/api/session', () => {
   });
 });
 
+describe('/telegram/webhook cleanup', () => {
+  // Records every request the Worker makes so the stored row and the reply can be read back.
+  const wire = () => {
+    const bodies: { url: string; body: { [k: string]: unknown } | null }[] = [];
+    const stub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      bodies.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.includes('/captures?on_conflict')) {
+        return new Response(JSON.stringify([{ id: 'cap-1' }]), { headers: { 'Content-Type': 'application/json' } });
+      }
+      // An empty array answers the reads (settings, reminders) without upsetting JSON.parse.
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', stub);
+    return bodies;
+  };
+  const telegram = (bodies: { url: string; body: { [k: string]: unknown } | null }[]) =>
+    bodies.find((b) => b.url.includes('api.telegram.org'))?.body as { text: string } | undefined;
+  const update = (text: string) => request('/telegram/webhook', {
+    method: 'POST',
+    headers: { 'X-Telegram-Bot-Api-Secret-Token': 'hook', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ update_id: 77, message: { message_id: 1, date: 1791895200, text, chat: { id: 1 } } }),
+  });
+
+  it('writes the cleaned text and the original through the real route', async () => {
+    const bodies = wire();
+    const ai = { run: vi.fn(async () => ({ response: 'Had coffee with Ram.' })) };
+    const res = await worker.fetch(update('um so I had a coffee with ram'), env({ AI: ai }));
+    expect(res.status).toBe(200);
+    const thought = bodies.find((b) => b.url.endsWith('/thoughts'))?.body;
+    expect(thought).toMatchObject({
+      clean_text: 'Had coffee with Ram.',
+      raw_text: 'um so I had a coffee with ram',
+      mode: 'refine',
+    });
+    expect(telegram(bodies)?.text).toBe('Saved to Inbox.');
+  });
+
+  it('saves the note as written when the model is unavailable, and says so', async () => {
+    const bodies = wire();
+    const ai = { run: vi.fn(async () => { throw new Error('Workers AI binding not available'); }) };
+    const res = await worker.fetch(update('a quick note'), env({ AI: ai }));
+    expect(res.status).toBe(200);
+    expect(bodies.find((b) => b.url.endsWith('/thoughts'))?.body).toMatchObject({
+      clean_text: 'a quick note', raw_text: 'a quick note',
+    });
+    expect(telegram(bodies)?.text).toContain('Cleanup failed');
+  });
+
+  it('with no AI binding on the Worker, stores the words as sent', async () => {
+    const bodies = wire();
+    const res = await worker.fetch(update('a plain note'), env({ AI: undefined }));
+    expect(res.status).toBe(200);
+    expect(bodies.find((b) => b.url.endsWith('/thoughts'))?.body).toMatchObject({
+      clean_text: 'a plain note', raw_text: 'a plain note',
+    });
+  });
+});
+
 describe('/api/entries', () => {
   it('serves the diary openly when no passphrase is configured', async () => {
     supabaseStub();

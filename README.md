@@ -12,19 +12,33 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 - Stores every message as a raw capture before doing anything else, so nothing is lost if a later step fails.
 - Reads simple commands at the start of a message:
   - `/push` saves the text exactly as written, with no cleanup.
-  - `/reason` marks a messy idea that should be structured.
-  - `/think` marks a thought for deeper analysis.
-  - Category tags: `/class`, `/learn`, `/thought`, `/quote`, `/work`, `/project`, `/life`, `/task`.
+  - `/reason` cleans the note up and makes its reasoning explicit.
+  - `/think` cleans it up and tightens the thinking.
+  - Category tags: `/class`, `/learn`, `/thought`, `/quote`, `/work`, `/project`, `/life`, `/task`, `/deadline`.
   - Tags can be combined with a space: `/push /thought Stay hungry, stay foolish`.
   - `/timezone Asia/Kolkata` sets the timezone used to decide which day an entry belongs to. `/timezone` on its own shows the current one. Older entries keep their day.
   - `/test` replies with live database counts and writes one heartbeat row, so you can tell a quiet bot from an empty database. It is never saved as an entry.
+- Cleans each note up with Workers AI before storing it: filler and false starts out, punctuation and sentence breaks in, the writer's facts and voice untouched. The original stays in `raw_text` next to the cleaned `clean_text`, and the web page's Raw control shows it.
 - Puts untagged text in Inbox for now.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
-- Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, behind Cloudflare Access. `public/demo/` keeps the sample-data preview.
+- Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`. The page is open unless a passphrase secret is set.
+
+## The cleanup step
+
+`src/refine.ts` holds the prompt and the model choice; `src/handler.ts` calls it after the day, category and reminder are worked out and before the row is written.
+
+| Note length | Model |
+| --- | --- |
+| up to 1000 characters | `@cf/meta/llama-3.1-8b-instruct` |
+| longer | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+
+- `/push` (verbatim) never reaches the model: those words are the point.
+- If the model fails or answers with nothing, the note is stored as written and the Telegram reply says `Cleanup failed, so it is saved exactly as you wrote it.` Nothing is ever lost.
+- The binding is declared in `wrangler.toml` (`[ai] binding = "AI"`). Local `wrangler dev` cannot run it; Workers AI always runs remotely, so cleanup can only be tested after a deploy.
 
 ## What is not built yet
 
-- Automatic cleanup and categorization with an LLM.
+- Automatic categorization with an LLM: untagged notes still go to Inbox.
 - Speech-to-text for voice notes, and photo capture.
 - Moving entries between categories on the web.
 - Link capture.

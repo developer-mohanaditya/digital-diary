@@ -7,6 +7,11 @@ compatibility_date = "2026-10-01"
 directory = "./public"
 binding = "ASSETS"
 
+# Workers AI cleans up each note and stores the original beside it. Short notes use
+# the 8B model, long ones the 70B; see src/refine.ts. It has a free daily allowance.
+[ai]
+binding = "AI"
+
 # Daily "life function": writes a heartbeat so the Supabase project stays active.
 # Plus morning + evening sweeps for deadline/review pings.
 [triggers]
