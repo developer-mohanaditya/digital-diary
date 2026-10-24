@@ -95,6 +95,24 @@ export function formatHealth(stats: HealthStats, timeZone: string): string {
   ].join('\n');
 }
 
+// The reply preview: enough of the stored note to recognise it on a phone, flattened to
+// one line, with three dots marking where it was cut.
+export const PREVIEW_CHARS = 180;
+
+export function storedPreview(text: string, limit = PREVIEW_CHARS): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > limit ? `${flat.slice(0, limit).trimEnd()}...` : flat;
+}
+
+// What the cleanup did, in one line: the difference between a note that was never
+// cleaned and one the model chose not to change is worth showing.
+export function cleanupLine(raw: string, clean: string, mode: Mode, error: string | null): string {
+  if (error) return `Cleanup failed (${error}), saved as written.`;
+  if (mode === 'verbatim') return 'Saved as written, no cleanup.';
+  if (clean === raw) return 'Cleaned up, no change needed.';
+  return `Cleaned up, ${raw.length} -> ${clean.length} characters.`;
+}
+
 const CATEGORY_LABEL: Record<Category, string> = {
   class: 'Class', learning: 'Learning', thought: 'Thought', quote: 'Quote', work: 'Work',
   project: 'Project', life: 'Life', task: 'Task', inbox: 'Inbox', deadline: 'Deadline',
@@ -231,17 +249,17 @@ export async function handleUpdate(
     }
   }
   await store.setCaptureStatus(capture.id, 'done');
-  // A failed cleanup is said out loud: otherwise the note just looks unrefined, which
-  // is the same thing the diary looked like when the step did not exist at all.
-  const fallback = refineError
-    ? ` Cleanup failed (${refineError}), so it is saved exactly as you wrote it.`
+  // Three lines: where it was filed, what the cleanup did (a failure is said out loud,
+  // with its reason), and the start of what was actually stored.
+  const reminder = detected?.kind === 'deadline' ? "I'll ping you daily from 3 days before."
+    : detected?.kind === 'review' ? "I'll remind you to review it."
     : '';
-  if (detected?.kind === 'deadline') {
-    await notifier.reply(msg.chat.id, `Saved to Deadline. I'll ping you daily from 3 days before.${fallback}`);
-  } else if (detected?.kind === 'review') {
-    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}. I'll remind you to review it.${fallback}`);
-  } else {
-    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}.${fallback}`);
-  }
+  const detail = [cleanupLine(parsed.body, clean, parsed.mode, refineError), reminder]
+    .filter(Boolean)
+    .join(' ');
+  await notifier.reply(
+    msg.chat.id,
+    [`Saved to ${CATEGORY_LABEL[category]}.`, detail, storedPreview(clean)].join('\n'),
+  );
   return 'saved';
 }
