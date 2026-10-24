@@ -61,7 +61,8 @@ Both are in the current catalog. Workers AI retired eighteen older models on 30 
 - If every model fails, the note is stored as written and the Telegram reply says `Cleanup failed (<reason>), saved as written.` Nothing is ever lost, the reason is in the message, and it is also kept on the capture (`captures.last_error`) so it can be read back without the phone.
 - The binding is declared in `wrangler.toml` (`[ai] binding = "AI"`). Local `wrangler dev` cannot run it; Workers AI always runs remotely, so cleanup can only be tested after a deploy.
 - `GET /api/ai-check` runs one tiny inference per cleanup model and answers `{ ok, binding, models: [{ model, ok, ms, output | error }] }`. It separates a missing binding from a retired model id from an account that cannot use Workers AI, without writing a test note into the diary.
-- `POST /api/reclean` re-runs the cleanup over notes an earlier, broken model left untouched (`clean_text` identical to `raw_text`). It only ever rewrites `clean_text`, never `raw_text`, and needs the Telegram webhook secret in an `x-reclean-token` header. `?limit=25` caps the work (maximum 50) because the call is synchronous.
+- `POST /api/reclean` re-runs the cleanup over notes an earlier, broken model left untouched (`clean_text` identical to `raw_text`). It only ever rewrites `clean_text`, never `raw_text`, so a bad rewrite is recoverable. It accepts either the Telegram webhook secret or the database service key in an `x-reclean-token` header, and `?limit=` caps the work (default 5, maximum 25) because the call is synchronous.
+- `/reclean` in Telegram does the same thing without a token, since the bot already knows it is you: `/reclean 10` repairs ten notes and replies with the count. That is the command to run once after a cleanup-model change; nothing else needs it.
 
 The reply is always three lines: where it was filed, what the cleanup did, and the start of what was stored (first 180 characters, cut with `...`).
 
