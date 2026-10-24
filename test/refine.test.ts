@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   BACKUP_MODEL, BIG_MODEL, BIG_TEXT_CHARS, MAX_INPUT_CHARS, SMALL_MODEL,
-  buildMessages, isPlausible, pickModel, readOutput, sameWords, workersAiRefiner,
+  buildMessages, hasCommentary, isPlausible, pickModel, readOutput, sameWords, workersAiRefiner,
 } from '../src/refine';
 
 const run = (answer: unknown) => vi.fn(async () => answer);
@@ -18,11 +18,14 @@ describe('pickModel', () => {
 });
 
 describe('buildMessages', () => {
-  it('passes the category and the note to the model', () => {
-    const [, user] = buildMessages({ text: 'um so the lecture was about raft', mode: 'refine', category: 'class' });
-    expect(user.content).toContain('Category: class');
+  it('passes the note in the user turn and the category in the system turn', () => {
+    const [system, user] = buildMessages({ text: 'um so the lecture was about raft', mode: 'refine', category: 'class' });
+    expect(system.content).toContain('filed under "class"');
     expect(user.content).toContain('um so the lecture was about raft');
     expect(user.content).toContain('reads cleanly');
+    // The category must not lead the user turn: a model continued that template and
+    // stored "Category: inbox" as the note.
+    expect(user.content.startsWith('Category:')).toBe(false);
   });
 
   it('asks for explicit reasoning in reason mode, and depth in think mode', () => {
@@ -69,6 +72,11 @@ describe('readOutput', () => {
     expect(readOutput({ response: 'Here is the rewritten note: \"Had coffee.\"' })).toBe('Had coffee.');
   });
 
+  it('drops a category header the model echoed back from the prompt', () => {
+    expect(readOutput({ response: 'Category: inbox\nClearRoute needs a search algorithm update.' }))
+      .toBe('ClearRoute needs a search algorithm update.');
+  });
+
   it('collapses runs of blank lines so paragraphs stay paragraphs', () => {
     expect(readOutput({ response: 'One.\n\n\n\nTwo.' })).toBe('One.\n\nTwo.');
   });
@@ -79,6 +87,18 @@ describe('isPlausible', () => {
     expect(isPlausible('**Deploy** went out.\n\n- Raw fixed', 'deploy went out and raw fixed')).toBe(true);
     expect(isPlausible('As an AI language model, I cannot', 'a note')).toBe(false);
     expect(isPlausible('word '.repeat(200), 'a short note')).toBe(false);
+  });
+
+  it('rejects an answer that explains its own edit', () => {
+    const raw = 'if the diary is open to anyone, what is the cost of losing it';
+    const answered = 'If the diary is open to anyone, what is the cost of losing it?\n\nThe note was rewritten to improve clarity and readability, and the phrase "the cost" was wrapped in **double asterisks**.';
+    expect(hasCommentary(answered)).toBe(true);
+    expect(isPlausible(answered, raw)).toBe(false);
+  });
+
+  it('still accepts a note that roughly doubles when a list is laid out', () => {
+    const raw = 'need to cancel the trial, finish the proposal and email priya';
+    expect(isPlausible('Three things:\n\n- Cancel the trial\n- Finish the proposal\n- Email Priya', raw)).toBe(true);
   });
 });
 
@@ -126,6 +146,22 @@ describe('workersAiRefiner', () => {
     };
     expect(await workersAiRefiner(ai).refine({ text: 'um so coffee with ram', mode: 'refine', category: 'life' }))
       .toBe('Had coffee with Ram.');
+    expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
+  });
+
+  it('falls through to the next model when the first one narrates its own edit', async () => {
+    const seen: string[] = [];
+    const ai = {
+      run: vi.fn(async (model: string) => {
+        seen.push(model);
+        if (model === SMALL_MODEL) {
+          return { response: 'Had coffee with Ram.\n\nThe note was rewritten to remove filler and one phrase was wrapped in ==equals==.' };
+        }
+        return { response: 'Had coffee with **Ram**.' };
+      }),
+    };
+    expect(await workersAiRefiner(ai).refine({ text: 'um so coffee with ram', mode: 'refine', category: 'life' }))
+      .toBe('Had coffee with **Ram**.');
     expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
   });
 
