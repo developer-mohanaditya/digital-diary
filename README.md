@@ -70,6 +70,18 @@ Secrets are never stored in this repository. They live in Cloudflare (Worker set
 | `SUPABASE_URL` | variable | Supabase project URL |
 | `ALLOWED_CHAT_ID` | variable | Numeric Telegram chat ID of the owner |
 | `DIARY_TZ` | variable | Fallback timezone, used only if none is stored. The stored value (set with `/timezone`) wins |
+| `DIARY_PASSPHRASE` | secret | Password for the diary page. Without it `GET /api/entries` refuses everyone |
+| `DIARY_SESSION_SECRET` | secret, optional | Signs the login cookie. Defaults to `DIARY_PASSPHRASE` |
+
+### The web page's password
+
+The page is locked by default. `POST /api/session` with `{"passphrase":"..."}` checks `DIARY_PASSPHRASE` and sets an HttpOnly, 30-day signed cookie; `DELETE /api/session` clears it. Set the passphrase once:
+
+```sh
+npx wrangler secret put DIARY_PASSPHRASE
+```
+
+Until that secret exists the page shows the sign-in card and the API answers `503`, so nothing is readable by accident. Cloudflare Access also works if it is added later: the Worker accepts its `Cf-Access-Jwt-Assertion` header as a signed-in visitor.
 
 ## Database setup
 
