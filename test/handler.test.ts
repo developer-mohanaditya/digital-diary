@@ -119,6 +119,37 @@ describe('handleUpdate', () => {
     expect(n.reply.mock.calls[0][1]).toContain('Nothing saved');
   });
 
+  it('/reclean repairs untouched notes and stores nothing itself', async () => {
+    const store = fakeStore(); const n = fakeNotifier();
+    const repair = vi.fn(async () => ({ scanned: 3, cleaned: 2, failed: [] }));
+    expect(await handleUpdate(update('/reclean 3'), store, n, SETTINGS, NOW, undefined, { repair })).toBe('ignored');
+    expect(repair).toHaveBeenCalledWith(3);
+    expect(store.insertCapture).not.toHaveBeenCalled();
+    expect(n.reply.mock.calls[0][1]).toBe('Re-cleaned 2 of 3 untouched notes.');
+  });
+
+  it('/reclean defaults to five notes and caps a big number at 25', async () => {
+    const repair = vi.fn(async () => ({ scanned: 0, cleaned: 0, failed: [] }));
+    const store = fakeStore();
+    await handleUpdate(update('/reclean'), store, fakeNotifier(), SETTINGS, NOW, undefined, { repair });
+    await handleUpdate(update('/reclean 500'), store, fakeNotifier(), SETTINGS, NOW, undefined, { repair });
+    expect(repair.mock.calls).toEqual([[5], [25]]);
+  });
+
+  it('/reclean says why it failed instead of staying silent', async () => {
+    const repair = vi.fn(async () => { throw new Error('Supabase 503: unavailable'); });
+    const n = fakeNotifier();
+    await handleUpdate(update('/reclean'), fakeStore(), n, SETTINGS, NOW, undefined, { repair });
+    expect(n.reply.mock.calls[0][1]).toContain('Re-clean failed');
+    expect(n.reply.mock.calls[0][1]).toContain('Supabase 503');
+  });
+
+  it('/reclean explains itself when the build has no repairer', async () => {
+    const n = fakeNotifier();
+    await handleUpdate(update('/reclean'), fakeStore(), n, SETTINGS, NOW);
+    expect(n.reply.mock.calls[0][1]).toContain('not available');
+  });
+
   it('a bare command is answered and never becomes a diary row', async () => {
     for (const text of ['/unknown', '/push', '/work']) {
       const store = fakeStore(); const n = fakeNotifier();

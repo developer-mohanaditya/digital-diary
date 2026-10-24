@@ -205,10 +205,26 @@ describe('/api/reclean', () => {
     return patches;
   };
 
-  it('refuses to run without the webhook secret', async () => {
+  it('refuses to run without an accepted secret', async () => {
     untouchedStub();
     const res = await worker.fetch(request('/api/reclean', { method: 'POST' }), env());
     expect(res.status).toBe(401);
+    const wrong = await worker.fetch(
+      request('/api/reclean', { method: 'POST', headers: { 'x-reclean-token': 'nope' } }),
+      env(),
+    );
+    expect(wrong.status).toBe(401);
+  });
+
+  it('also accepts the database service key, for a machine without the bot secret', async () => {
+    const patches = untouchedStub();
+    const AI = { run: vi.fn(async () => ({ response: 'The deploy went out.' })) };
+    const res = await worker.fetch(
+      request('/api/reclean', { method: 'POST', headers: { 'x-reclean-token': 'service-key' } }),
+      env({ AI }),
+    );
+    expect(res.status).toBe(200);
+    expect(patches).toHaveLength(1);
   });
 
   it('rewrites only the clean_text of a note the old model left untouched', async () => {
@@ -219,7 +235,7 @@ describe('/api/reclean', () => {
       env({ AI }),
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, untouched: 1, cleaned: 1, failed: [] });
+    expect(await res.json()).toMatchObject({ ok: true, scanned: 1, cleaned: 1, failed: [] });
     expect(patches).toHaveLength(1);
     expect(patches[0].url).toContain('id=eq.th-old');
     expect(patches[0].body).toEqual({ clean_text: 'The deploy went out.\n\nStill missing: **Raw**.' });
