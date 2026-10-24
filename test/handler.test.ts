@@ -110,12 +110,29 @@ describe('handleUpdate', () => {
     expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({ category: 'inbox', category_source: 'auto' }));
   });
 
-  it('a conflict is stored as failed, nothing becomes a thought, and the user is asked', async () => {
+  it('a conflicting command is answered, and nothing at all is stored', async () => {
     const store = fakeStore(); const n = fakeNotifier();
     expect(await handleUpdate(update('/push /think hi'), store, n, SETTINGS, NOW)).toBe('rejected');
+    expect(store.insertCapture).not.toHaveBeenCalled();
     expect(store.insertThought).not.toHaveBeenCalled();
-    expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'failed', 'conflict_mode');
     expect(n.reply.mock.calls[0][1]).toContain('Pick one mode');
+    expect(n.reply.mock.calls[0][1]).toContain('Nothing saved');
+  });
+
+  it('a bare command is answered and never becomes a diary row', async () => {
+    for (const text of ['/unknown', '/push', '/work']) {
+      const store = fakeStore(); const n = fakeNotifier();
+      expect(await handleUpdate(update(text), store, n, SETTINGS, NOW)).toBe('rejected');
+      expect(store.insertCapture).not.toHaveBeenCalled();
+      expect(n.reply.mock.calls[0][1]).toContain('Nothing saved');
+    }
+  });
+
+  it('an empty or whitespace-only message is answered and never stored', async () => {
+    const store = fakeStore(); const n = fakeNotifier();
+    expect(await handleUpdate(update('   '), store, n, SETTINGS, NOW)).toBe('rejected');
+    expect(store.insertCapture).not.toHaveBeenCalled();
+    expect(n.reply.mock.calls[0][1]).toContain('Nothing saved');
   });
 
   it('a duplicate Telegram update is ignored: no thought, no reply', async () => {
@@ -158,7 +175,7 @@ describe('cleanup', () => {
     // Three lines: filed under, what cleanup did, what was stored.
     expect(n.reply.mock.calls[0][1].split('\n')).toEqual([
       'Saved to Inbox.',
-      'Cleaned up, 35 -> 20 characters.',
+      'Formatted, 35 -> 20 characters.',
       'Had coffee with Ram.',
     ]);
   });
@@ -187,7 +204,7 @@ describe('cleanup', () => {
     expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
       clean_text: 'a quick note', raw_text: 'a quick note',
     }));
-    expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done');
+    expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done', 'AI quota exhausted');
     expect(n.reply.mock.calls[0][1]).toContain('Cleanup failed');
     // The reason travels with the reply: "failed" alone cannot be diagnosed from a phone.
     expect(n.reply.mock.calls[0][1]).toContain('AI quota exhausted');
@@ -228,11 +245,19 @@ describe('reply format', () => {
   });
 
   it('reports the cleanup result, and never claims success after a failure', () => {
-    expect(cleanupLine('um so I had a coffee with ram', 'Had coffee with Ram.', 'refine', null))
-      .toBe('Cleaned up, 29 -> 20 characters.');
-    expect(cleanupLine('same', 'same', 'refine', null)).toBe('Cleaned up, no change needed.');
-    expect(cleanupLine('exact words', 'exact words', 'verbatim', null)).toBe('Saved as written, no cleanup.');
-    expect(cleanupLine('a note', 'a note', 'refine', 'Model not found: @cf/old')).toBe('Cleanup failed (Model not found: @cf/old), saved as written.');
+    expect(cleanupLine({ raw: 'um so I had a coffee with ram', clean: 'Had coffee with Ram.', mode: 'refine', error: null, ran: true }))
+      .toBe('Formatted, 29 -> 20 characters.');
+    expect(cleanupLine({ raw: 'same', clean: 'same', mode: 'refine', error: null, ran: true }))
+      .toBe('Cleaned up, no change needed.');
+    expect(cleanupLine({ raw: 'exact words', clean: 'exact words', mode: 'verbatim', error: null, ran: false }))
+      .toBe('Saved as written, no cleanup.');
+    expect(cleanupLine({ raw: 'a note', clean: 'a note', mode: 'refine', error: 'Model not found: @cf/old', ran: true }))
+      .toBe('Cleanup failed (Model not found: @cf/old), saved as written.');
+  });
+
+  it('says cleanup was unavailable rather than pretending nothing needed changing', () => {
+    expect(cleanupLine({ raw: 'a note', clean: 'a note', mode: 'refine', error: null, ran: false }))
+      .toBe('Cleanup unavailable, saved as written.');
   });
 });
 
@@ -253,8 +278,8 @@ describe('timezone handling', () => {
     const store = tzStore('Europe/Paris'); const n = fakeNotifier();
     expect(await handleUpdate(update('/timezone Asia/Kolkata'), store, n, SETTINGS, NOW)).toBe('saved');
     expect(store.setTimeZone).toHaveBeenCalledWith('Asia/Kolkata');
+    expect(store.insertCapture).not.toHaveBeenCalled();
     expect(store.insertThought).not.toHaveBeenCalled();
-    expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done');
     expect(n.reply.mock.calls[0][1]).toContain('Timezone set to Asia/Kolkata');
   });
 

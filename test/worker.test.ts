@@ -121,7 +121,7 @@ describe('/telegram/webhook cleanup', () => {
     });
     expect((telegram(bodies)?.text ?? '').split('\n')).toEqual([
       'Saved to Inbox.',
-      'Cleaned up, 29 -> 20 characters.',
+      'Formatted, 29 -> 20 characters.',
       'Had coffee with Ram.',
     ]);
   });
@@ -144,6 +144,85 @@ describe('/telegram/webhook cleanup', () => {
     expect(bodies.find((b) => b.url.endsWith('/thoughts'))?.body).toMatchObject({
       clean_text: 'a plain note', raw_text: 'a plain note',
     });
+  });
+});
+
+describe('/api/ai-check', () => {
+  it('reports each cleanup model and what it answered', async () => {
+    supabaseStub();
+    const AI = { run: vi.fn(async () => ({ response: 'ok' })) };
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      ok: boolean; binding: boolean; models: { model: string; ok: boolean; output?: string }[];
+    };
+    expect(body.ok).toBe(true);
+    expect(body.binding).toBe(true);
+    expect(body.models).toHaveLength(3);
+    expect(body.models[0]).toMatchObject({ ok: true, output: 'ok' });
+  });
+
+  it('reports the real model error instead of a bare failure', async () => {
+    supabaseStub();
+    const AI = { run: vi.fn(async () => { throw new Error('Model not found: @cf/zai-org/glm-4.7-flash'); }) };
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(502);
+    const body = await res.json() as { ok: boolean; binding: boolean; models: { error?: string }[] };
+    expect(body.ok).toBe(false);
+    expect(body.binding).toBe(true);
+    expect(body.models[0].error).toContain('Model not found');
+  });
+
+  it('says the binding itself is missing when there is no AI on the Worker', async () => {
+    supabaseStub();
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI: undefined, DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ ok: false, binding: false });
+  });
+
+  it('is behind the passphrase when one is set', async () => {
+    supabaseStub();
+    const res = await worker.fetch(request('/api/ai-check'), env({ AI: { run: vi.fn() } }));
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('/api/reclean', () => {
+  const untouchedStub = () => {
+    const patches: { url: string; body: { [k: string]: unknown } | null }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'PATCH') patches.push({ url, body: JSON.parse(String(init.body)) });
+      if (url.includes('/thoughts?mode=neq.verbatim')) {
+        return new Response(JSON.stringify([{
+          id: 'th-old', mode: 'refine', category: 'work',
+          clean_text: 'the deploy went out and, um, raw is still missing',
+          raw_text: 'the deploy went out and, um, raw is still missing',
+        }]), { headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    }));
+    return patches;
+  };
+
+  it('refuses to run without the webhook secret', async () => {
+    untouchedStub();
+    const res = await worker.fetch(request('/api/reclean', { method: 'POST' }), env());
+    expect(res.status).toBe(401);
+  });
+
+  it('rewrites only the clean_text of a note the old model left untouched', async () => {
+    const patches = untouchedStub();
+    const AI = { run: vi.fn(async () => ({ response: 'The deploy went out.\n\nStill missing: **Raw**.' })) };
+    const res = await worker.fetch(
+      request('/api/reclean', { method: 'POST', headers: { 'x-reclean-token': 'hook' } }),
+      env({ AI }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, untouched: 1, cleaned: 1, failed: [] });
+    expect(patches).toHaveLength(1);
+    expect(patches[0].url).toContain('id=eq.th-old');
+    expect(patches[0].body).toEqual({ clean_text: 'The deploy went out.\n\nStill missing: **Raw**.' });
   });
 });
 
