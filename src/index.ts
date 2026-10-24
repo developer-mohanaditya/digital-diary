@@ -175,6 +175,9 @@ function sessionSecret(env: Env): string | null {
 }
 
 async function signedIn(request: Request, env: Env): Promise<boolean> {
+  // No passphrase on the Worker means no gate: this is a one-person diary and the owner
+  // asked to read it without signing in. Setting DIARY_PASSPHRASE closes it again.
+  if (!env.DIARY_PASSPHRASE) return true;
   // If Cloudflare Access is ever enabled, it authenticates visitors before the Worker
   // and stamps this header. The cookie covers the case where Access is not set up.
   if (request.headers.get('Cf-Access-Jwt-Assertion')) return true;

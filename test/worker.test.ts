@@ -85,6 +85,15 @@ describe('/api/session', () => {
 });
 
 describe('/api/entries', () => {
+  it('serves the diary openly when no passphrase is configured', async () => {
+    supabaseStub();
+    const res = await worker.fetch(request('/api/entries'), env({ DIARY_PASSPHRASE: undefined }));
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; total: number };
+    expect(body.ok).toBe(true);
+    expect(body.total).toBe(1);
+  });
+
   it('answers 401 and asks the page to sign in when there is no session', async () => {
     const calls = supabaseStub();
     const res = await worker.fetch(request('/api/entries'), env());

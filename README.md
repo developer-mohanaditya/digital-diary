@@ -70,18 +70,18 @@ Secrets are never stored in this repository. They live in Cloudflare (Worker set
 | `SUPABASE_URL` | variable | Supabase project URL |
 | `ALLOWED_CHAT_ID` | variable | Numeric Telegram chat ID of the owner |
 | `DIARY_TZ` | variable | Fallback timezone, used only if none is stored. The stored value (set with `/timezone`) wins |
-| `DIARY_PASSPHRASE` | secret | Password for the diary page. Without it `GET /api/entries` refuses everyone |
+| `DIARY_PASSPHRASE` | secret, optional | When set, the diary page asks for it. When absent, the page is open |
 | `DIARY_SESSION_SECRET` | secret, optional | Signs the login cookie. Defaults to `DIARY_PASSPHRASE` |
 
-### The web page's password
+### The web page's door (optional)
 
-The page is locked by default. `POST /api/session` with `{"passphrase":"..."}` checks `DIARY_PASSPHRASE` and sets an HttpOnly, 30-day signed cookie; `DELETE /api/session` clears it. Set the passphrase once:
+The page is **open by default**: with no `DIARY_PASSPHRASE` secret, `GET /api/entries` serves the diary to anyone who has the URL, and no sign-in card appears. To lock it later, set the secret once:
 
 ```sh
 npx wrangler secret put DIARY_PASSPHRASE
 ```
 
-Until that secret exists the page shows the sign-in card and the API answers `503`, so nothing is readable by accident. Cloudflare Access also works if it is added later: the Worker accepts its `Cf-Access-Jwt-Assertion` header as a signed-in visitor.
+From then on the page shows a sign-in card: `POST /api/session` with `{"passphrase":"..."}` sets an HttpOnly, 30-day signed cookie and `DELETE /api/session` clears it. Removing the secret opens the page again. Cloudflare Access also works if it is added: the Worker accepts its `Cf-Access-Jwt-Assertion` header as a signed-in visitor.
 
 ## Database setup
 
