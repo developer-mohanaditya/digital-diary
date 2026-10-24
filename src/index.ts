@@ -1,5 +1,8 @@
 import { handleUpdate, type TelegramUpdate, type Store, type Notifier } from './handler';
 import { groupByDay, type DeadlineMark, type ThoughtRow } from './api';
+import {
+  SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
+} from './session';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -9,6 +12,8 @@ export interface Env {
   TELEGRAM_WEBHOOK_SECRET: string;
   ALLOWED_CHAT_ID: string;
   DIARY_TZ: string; // IANA timezone, e.g. "Asia/Kolkata"
+  DIARY_PASSPHRASE?: string;     // secret: the one password that opens the diary page
+  DIARY_SESSION_SECRET?: string; // secret: signs cookies; defaults to the passphrase
 }
 
 // Supabase REST adapter (service key stays server-side in Worker secrets).
@@ -155,19 +160,56 @@ async function answerCallback(env: Env, id: string, text: string): Promise<void>
   }
 }
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra },
   });
 }
 
-// Read API for the web interface. Cloudflare Access sits in front of the site and
-// adds this header once a request is authenticated; without it the API would hand
-// the whole diary to anyone who learns the workers.dev URL.
+// Everything the cookie signature needs. Defaulting to the passphrase keeps setup to
+// one secret; DIARY_SESSION_SECRET only matters if the passphrase is ever rotated and
+// you want existing sessions to survive (or die) on a separate schedule.
+function sessionSecret(env: Env): string | null {
+  return env.DIARY_SESSION_SECRET || env.DIARY_PASSPHRASE || null;
+}
+
+async function signedIn(request: Request, env: Env): Promise<boolean> {
+  // If Cloudflare Access is ever enabled, it authenticates visitors before the Worker
+  // and stamps this header. The cookie covers the case where Access is not set up.
+  if (request.headers.get('Cf-Access-Jwt-Assertion')) return true;
+  const secret = sessionSecret(env);
+  if (!secret) return false;
+  return sessionValid(readCookie(request, SESSION_COOKIE), secret, new Date());
+}
+
+// POST /api/session { passphrase } -> sets the signed cookie.
+async function signIn(request: Request, env: Env): Promise<Response> {
+  if (!env.DIARY_PASSPHRASE) {
+    return json({ ok: false, error: 'No passphrase is set on the Worker. Add the DIARY_PASSPHRASE secret.' }, 503);
+  }
+  let body: { passphrase?: unknown };
+  try {
+    body = (await request.json()) as { passphrase?: unknown };
+  } catch {
+    return json({ ok: false, error: 'Send JSON: { "passphrase": "..." }' }, 400);
+  }
+  const given = typeof body.passphrase === 'string' ? body.passphrase : '';
+  if (!sameSecret(given, env.DIARY_PASSPHRASE)) {
+    // A short pause makes guessing over the network expensive without needing storage.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return json({ ok: false, error: 'That passphrase is not right.' }, 401);
+  }
+  const token = await issueSession(sessionSecret(env)!, new Date());
+  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(token) });
+}
+
+// Read API for the web interface. Without a signed-in session (or Cloudflare Access,
+// if it is ever enabled) the API would hand the whole diary to anyone who learns the
+// workers.dev URL, so it answers 401 and the page asks for the passphrase.
 async function entriesApi(request: Request, env: Env): Promise<Response> {
-  if (!request.headers.get('Cf-Access-Jwt-Assertion')) {
-    return json({ ok: false, error: 'Not signed in. This page sits behind Cloudflare Access.' }, 401);
+  if (!(await signedIn(request, env))) {
+    return json({ ok: false, need: 'login', error: 'Sign in to read your diary.' }, 401);
   }
 
   const url = new URL(request.url);
@@ -274,6 +316,10 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/telegram/webhook' && request.method === 'POST') return webhook(request, env);
+    if (url.pathname === '/api/session') {
+      if (request.method === 'POST') return signIn(request, env);
+      if (request.method === 'DELETE') return json({ ok: true }, 200, { 'Set-Cookie': clearedCookie() });
+    }
     if (url.pathname === '/api/entries' && request.method === 'GET') return entriesApi(request, env);
     return env.ASSETS.fetch(request);
   },
