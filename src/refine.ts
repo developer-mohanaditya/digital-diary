@@ -82,17 +82,21 @@ export function modelOrder(text: string): string[] {
     : [SMALL_MODEL, BIG_MODEL, BACKUP_MODEL];
 }
 
+// The category lives in the system message: when it sat at the top of the user turn, a
+// model occasionally continued the template and stored "Category: inbox" as the note.
 export function buildMessages(req: RefineRequest): { role: string; content: string }[] {
   return [
-    { role: 'system', content: SYSTEM },
+    { role: 'system', content: `${SYSTEM}\n\nThis note is filed under "${req.category}".` },
     {
       role: 'user',
-      content: `${MODE_INSTRUCTION[req.mode]}\n\nCategory: ${req.category}\n\nNote:\n${req.text.slice(0, MAX_INPUT_CHARS)}`,
+      content: `${MODE_INSTRUCTION[req.mode]}\n\n${req.text.slice(0, MAX_INPUT_CHARS)}`,
     },
   ];
 }
 
 const PREAMBLE = /^(here(?:'s| is) (?:the|your) (?:rewritten|cleaned|tidied|formatted) note:?|rewritten note:?)\s*/i;
+// A model that answered the prompt's template instead of the note: "Category: inbox".
+const ECHOED_HEADER = /^category:\s*[\w-]+\s*\n?/i;
 
 // A fence, a surrounding quote or a "Here is..." line would otherwise be stored as part
 // of the note. Blank-line runs are collapsed so the page's paragraph split stays honest.
@@ -113,18 +117,37 @@ export function readOutput(raw: unknown): string | null {
     .replace(/\s*```$/, '')
     .trim()
     .replace(PREAMBLE, '')
+    .replace(ECHOED_HEADER, '')
     .replace(/^"(.*)"$/s, '$1')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   return tidy === '' ? null : tidy;
 }
 
-// A model that lectures, answers in the third person, or writes three times as much as
-// the note is not cleaning anything up. The note is better served by the next model.
+// Some models append an explanation of what they did instead of just doing it. That text
+// is not the note, and storing it would put "the note was rewritten to improve clarity"
+// in the diary: the answer is rejected and the next model is asked instead.
+const COMMENTARY = [
+  /\bthe note (?:was|has been|is)\b[^.]*\b(?:rewritten|cleaned|tidied|formatted|edited)\b/i,
+  /\bthe phrase\b[^.]*\b(?:was|is)\b[^.]*\b(?:wrapped|bolded|highlighted)\b/i,
+  /\bno other markup\b/i,
+  /\bI (?:rewrote|cleaned|tidied|formatted) (?:the|your) note\b/i,
+  /\bas requested, I\b/i,
+  /\bthis (?:rewrite|version) (?:removes|keeps|adds|splits)\b/i,
+  /\n\*\*Note:\*\*/,
+];
+
+export function hasCommentary(cleaned: string): boolean {
+  return COMMENTARY.some((re) => re.test(cleaned));
+}
+
+// A model that lectures, narrates its own work, or writes twice as much as the note is
+// not cleaning anything up. The note is better served by the next model.
 export function isPlausible(cleaned: string, original: string): boolean {
   if (cleaned.trim() === '') return false;
   if (/\bas an ai\b/i.test(cleaned)) return false;
-  if (cleaned.length > original.length * 4 + 120) return false;
+  if (hasCommentary(cleaned)) return false;
+  if (cleaned.length > original.length * 2 + 100) return false;
   return true;
 }
 
