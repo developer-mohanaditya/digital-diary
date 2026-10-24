@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleUpdate, localDay, type Store, type Notifier, type TelegramUpdate } from '../src/handler';
+import type { Refiner } from '../src/refine';
 
 const SETTINGS = { allowedChatId: 42, timeZone: 'UTC' };
 const NOW = new Date('2026-10-13T10:00:00Z');
@@ -127,6 +128,74 @@ describe('handleUpdate', () => {
     const store = fakeStore(); const n = fakeNotifier();
     expect(await handleUpdate(update(undefined), store, n, SETTINGS, NOW)).toBe('ignored');
     expect(n.reply.mock.calls[0][1]).toContain('not wired up');
+  });
+});
+
+describe('cleanup', () => {
+  function fakeRefiner(answer: string | null | Error) {
+    const refine = vi.fn(async () => {
+      if (answer instanceof Error) throw answer;
+      return answer;
+    });
+    return { refiner: { refine } as Refiner, refine };
+  }
+
+  it('stores the cleaned text and keeps the original beside it', async () => {
+    const store = fakeStore(); const n = fakeNotifier();
+    const { refiner, refine } = fakeRefiner('Had coffee with Ram.');
+    expect(await handleUpdate(update('um so i had a coffee with ram, yeah'), store, n, SETTINGS, NOW, refiner)).toBe('saved');
+    expect(refine).toHaveBeenCalledWith({ text: 'um so i had a coffee with ram, yeah', mode: 'refine', category: 'inbox' });
+    expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
+      clean_text: 'Had coffee with Ram.',
+      raw_text: 'um so i had a coffee with ram, yeah',
+    }));
+    expect(n.reply).toHaveBeenCalledWith(42, 'Saved to Inbox.');
+  });
+
+  it('sends the tagged category and the mode it was sent with', async () => {
+    const store = fakeStore();
+    const { refiner, refine } = fakeRefiner('A tighter paragraph.');
+    await handleUpdate(update('/work /reason the api fix went out but nobody checked it'), store, fakeNotifier(), SETTINGS, NOW, refiner);
+    expect(refine).toHaveBeenCalledWith(expect.objectContaining({ mode: 'reason', category: 'work' }));
+  });
+
+  it('never cleans up a verbatim note: the exact words are the point', async () => {
+    const store = fakeStore();
+    const { refiner, refine } = fakeRefiner('rewritten');
+    await handleUpdate(update('/push /work Shipped the entries fix.'), store, fakeNotifier(), SETTINGS, NOW, refiner);
+    expect(refine).not.toHaveBeenCalled();
+    expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'verbatim', clean_text: 'Shipped the entries fix.', raw_text: 'Shipped the entries fix.',
+    }));
+  });
+
+  it('saves the note as written and says so when the model fails', async () => {
+    const store = fakeStore(); const n = fakeNotifier();
+    const { refiner } = fakeRefiner(new Error('AI quota exhausted'));
+    expect(await handleUpdate(update('a quick note'), store, n, SETTINGS, NOW, refiner)).toBe('saved');
+    expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
+      clean_text: 'a quick note', raw_text: 'a quick note',
+    }));
+    expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done');
+    expect(n.reply.mock.calls[0][1]).toContain('Cleanup failed');
+  });
+
+  it('keeps the original silently when the model returns nothing', async () => {
+    const store = fakeStore(); const n = fakeNotifier();
+    const { refiner } = fakeRefiner(null);
+    await handleUpdate(update('a quick note'), store, n, SETTINGS, NOW, refiner);
+    expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
+      clean_text: 'a quick note', raw_text: 'a quick note',
+    }));
+    expect(n.reply.mock.calls[0][1]).not.toContain('Cleanup failed');
+  });
+
+  it('without a refiner the note is stored as written, as before', async () => {
+    const store = fakeStore();
+    await handleUpdate(update('no model here'), store, fakeNotifier(), SETTINGS, NOW);
+    expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
+      clean_text: 'no model here', raw_text: 'no model here',
+    }));
   });
 });
 

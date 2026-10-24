@@ -488,7 +488,9 @@ function noteHTML(ref) {
   if (!found) return '';
   const { k, it } = found;
   const c = CAT[it.cat];
-  const hasRaw = it.raw && it.raw !== it.text;
+  // Always offered: before cleanup existed every note was stored with the same text
+  // twice, and a button that vanished made the raw copy look missing rather than equal.
+  const hasRaw = !!(it.raw || it.text);
   const rawOpen = ui.openRaw.has(it.id);
   const opts = CATS.map(x => `<option value="${x.id}"${x.id === it.cat ? ' selected' : ''}>${x.label}</option>`).join('');
   const moveOpen = ui.moveMenu;
@@ -500,7 +502,7 @@ function noteHTML(ref) {
       ${dueLine(it)}
       ${noteTitleBody(it.text)}
       ${it.photo ? `<figure class="sfigure"><img src="${it.photo.src}" alt="Attached photo" loading="lazy" /></figure>` : ''}
-      ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
+      ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw || it.text)}</p>${(it.raw || it.text) === it.text ? '<span class="muted">Exactly as you sent it: the cleanup changed nothing.</span>' : ''}</div>` : ''}
     </div></div>`;
 }
 function dayTabsHTML(tabDefs) {

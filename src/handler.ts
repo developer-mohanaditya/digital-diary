@@ -1,6 +1,7 @@
 import { parseCommand, type Category, type Mode } from './parse';
 import { parseTimeZoneCommand } from './timezone';
 import { detectReminder, type DetectedReminder } from './reminders';
+import type { Refiner } from './refine';
 
 // Telegram update shape (only the fields we use).
 export interface TelegramUpdate {
@@ -110,6 +111,7 @@ export async function handleUpdate(
   notifier: Notifier,
   settings: Settings,
   now: Date = new Date(),
+  refiner?: Refiner,
 ): Promise<Outcome> {
   const msg = update.message;
   if (!msg || msg.chat.id !== settings.allowedChatId) return 'ignored';
@@ -186,6 +188,21 @@ export async function handleUpdate(
   const tz = (await store.getTimeZone()) ?? settings.timeZone;
   const detected: DetectedReminder | null = detectReminder(msg.text, now, tz);
   const category: Category = detected?.categoryHint ?? parsed.category ?? 'inbox';
+
+  // Cleanup. The raw text is what gets stored alongside the result, so a model that
+  // fails or answers with nothing at all costs a tidy line, never the note.
+  let clean = parsed.body;
+  let refineFailed = false;
+  if (refiner && parsed.mode !== 'verbatim') {
+    try {
+      const out = await refiner.refine({ text: parsed.body, mode: parsed.mode, category });
+      if (out) clean = out;
+    } catch (err) {
+      refineFailed = true;
+      console.error('refine failed', err);
+    }
+  }
+
   await store.insertThought({
     capture_id: capture.id,
     day: localDay(now, tz),
@@ -193,7 +210,7 @@ export async function handleUpdate(
     category,
     category_source: parsed.categorySource === 'tag' ? 'tag' : detected ? 'auto' : 'auto',
     mode: parsed.mode,
-    clean_text: parsed.body,
+    clean_text: clean,
     raw_text: parsed.body,
   });
   if (detected && store.insertReminder) {
@@ -212,12 +229,15 @@ export async function handleUpdate(
     }
   }
   await store.setCaptureStatus(capture.id, 'done');
+  // A failed cleanup is said out loud: otherwise the note just looks unrefined, which
+  // is the same thing the diary looked like when the step did not exist at all.
+  const fallback = refineFailed ? ' Cleanup failed, so it is saved exactly as you wrote it.' : '';
   if (detected?.kind === 'deadline') {
-    await notifier.reply(msg.chat.id, `Saved to Deadline. I'll ping you daily from 3 days before.`);
+    await notifier.reply(msg.chat.id, `Saved to Deadline. I'll ping you daily from 3 days before.${fallback}`);
   } else if (detected?.kind === 'review') {
-    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}. I'll remind you to review it.`);
+    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}. I'll remind you to review it.${fallback}`);
   } else {
-    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}.`);
+    await notifier.reply(msg.chat.id, `Saved to ${CATEGORY_LABEL[category]}.${fallback}`);
   }
   return 'saved';
 }
