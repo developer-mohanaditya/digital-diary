@@ -798,6 +798,69 @@ function monthBuckets(y, m) {
   });
 }
 
+/* ---------- Readings: one sentence of pattern under each chart ---------- */
+// Every chart on these pages closes the same way: a tinted line that says what the shape
+// means. The numbers are computed from the same entries the chart draws, not typed in.
+const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function readingHTML(text) {
+  return text ? `<p class="reading"><span class="kicker">Reading</span>${text}</p>` : '';
+}
+
+function hourReading(list) {
+  if (list.length < 4) return '';
+  const c = Array(24).fill(0);
+  list.forEach(it => c[+it.time.slice(0, 2)]++);
+  const peak = c.indexOf(Math.max(...c));
+  const pct = h => Math.round(c[h] / list.length * 100);
+  const eve = list.filter(it => +it.time.slice(0, 2) >= 18).length;
+  const mor = list.filter(it => { const h = +it.time.slice(0, 2); return h >= 6 && h < 12; }).length;
+  const night = list.filter(it => +it.time.slice(0, 2) < 5).length;
+  const p = n => Math.round(n / list.length * 100);
+  const tilt = eve >= mor
+    ? `Evenings from 18:00 hold the larger share at ${p(eve)}%, against ${p(mor)}% before noon`
+    : `Mornings before noon hold the larger share at ${p(mor)}%, against ${p(eve)}% from 18:00`;
+  return `${tilt}. The busiest hour is ${pad(peak)}:00, ${pct(peak)}% of the notes.` +
+    (night ? ` ${night} ${night === 1 ? 'note was' : 'notes were'} written after midnight.` : ' Nothing is written between midnight and five.');
+}
+
+function activityReading(list, isYear, y, m) {
+  if (!list.length) return '';
+  const bks = isYear ? yearBuckets(y) : monthBuckets(y, m);
+  const totals = bks.map(b => Object.values(b.counts).reduce((a, n) => a + n, 0));
+  let best = 0;
+  totals.forEach((n, i) => { if (n > totals[best]) best = i; });
+  const pct = Math.round(totals[best] / list.length * 100);
+  const empty = totals.filter(n => !n).length;
+  const wd = Array(7).fill(0);
+  list.forEach(it => wd[parse(it.k).getDay()]++);
+  const topWd = wd.indexOf(Math.max(...wd));
+  const lead = isYear
+    ? `${MONTHS[best]} leads with ${totals[best]} items (${pct}%)`
+    : `${best + 1} ${MONTHS[m-1].slice(0, 3)} is the fullest day with ${totals[best]} items (${pct}%)`;
+  const quiet = empty
+    ? `, and ${empty} ${empty === 1 ? (isYear ? 'month is' : 'day is') : (isYear ? 'months are' : 'days are')} empty`
+    : '';
+  return `${lead}${quiet}. ${WEEKDAYS[topWd]} carries the most, ${Math.round(wd[topWd] / list.length * 100)}% of everything written.`;
+}
+
+function coverageReading(y, m) {
+  const first = m ? `${y}-${pad(m)}-01` : `${y}-01-01`;
+  const full = m ? `${y}-${pad(m)}-${pad(dim(y, m))}` : `${y}-12-31`;
+  const last = full < TODAY ? full : TODAY;
+  const scopeName = m ? `${MONTHS[m - 1]} ${y}` : `${y}`;
+  const over = full < TODAY;   // the range has closed, so "yet" would be a lie
+  if (first > last) return `Nothing written in ${scopeName} yet.`;
+  let span = 0, written = 0, run = 0, best = 0;
+  for (let t = parse(first); iso(t) <= last; t = addDays(t, 1)) {
+    span++;
+    if (items(iso(t)).length) { written++; run++; if (run > best) best = run; } else run = 0;
+  }
+  if (!written) return `Nothing written in ${scopeName}${over ? '' : ' yet'}.`;
+  const blank = span - written;
+  const pct = Math.round(written / span * 100);
+  return `You wrote on ${written} of ${span} days${last === full ? '' : ' so far'} (${pct}%), ${blank ? `leaving ${blank} blank` : 'not one blank'}. The longest run is ${best} ${best === 1 ? 'day' : 'days'}.`;
+}
+
 function statsPage(y, m) {
   const isYear = !m;
   const now = parse(TODAY);
@@ -834,7 +897,8 @@ function statsPage(y, m) {
   const heat = isYear
     ? `<section class="card"><span class="kicker">Heatmap</span><h2>The year in weeks</h2>
         ${yearHeat(y)}
-        <p class="note">One square per day of ${y}, shaded by how many items it holds; a cross marks a day that has passed with nothing written.</p></section>`
+        <p class="note">One square per day of ${y}, shaded by how many items it holds; a cross marks a day that has passed with nothing written.</p>
+        ${readingHTML(coverageReading(y))}</section>`
     : `<section class="card">
         <div class="navrow act-head">
           <div class="act-title"><span class="kicker">Heatmap</span><h2 style="margin:2px 0 0">${MONTHS[m-1]} in weeks</h2></div>
@@ -844,7 +908,8 @@ function statsPage(y, m) {
           </div>
         </div>
         ${state.heatmap === 'weeks' ? monthWeeks(y, m) : monthCalendar(y, m)}
-        <p class="note">Shade is the number of items that day; the right-hand column totals each week. Every day opens.</p></section>`;
+        <p class="note">Shade is the number of items that day; the right-hand column totals each week. Every day opens.</p>
+        ${readingHTML(coverageReading(y, m))}</section>`;
 
   const pick = isYear
     ? `<div class="card"><span class="kicker">Months</span><h2>Open a month</h2>
@@ -884,10 +949,12 @@ function statsPage(y, m) {
         ? stackChart(yearBuckets(y), 'Items by month, stacked by category')
         : stackChart(monthBuckets(y, m), 'Items by day, stacked by category')}
       <div style="margin-top:14px">${compHTML(counts)}</div>
+      ${readingHTML(activityReading(list, isYear, y, m))}
     </div>
     <div class="card">
       <span class="kicker">When you write</span><h2>Hour of day · ${scope}</h2>
       ${hourHistogram(list, `Items by hour of day, ${scope}`)}
+      ${readingHTML(hourReading(list))}
     </div>
   </section>
 
