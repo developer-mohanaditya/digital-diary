@@ -612,7 +612,7 @@ function openDeadlines() {
     .sort((a, b) => a.due.localeCompare(b.due));
 }
 
-// One day of entries, led by the category tabs, closed by the hours band.
+// One day of entries, led by the category tabs.
 function entriesCardHTML(k, home) {
   const list = items(k), counts = {};
   tallyInto(counts, list);
@@ -626,11 +626,13 @@ function entriesCardHTML(k, home) {
   return `<section class="card">
     <div class="lhead"><span class="kicker">Entries</span>${list.length ? dayTabsHTML(tabDefs) : ''}</div>
     ${body}
-    ${hoursBandHTML(list, k)}
   </section>`;
 }
 
-function hoursBandHTML(list, k) {
+// The day's hours in a card of their own: what the day held, and when it happened,
+// are two readings, not one.
+function hoursCardHTML(k) {
+  const list = items(k);
   if (!list.length) return '';
   const c = Array(24).fill(0);
   list.forEach(it => c[+it.time.slice(0, 2)]++);
@@ -640,11 +642,14 @@ function hoursBandHTML(list, k) {
   const isToday = k === TODAY;
   const bars = c.map((n, h) =>
     `<span class="${n ? 'has' : ''}${isToday && h === nowH ? ' now' : ''}" style="height:${n ? Math.max(14, Math.round(n / max * 100)) : 5}%" title="${pad(h)}:00 · ${n} ${n === 1 ? 'note' : 'notes'}"></span>`).join('');
-  return `<div class="hoursband">
-    <div class="lab"><span>Hours</span><b>${list.length} ${list.length === 1 ? 'note' : 'notes'} · ${busy} ${busy === 1 ? 'hour' : 'hours'} busy</b></div>
+  return `<section class="card">
+    <div class="lhead" style="margin-bottom:0">
+      <div><span class="kicker">Timeline</span><h2 style="margin:2px 0 0">Hours</h2></div>
+      <span class="hoursum">${list.length} ${list.length === 1 ? 'note' : 'notes'} · ${busy} ${busy === 1 ? 'hour' : 'hours'} busy</span>
+    </div>
     <div class="hbars">${bars}</div>
     <div class="hticks">${Array.from({ length: 24 }, (_, h) => `<span>${h % 3 === 0 ? pad(h) : ''}</span>`).join('')}</div>
-  </div>`;
+  </section>`;
 }
 
 // The month as a heatmap, GitHub shading, one cell per day of this month only.
@@ -753,7 +758,7 @@ function dayPage(y, m, d, home) {
     </div>
   </section>
   <div class="split">
-    <div class="stack">${entriesCardHTML(k, home)}</div>
+    <div class="stack">${entriesCardHTML(k, home)}${hoursCardHTML(k)}</div>
     <aside class="side">
       ${monthHeatCard(k)}
       ${dueCard()}

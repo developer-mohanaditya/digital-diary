@@ -457,11 +457,8 @@
   .split { grid-template-columns:minmax(0,1fr) 344px; }
   @media (max-width:980px) { .split { grid-template-columns:minmax(0,1fr); } }
 
-  .hoursband { margin-top:14px; padding-top:12px; border-top:1.5px solid var(--line); }
-  .hoursband .lab { display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:.66rem;
-    text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-weight:800; }
-  .hoursband .lab b { font-family:var(--head); font-size:.78rem; letter-spacing:0; text-transform:none; color:var(--ink); }
-  .hbars { display:grid; grid-template-columns:repeat(24,minmax(0,1fr)); gap:3px; align-items:end; height:46px; margin-top:9px; }
+  .hoursum { font-family:var(--head); font-size:.8rem; font-weight:800; color:var(--ink); }
+  .hbars { display:grid; grid-template-columns:repeat(24,minmax(0,1fr)); gap:3px; align-items:end; height:46px; margin-top:12px; }
   .hbars span { display:block; background:var(--line); border-radius:3px 3px 0 0; min-height:3px; }
   .hbars span.has { background:var(--accent); }
   .hbars span.now { outline:1.5px solid var(--ink); outline-offset:1px; }
