@@ -40,7 +40,7 @@ side.
   day, the deadlines); the dashboard scopes it to the whole year (the year in weeks, months as
   doors, activity month by month). Both lead with the day page's header (`‹ Sep | October 2026 |
   Nov ›`), and its arrows are the only thing that differs. Each chart card closes with the same
-  thing in the same place: a plain reading, led by a small spark, computed from the entries the
+  thing in the same place: a plain reading, led by one small diamond, computed from the entries the
   chart draws. Coverage and the longest run under the heatmap, the busiest bucket and weekday
   under activity, the peak hour and the morning/evening split under the hours. A day that has passed with nothing
   written carries a faint cross in its square, in the year and in the month's weeks table; days

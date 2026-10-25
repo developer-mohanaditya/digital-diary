@@ -802,7 +802,8 @@ function monthBuckets(y, m) {
 // Every chart on these pages closes the same way: a tinted line that says what the shape
 // means. The numbers are computed from the same entries the chart draws, not typed in.
 const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const INSIGHT_ICON = '<svg class="insight" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10.5 2.5c.55 4.3 2.7 6.45 7 7-4.3.55-6.45 2.7-7 7-.55-4.3-2.7-6.45-7-7 4.3-.55 6.45-2.7 7-7Z"/><path d="M18.6 14.2c.3 2.3 1.4 3.4 3.7 3.7-2.3.3-3.4 1.4-3.7 3.7-.3-2.3-1.4-3.4-3.7-3.7 2.3-.3 3.4-1.4 3.7-3.7Z"/></svg>';
+// One diamond, centred: the mark of an insight in this page's language.
+const INSIGHT_ICON = '<svg class="insight" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2Q13.5 10.5 22 12Q13.5 13.5 12 22Q10.5 13.5 2 12Q10.5 10.5 12 2Z"/></svg>';
 function readingHTML(text) {
   return text ? `<p class="reading">${INSIGHT_ICON}<span>${text}</span></p>` : '';
 }
@@ -896,11 +897,11 @@ function statsPage(y, m) {
   }
 
   const heat = isYear
-    ? `<section class="card"><span class="kicker">Heatmap</span><h2>The year in weeks</h2>
+    ? `<section class="card chartcard"><span class="kicker">Heatmap</span><h2>The year in weeks</h2>
         ${yearHeat(y)}
         <p class="note">One square per day of ${y}, shaded by how many items it holds; a cross marks a day that has passed with nothing written.</p>
         ${readingHTML(coverageReading(y))}</section>`
-    : `<section class="card">
+    : `<section class="card chartcard">
         <div class="navrow act-head">
           <div class="act-title"><span class="kicker">Heatmap</span><h2 style="margin:2px 0 0">${MONTHS[m-1]} in weeks</h2></div>
           <div class="seg">
@@ -944,7 +945,7 @@ function statsPage(y, m) {
   ${heat}
 
   <section class="grid2">
-    <div class="card">
+    <div class="card chartcard">
       <span class="kicker">Activity</span><h2>${isYear ? `${y}, month by month` : `${MONTHS[m-1]}, day by day`}</h2>
       ${isYear
         ? stackChart(yearBuckets(y), 'Items by month, stacked by category')
@@ -952,7 +953,7 @@ function statsPage(y, m) {
       <div style="margin-top:14px">${compHTML(counts)}</div>
       ${readingHTML(activityReading(list, isYear, y, m))}
     </div>
-    <div class="card">
+    <div class="card chartcard">
       <span class="kicker">When you write</span><h2>Hour of day · ${scope}</h2>
       ${hourHistogram(list, `Items by hour of day, ${scope}`)}
       ${readingHTML(hourReading(list))}
