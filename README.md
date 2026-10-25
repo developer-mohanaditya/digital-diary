@@ -118,28 +118,46 @@ npm test
 
 `npm install` may need `--legacy-peer-deps` if the Wrangler and types packages report a version conflict. The project already sets this in `.npmrc`.
 
+`npm run dev` runs the Worker on `:8787` against the real Supabase project, but Wrangler's `[ai]` binding is remote by default and wants `wrangler login`. `npm run dev:local` stays entirely local (AI calls answer "not supported") and needs nothing.
+
 ## Configuration
 
-Secrets are never stored in this repository. They live in Cloudflare (Worker settings) or in a local `.dev.vars` file that is ignored by Git.
+Every value lives in exactly one of two places. There is no third file, and no name appears in both.
 
-| Name | Type | What it is |
+| File | Holds | Read by |
 | --- | --- | --- |
-| `TELEGRAM_BOT_TOKEN` | secret | Token from @BotFather |
-| `TELEGRAM_WEBHOOK_SECRET` | secret | Random string that Telegram sends with each update |
-| `SUPABASE_SERVICE_KEY` | secret | Supabase `service_role` key, used only by the Worker |
-| `SUPABASE_URL` | variable | Supabase project URL |
-| `ALLOWED_CHAT_ID` | variable | Numeric Telegram chat ID of the owner |
-| `DIARY_TZ` | variable | Fallback timezone, used only if none is stored. The stored value (set with `/timezone`) wins |
-| `DIARY_PASSPHRASE` | secret, optional | When set, the diary page asks for it. When absent, the page is open |
-| `DIARY_SESSION_SECRET` | secret, optional | Signs the login cookie. Defaults to `DIARY_PASSPHRASE` |
+| `wrangler.toml` `[vars]` | non-secret values, committed | `wrangler dev` and every deploy |
+| `.dev.vars` | secrets, gitignored | `wrangler dev` and `scripts/*.mjs` |
+
+A secret must also exist on the deployed Worker, because Cloudflare does not read `.dev.vars`. Keeping the two in step is one command:
+
+```sh
+npm run secret SUPABASE_SERVICE_KEY   # silent prompt, writes .dev.vars AND pushes to Cloudflare
+npm run env:check                     # lists every name, its home, and what is missing
+```
+
+The prompt never echoes. Pushing to Cloudflare is attempted with the same `CLOUDFLARE_API_TOKEN` everything else uses; `npm run secret NAME -- --local` writes only the local file. Pushing needs that token to carry **Workers Scripts: Edit** — an analytics-only token is refused, and the command says so, leaving the value in `.dev.vars` for one paste in the dashboard (Workers → awedityasdiary → Settings → Variables and Secrets).
+
+| Name | Home | On Cloudflare? | What it is |
+| --- | --- | --- | --- |
+| `SUPABASE_URL` | `[vars]` | via deploy | Project URL |
+| `ALLOWED_CHAT_ID` | `[vars]` | via deploy | Numeric Telegram chat ID of the owner |
+| `DIARY_TZ` | `[vars]` | via deploy | Fallback timezone; the value saved with `/timezone` wins |
+| `OWNER_USER_ID` | `[vars]` | via deploy | Supabase Auth user that owns every row |
+| `CLOUDFLARE_ACCOUNT_ID` | `[vars]` | via deploy | Account the Worker and its analytics belong to |
+| `SUPABASE_SERVICE_KEY` | `.dev.vars` | yes | Supabase `service_role` key; bypasses RLS, server only |
+| `TELEGRAM_BOT_TOKEN` | `.dev.vars` | yes | Token from @BotFather |
+| `TELEGRAM_WEBHOOK_SECRET` | `.dev.vars` | yes | Random string Telegram sends with each update |
+| `DIARY_PASSPHRASE` | `.dev.vars` | yes | Interim page lock; removed when Supabase Auth ships |
+| `SUPABASE_ANON_KEY` | `.dev.vars` | when auth ships | Public key the Worker uses for the sign-in endpoint |
+| `CLOUDFLARE_API_TOKEN` | `.dev.vars` | **no** | Account Analytics: Read, for `scripts/` only |
+| `DIARY_SESSION_SECRET` | `.dev.vars` | optional | Overrides the cookie signing key; defaults to `DIARY_PASSPHRASE` |
 
 ### The web page's door (optional)
 
-The page is **open by default**: with no `DIARY_PASSPHRASE` secret, `GET /api/entries` serves the diary to anyone who has the URL, and no sign-in card appears. To lock it later, set the secret once:
+The page is **open by default**: with no `DIARY_PASSPHRASE` secret, `GET /api/entries` serves the diary to anyone who has the URL, and no sign-in card appears. To lock it, set the secret with `npm run secret DIARY_PASSPHRASE` (and push it, or paste it in the dashboard).
 
-```sh
-npx wrangler secret put DIARY_PASSPHRASE
-```
+If local and Cloudflare disagree, the page answers 401 to the passphrase that works locally: Cloudflare's copy wins in production, so the two must match. `npm run env:check` cannot see Cloudflare's values, which is why the same command writes both.
 
 From then on the page shows a sign-in card: `POST /api/session` with `{"passphrase":"..."}` sets an HttpOnly, 30-day signed cookie and `DELETE /api/session` clears it. Removing the secret opens the page again. Cloudflare Access also works if it is added: the Worker accepts its `Cf-Access-Jwt-Assertion` header as a signed-in visitor.
 

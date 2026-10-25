@@ -1,0 +1,36 @@
+# Copy to .dev.vars (`cp .dev.vars.example .dev.vars`) and fill every value in.
+#
+# .dev.vars is the ONE local file for secrets. There is no .env. `wrangler dev` reads this
+# file, and so do scripts/*.mjs. Anything in it that is also in wrangler.toml [vars] wins,
+# even when its value is empty — which is why the non-secrets are NOT listed here.
+#
+# Never type a value into a shell command: it lands in history. Use the silent prompt:
+#   npm run secret NAME
+# and check the whole set with:
+#   npm run env:check
+#
+# The same six names must also exist on the deployed Worker:
+#   Cloudflare -> Workers -> awedityasdiary -> Settings -> Variables and Secrets
+# or, with a token that has Workers Scripts: Edit, `npm run secret NAME -- --push`.
+
+# Supabase -> Settings -> API -> service_role (or the `sb_secret_...` key).
+# Server only: it bypasses row-level security.
+SUPABASE_SERVICE_KEY=
+
+# Supabase -> Settings -> API -> anon / publishable. Used by the browser for sign-in.
+SUPABASE_ANON_KEY=
+
+# @BotFather -> /mybots -> API token. Looks like 123456789:AA...
+TELEGRAM_BOT_TOKEN=
+
+# Any long random string (openssl rand -hex 32). Telegram sends it with every update and
+# the Worker rejects updates that do not carry it. Re-register with
+#   node scripts/telegram-doctor.mjs --set https://<worker>/telegram/webhook
+TELEGRAM_WEBHOOK_SECRET=
+
+# Cloudflare -> My Profile -> API Tokens -> Account Analytics: Read.
+# Used to reconcile neuron counts; the Worker never needs it.
+CLOUDFLARE_API_TOKEN=
+
+# The interim page lock. Remove it from both places once Supabase Auth ships.
+DIARY_PASSPHRASE=
