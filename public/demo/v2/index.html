@@ -571,9 +571,11 @@
   /* One column below 980px, with the rail's deadlines moved up to second: on a phone what is
      due is the only card that asks for an action, and it does not wait behind two charts. */
   @media (max-width:980px) {
-    .split { display:flex; flex-direction:column; gap:18px; }
+    /* stretch, not start: in a column, `start` sizes every card to its own content and the
+       deadlines card, whose rows do not wrap, then runs off the right edge. */
+    .split { display:flex; flex-direction:column; gap:18px; align-items:stretch; }
     .split > .stack, .split > .side { display:contents; }
-    .split .card { margin-bottom:0; }
+    .split .card { margin-bottom:0; width:100%; min-width:0; }
     .split > .stack > .card:nth-child(1) { order:1; }
     .split > .side > .card:nth-child(2) { order:2; }
     .split > .stack > .card:nth-child(2) { order:3; }
