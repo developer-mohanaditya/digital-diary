@@ -460,10 +460,12 @@
   .split { grid-template-columns:minmax(0,1fr) 344px; }
   @media (max-width:980px) { .split { grid-template-columns:minmax(0,1fr); } }
 
-  /* The reading under a chart: plain text, led by a spark so it reads as an insight and
-     not as another caption. */
+  /* The reading under a chart: plain text, led by one diamond so it reads as an insight and
+     not as another caption. On a chart card it sits on the card's floor, not in mid-air. */
   .reading { display:flex; gap:9px; align-items:flex-start; margin:14px 0 0; font-size:.86rem; line-height:1.55; color:var(--ink); }
   .reading .insight { width:15px; height:15px; flex:0 0 auto; margin-top:3px; color:var(--accent); }
+  .chartcard { display:flex; flex-direction:column; }
+  .chartcard .reading { margin-top:auto; padding-top:16px; }
   .hoursum { font-family:var(--head); font-size:.8rem; font-weight:800; color:var(--ink); }
   .hbars { display:grid; grid-template-columns:repeat(24,minmax(0,1fr)); gap:3px; align-items:end; height:46px; margin-top:12px; }
   .hbars span { display:block; background:var(--line); border-radius:3px 3px 0 0; min-height:3px; }
