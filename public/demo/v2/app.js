@@ -1059,9 +1059,9 @@ const iconSVG = (body, attrs = '') => `<svg ${attrs}viewBox="0 0 24 24" fill="no
 const DASH_ICON = iconSVG('<rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/>');
 const HOME_BODY = '<path d="M3.4 10.5 12 3.4l8.6 7.1"/><path d="M5.6 9.4V20a.6.6 0 0 0 .6.6h4.2v-5.5h3.2v5.5h4.2a.6.6 0 0 0 .6-.6V9.4"/>';
 const HOME_ICON = iconSVG(HOME_BODY);
-// Home's own mark in the breadcrumb: Boxicons' "home alt" (MIT), a house with an eave and a
-// doorway, filled in the theme accent. Inlined so it takes the accent of whichever theme is on.
-const HOME_CRUMB = '<svg role="img" aria-label="Home" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h1v7c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-7h1c.4 0 .77-.24.92-.62c.15-.37.07-.8-.22-1.09l-8.99-9a.996.996 0 0 0-1.41 0l-9.01 9c-.29.29-.37.72-.22 1.09s.52.62.92.62Zm7 7v-5h4v5zm2-15.59l6 6V20h-2v-5c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v5H6v-9.59z"/></svg>';
+// Home's own mark in the breadcrumb: the bar's house, drawn the way the bar draws every icon
+// (one 1.8 stroke, round joins, no fill), in the page's ink since it sits on the page.
+const HOME_CRUMB = iconSVG(HOME_BODY, 'role="img" aria-label="Home" ');
 
 // The bar's fourth icon is wherever you are not: on the dashboard it offers the way home,
 // on every other page it offers the dashboard.
