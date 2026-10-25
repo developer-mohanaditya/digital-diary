@@ -23,6 +23,11 @@ crons = ["0 6 * * *", "30 12 * * *"]
 [vars]
 DIARY_TZ = "Europe/Paris"
 ALLOWED_CHAT_ID = "1353449143"
+# Not a secret: an identifier, and the same number in production and local dev.
+# The Supabase Auth user that owns every row. Set when the diary gained a login.
+OWNER_USER_ID = "9d6eb0f3-6952-4260-ab9e-72d5eaf7b3b2"
+# Not a secret: the Cloudflare account the Worker and its analytics belong to.
+CLOUDFLARE_ACCOUNT_ID = "38e2da6c293b361d7563a76bf8e519d7"
 # Not a secret: RLS keeps the data private, and the service key stays a secret.
 # Kept here so every deploy carries it, instead of depending on dashboard state.
 SUPABASE_URL = "https://rniszgdbwkelkjhnmvgt.supabase.co"
