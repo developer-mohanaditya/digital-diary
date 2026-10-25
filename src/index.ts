@@ -9,6 +9,7 @@ import {
   SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
 } from './session';
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
+import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -135,6 +136,34 @@ function supabaseStore(env: Env): Store {
         captures, thoughts, todayThoughts, pendingReminders,
         lastCaptureAt: lastRows[0]?.received_at ?? null, heartbeatOk: true,
       };
+    },
+    async dayNotes(day) {
+      const res = await check(await fetch(
+        `${base}/thoughts?day=eq.${day}&select=category,clean_text,created_at&order=created_at.asc&limit=200`,
+        { headers },
+      ));
+      const rows = (await res.json()) as { category: string; clean_text: string; created_at: string }[];
+      return rows.map((r) => ({ category: r.category as SummaryNote['category'], text: r.clean_text, at: r.created_at }));
+    },
+    async openReminders(limit) {
+      const res = await check(await fetch(
+        `${base}/reminders?status=eq.pending&select=kind,title,due_at&order=next_remind_at.asc&limit=${limit}`,
+        { headers },
+      ));
+      const rows = (await res.json()) as { kind: string; title: string; due_at: string | null }[];
+      return rows.map((r) => ({ kind: r.kind, title: r.title, dueAt: r.due_at }));
+    },
+    async summarySentOn() {
+      const res = await check(await fetch(`${base}/settings?key=eq.daily_summary&select=value`, { headers }));
+      const rows = (await res.json()) as { value: string }[];
+      return rows[0]?.value ?? null;
+    },
+    async markSummarySent(day) {
+      await check(await fetch(`${base}/settings?on_conflict=key`, {
+        method: 'POST',
+        headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ key: 'daily_summary', value: day, updated_at: new Date().toISOString() }),
+      }));
     },
   };
 }
@@ -795,6 +824,23 @@ async function runDue(env: Env): Promise<void> {
   }
 }
 
+// The 10pm summary. Two cron entries cover CET and CEST; whichever one lands at 22:00 in
+// the diary's timezone sends, and the settings row stops a second one on the day the
+// clocks go back. A database that refuses the reads sends nothing at all, rather than a
+// summary that claims the day was empty.
+async function dailySummary(env: Env): Promise<void> {
+  const store = supabaseStore(env);
+  if (!store.dayNotes || !store.openReminders || !store.summarySentOn || !store.markSummarySent) return;
+  const tz = (await store.getTimeZone()) ?? (env.DIARY_TZ || 'UTC');
+  const now = new Date();
+  const day = localDay(now, tz);
+  const sentOn = await store.summarySentOn();
+  if (!summaryDue(hourIn(now, tz), sentOn, day)) return;
+  const [notes, reminders] = await Promise.all([store.dayNotes(day), store.openReminders(6)]);
+  await telegramNotifier(env).reply(Number(env.ALLOWED_CHAT_ID), summaryMessage({ day, timeZone: tz, notes, reminders }));
+  await store.markSummarySent(day);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -813,5 +859,6 @@ export default {
   },
   async scheduled(_event: unknown, env: Env): Promise<void> {
     await runDue(env);
+    await dailySummary(env);
   },
 };
