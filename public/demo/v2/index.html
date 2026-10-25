@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Preview v2 · Digital Diary</title>
 <link rel="icon" href="../logo/mark.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -285,7 +285,8 @@
 
   /* Small screens: keep wide grids readable instead of squashing them. */
   @media (max-width:600px) {
-    .top { padding:10px 12px; }
+    /* The bar sits under the notch on a full-bleed phone, so the inset is added, not assumed. */
+    .top { padding:calc(10px + env(safe-area-inset-top)) 0 10px; }
     .brand { font-size:.85rem; gap:8px; flex-shrink:0; min-width:0; }
     .brand-name { display:inline; max-width:110px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     main { padding:12px 12px 32px; }
@@ -293,7 +294,6 @@
     .hero h1 { font-size:1.75rem; }
     .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .kpi b { font-size:1.5rem; }
-    .heat .hrow { grid-template-columns:28px repeat(31, minmax(0,1fr)); gap:2px; }
     .cal { gap:4px; }
     .cell { padding:4px 5px; border-radius:10px; aspect-ratio:auto; min-height:52px; }
     .cell small { font-size:.62rem; }
@@ -303,12 +303,11 @@
     .daynav .bl-full { display:none; }
     .daynav .bl-short { display:inline; }
     .daynav { gap:6px; }
-    .daynav .btn { padding:5px 8px; font-size:.78rem; min-width:104px; }
+    .daynav .btn { padding:5px 8px; font-size:.78rem; min-width:104px; min-height:40px; }
     .donut svg { width:120px; height:120px; }
     .strip, .ticks { gap:2px; }
     .add .row { flex-direction:column; align-items:stretch; }
     .actions { flex-direction:column; align-items:flex-start; }
-    .top { padding:10px 0; }
     .top-inner { gap:8px; padding:0 12px; }
     .act-head { flex-wrap:wrap; align-items:flex-start; gap:8px; }
     .act-title { flex:1 1 auto; min-width:0; order:1; }
@@ -320,15 +319,36 @@
     .act-datenav .btn { padding:4px 8px; font-size:.78rem; flex:0 0 auto; }
     .brand img { width:30px; height:30px; }
     .search-wrap { min-width:120px; }
-    .search-input { padding:7px 10px 7px 32px; font-size:.84rem; height:34px; }
+    .search-input { padding:8px 10px 8px 32px; font-size:.84rem; height:38px; }
     .search-icon { left:10px; }
-    .iconbtn { width:34px; height:34px; }
+    .tools { gap:10px; }
+    .iconbtn { width:40px; height:40px; }
+    /* Thumb-sized controls: the ink grows where it can, and the hit area makes up the rest. */
+    .hbtn, .xbtn { width:38px; height:38px; }
+    .hbtn svg { width:18px; height:18px; }
+    .tab { min-height:34px; padding:6px 12px; }
+    .utabs button { padding:9px 4px; }
+    .seg button, .segbar button, .ctabs button { min-height:32px; }
+    .ltag { padding:3px 9px; }
+    .lmove { padding:8px 6px; }
+    .dangerbtn { min-height:40px; }
+    .microbtn { padding:6px 10px; }
+    .tick { width:28px; height:28px; }
+    .tick::after { inset:-8px; }
+    .mmenu { top:70px; }
+    /* Reading is the phone's main job: 15px body is a desk size. */
+    .entry p, .ltxt, .rtext, .sfull { font-size:1.0625rem; }
   }
   @media (max-width:480px) {
     .brand-name { display:none; }
     .brand { gap:0; }
   }
   @media (max-width:380px) {
+    /* Two 90px arrows leave the date ~104px; 1.3rem no longer fits it there. */
+    .daytitle { font-size:1.12rem; }
+    /* Three 40px buttons and the logo leave the search ~110px: it shrinks instead of
+       pushing the bar wider than the screen. */
+    .search-wrap { min-width:0; }
     .act-datenav .btn { padding:3px 6px; font-size:.72rem; }
     .act-head .seg button { padding:2px 6px; font-size:.72rem; }
     .daynav .btn { min-width:90px; font-size:.72rem; gap:4px; }
@@ -360,14 +380,16 @@
   .lrow.clickable { cursor:pointer; }
   .lrow.clickable:hover { background:color-mix(in srgb, var(--accent) 7%, transparent); }
   .lrow.clickable:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
-  .overlay { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px; }
+  .overlay { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px 20px calc(20px + env(safe-area-inset-bottom)); }
   .backdrop { position:absolute; inset:0; background:rgba(10,10,25,.5); }
-  .sheet { position:relative; width:min(560px,100%); min-height:min(460px,76vh); max-height:86vh; overflow:auto; background:var(--card); color:var(--ink);
-    border:2px solid var(--edge); box-shadow:6px 6px 0 var(--shadow); border-radius:18px; padding:20px 22px 28px; }
+  /* dvh follows the phone's toolbar as it slides; the fallback keeps older browsers sane. */
+  .sheet { position:relative; width:min(560px,100%); min-height:min(460px,76vh); max-height:86vh; max-height:86dvh; overflow:auto; background:var(--card); color:var(--ink);
+    border:2px solid var(--edge); box-shadow:6px 6px 0 var(--shadow); border-radius:18px;
+    padding:20px 22px calc(28px + env(safe-area-inset-bottom)); }
   /* The note card: header and usage line stay put, only the note itself scrolls. */
   .nsheet { display:flex; flex-direction:column; overflow:hidden; padding-bottom:0; }
   .nsheet .sbody { flex:1 1 auto; min-height:0; overflow:auto; padding-bottom:16px; }
-  .nsheet .sfoot { flex:0 0 auto; border-top:1.5px solid var(--line); padding:11px 0 15px; }
+  .nsheet .sfoot { flex:0 0 auto; border-top:1.5px solid var(--line); padding:11px 0 calc(15px + env(safe-area-inset-bottom)); }
   .nsheet .sfoot .cost { white-space:normal; }
   .shead { display:flex; align-items:center; gap:10px; }
   .shead .mode { font-size:.74rem; }
@@ -393,8 +415,10 @@
   .donetog svg { width:12px; height:12px; }
   .donetog:hover { border-color:var(--accent); color:var(--accent); }
   .donetog[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
-  .tick { flex:0 0 auto; align-self:center; width:22px; height:22px; padding:0; border-radius:50%; border:1.5px solid var(--line);
+  .tick { position:relative; flex:0 0 auto; align-self:center; width:22px; height:22px; padding:0; border-radius:50%; border:1.5px solid var(--line);
     background:var(--card); color:var(--muted); cursor:pointer; display:inline-grid; place-items:center; }
+  /* The ring is 22px; the thumb gets 44. */
+  .tick::after { content:""; position:absolute; inset:-11px; border-radius:50%; }
   .tick svg { width:11px; height:11px; }
   .tick:hover { border-color:var(--accent); background:var(--accent); color:#fff; }
   .stitle { font-size:1.12rem; line-height:1.35; margin:0 0 6px; letter-spacing:-.01em; }
@@ -447,20 +471,12 @@
     padding:4px 11px 5px; min-width:72px; white-space:nowrap; }
   .hstat b { display:block; font-family:var(--head); font-size:1.06rem; font-weight:800; line-height:1.15; font-variant-numeric:tabular-nums; }
   .hstat span { display:block; font-size:.66rem; color:var(--muted); letter-spacing:.01em; line-height:1.2; }
-  /* Fifth card, only off today: the same counter shape in the accent, and it is a link. */
-  .hstat.go { background:var(--accent); border-color:var(--accent); color:#fff; text-decoration:none; transition:transform .12s, box-shadow .12s; }
-  /* "Open" over "Today", the two lines the same size and weight. */
-  .hstat.go b, .hstat.go span { font-size:.88rem; line-height:1.28; font-weight:800; color:#fff; letter-spacing:0; }
-  .hstat.go:hover { color:#fff; transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--shadow); }
-  .hstat.go:active { transform:translate(1px,1px); box-shadow:1px 1px 0 var(--shadow); }
   .newbtn { display:inline-flex; align-items:center; gap:7px; background:var(--accent); color:#fff; border:2px solid var(--edge);
     border-radius:12px; padding:6px 13px; font-weight:800; font-size:.86rem; cursor:pointer; box-shadow:3px 3px 0 var(--shadow);
     transition:transform .12s, box-shadow .12s; }
   .newbtn svg { width:15px; height:15px; }
   .newbtn:hover { transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--shadow); }
   .newbtn:active { transform:translate(1px,1px); box-shadow:1px 1px 0 var(--shadow); }
-  .split { grid-template-columns:minmax(0,1fr) 344px; }
-  @media (max-width:980px) { .split { grid-template-columns:minmax(0,1fr); } }
 
   /* The reading under a chart: plain text, led by one diamond so it reads as an insight and
      not as another caption. On a chart card it sits on the card's floor, not in mid-air. */
@@ -515,31 +531,55 @@
   .csave:hover { filter:brightness(1.07); border-color:var(--accent); }
   .addmsg { min-height:0; font-size:.8rem; margin-top:6px; }
   .addmsg:not(:empty) { color:var(--alert); }
-  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:60; background:var(--ink); color:var(--bg);
+  .toast { position:fixed; left:50%; bottom:calc(22px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:60; background:var(--ink); color:var(--bg);
     border-radius:999px; padding:9px 16px; font-size:.84rem; font-weight:700; box-shadow:0 8px 26px rgba(10,10,25,.28); }
   .toast[hidden] { display:none; }
 
   @media (max-width:700px) {
     /* One row of five: the four counters and the plus share the width evenly, and the house
-       steps aside so they can. */
+       steps aside so they can. A cell is 64px wide here, so the label sits at .62rem — the
+       smallest size that still reads as a word — and the number carries the row. */
     .crumbs.crumb-home { display:none; }
-    .crumbtools { width:100%; margin-left:0; gap:6px; flex-wrap:nowrap; align-items:stretch; }
+    /* Only the day's five cells take the whole row. Anything else that lands here — the trail's
+       actions on Settings — stays on the trail's line, right-aligned. */
+    .crumbtools { gap:4px; }
+    .crumbtools.cells { width:100%; margin-left:0; flex-wrap:nowrap; align-items:stretch; justify-content:flex-end; }
     .hstats { display:contents; }
-    .hstat { flex:1 1 0; min-width:0; padding:3px 5px 4px; border-radius:10px; box-shadow:2px 2px 0 var(--shadow); }
-    .hstat b { font-size:.9rem; overflow:hidden; text-overflow:ellipsis; }
-    .hstat span { font-size:.55rem; overflow:hidden; text-overflow:ellipsis; }
-    .hstat.go b, .hstat.go span { font-size:.68rem; }
+    .hstat { flex:1 1 0; min-width:0; padding:4px 4px 5px; border-radius:10px; box-shadow:2px 2px 0 var(--shadow); }
+    .hstat b { font-size:.95rem; overflow:hidden; text-overflow:ellipsis; }
+    .hstat span { font-size:.62rem; letter-spacing:0; overflow:hidden; text-overflow:ellipsis; }
     .newbtn { flex:1 1 0; min-width:0; justify-content:center; padding:6px 0; border-radius:10px; box-shadow:2px 2px 0 var(--shadow); }
     .newbtn span { display:none; }
     .newbtn svg { width:17px; height:17px; }
+    /* The year is 31 columns of days. At the card's 308px that is a 7px cell — unreadable
+       and untappable — so it keeps its links and scrolls sideways at 18px instead. */
+    .heat { overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px; }
+    .heat .hrow { grid-template-columns:30px repeat(31,18px); gap:3px; }
+    .xmark { display:none; }
     .mc { font-size:.64rem; border-radius:6px; }
+    .mlegend { font-size:.72rem; gap:5px; }
+    .mlegend i { width:13px; height:13px; }
+    /* The usage line is detail, not content: on a phone it wrapped to two lines at a size that
+       competed with the note above it. */
+    .nsheet .sfoot .cost { font-size:.66rem; line-height:1.45; }
     .hbars { height:38px; }
     .csheet textarea { min-height:120px; }
   }
 
   /* ---------- demo additions: all in the same tokens and card language ---------- */
   .split { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:18px; align-items:start; }
-  @media (max-width:980px) { .split { grid-template-columns:minmax(0,1fr); } }
+  /* One column below 980px, with the rail's deadlines moved up to second: on a phone what is
+     due is the only card that asks for an action, and it does not wait behind two charts. */
+  @media (max-width:980px) {
+    .split { display:flex; flex-direction:column; gap:18px; }
+    .split > .stack, .split > .side { display:contents; }
+    .split .card { margin-bottom:0; }
+    .split > .stack > .card:nth-child(1) { order:1; }
+    .split > .side > .card:nth-child(2) { order:2; }
+    .split > .stack > .card:nth-child(2) { order:3; }
+    .split > .side > .card:nth-child(1) { order:4; }
+    .split > .side > .card:nth-child(3) { order:5; }
+  }
   .side .card { padding:16px 18px; }
   .stat { display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:6px 0; border-top:1px solid var(--line); font-size:.9rem; }
   .stat:first-of-type { border-top:0; }
@@ -587,7 +627,6 @@
   .pmsg.err { color:var(--alert); font-weight:700; }
   /* Settings opens with its own Sign out at the far right, the way the bar used to hold it. */
   .sethead { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-  .sethead .dangerbtn { margin-left:auto; flex:0 0 auto; }
   .dangerbtn svg { width:15px; height:15px; flex:0 0 auto; }
   .dangerbtn { display:inline-flex; align-items:center; gap:8px; background:var(--alert); color:#fff; border:2px solid var(--edge);
     border-radius:12px; padding:7px 15px; font-weight:800; font-size:.9rem; cursor:pointer; box-shadow:3px 3px 0 var(--shadow);
@@ -604,10 +643,36 @@
     .weeks th { font-size:.56rem; }
     .side .card, .card { padding:14px 14px; }
   }
+  /* One ring for every control the demo draws: the browser default disappears on the dark
+     bar and on the accent fill. */
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline:2px solid var(--accent); outline-offset:2px; }
+  .top a:focus-visible, .top button:focus-visible, .top input:focus-visible { outline-color:#f5f5ff; }
+
+  /* The press and hover lifts are decoration; nothing here needs them to work. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration:.01ms !important; animation-duration:.01ms !important;
+      animation-iteration-count:1 !important; scroll-behavior:auto !important; }
+  }
 </style>
 
 </head>
 <body data-theme="minimal" data-mode="light">
+<script>
+  // Theme and mode are settled before the header paints: a saved choice must not flash the
+  // other mode, and a first visit follows the system's light/dark setting. app.js reads the
+  // same key and takes over from here.
+  (function () {
+    var p = {};
+    try { p = JSON.parse(localStorage.getItem('diary-prefs-v2') || '{}') || {}; } catch (e) {}
+    if (['minimal', 'paper', 'journal'].indexOf(p.theme) < 0) p.theme = 'minimal';
+    if (p.mode !== 'light' && p.mode !== 'dark') {
+      p.mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.body.dataset.theme = p.theme;
+    document.body.dataset.mode = p.mode;
+  })();
+</script>
 <header class="top"><div class="top-inner">
   <a class="brand" href="#/" aria-label="Digital Diary home"><img src="../logo/mark.svg" width="36" height="36" alt="Digital Diary logo" /><span class="brand-name">Digital Diary</span></a>
   <div class="search-wrap">
