@@ -430,7 +430,7 @@ function donut(counts) {
 function dueDays(due) { return Math.round((parse(due) - parse(TODAY)) / 864e5); }
 function duePill(it) {
   if (it.cat !== 'deadline') return '';
-  if (it.done) return '<span class="due done">Done</span>';
+  if (it.done) return `<span class="due done"${it.doneLabel ? ` title="Marked done ${esc(it.doneLabel)}"` : ''}>Done</span>`;
   if (!it.due) return '';
   const n = dueDays(it.due);
   if (n < 0) return `<span class="due over">Overdue ${-n}d</span>`;
@@ -439,16 +439,45 @@ function duePill(it) {
   return `<span class="due soon">Due in ${n}d</span>`;
 }
 
-// What a deadline is waiting for, stated in days. Closing one is the Worker's job — the
-// Telegram review button writes `done_at` — so the page reports the state and leaves the
-// writing where the authority is: the bot.
-function dueLine(it) {
+const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>';
+
+// What a deadline is waiting for, stated in days — and the button that ends the waiting.
+// A deadline is only done when someone says so, and the note is where they decide; the
+// Telegram Done button writes the same row, so the two cannot disagree. The button stays
+// afterwards, to reopen a mistake.
+function dueLine(it, k) {
   if (it.cat !== 'deadline') return '';
   const when = it.due ? fmtDay(parse(it.due)) : 'No due date';
   const n = it.due ? dueDays(it.due) : null;
-  const st = it.done ? 'Done'
+  const st = it.done ? (it.doneLabel ? `done ${it.doneLabel}` : 'done')
     : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
-  return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span></div>`;
+  return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span>
+    <button class="donetog" data-action="due-done" data-v="${k}|${it.id}" aria-pressed="${it.done ? 'true' : 'false'}">${it.done ? 'Reopen' : `${CHECK_ICON}Mark done`}</button></div>`;
+}
+
+// The write the page used to leave to the bot. The reminder on the row is what pings, so
+// closing it here stops the reminders as well as changing the badge.
+async function markDue(ref) {
+  const found = ref && findNote(ref);
+  if (!found || found.it.cat !== 'deadline') return;
+  const next = !found.it.done;
+  try {
+    const res = await fetch('/api/reminder/done', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: found.it.id, done: next }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      toast((data && data.error) || `The diary API answered ${res.status}.`);
+      return;
+    }
+    await loadDiary();
+    render();
+    toast(next ? 'Deadline marked done. No more pings.' : 'Deadline reopened. The next ping is tomorrow.');
+  } catch (_) {
+    toast('Could not reach the diary. Nothing was marked.');
+  }
 }
 const hasRawText = it => it.mode !== 'verbatim' && !!it.raw;
 
@@ -501,7 +530,7 @@ function noteHTML(ref) {
       ${ui.moveMenu ? moveMenuHTML(it) : ''}
       <div class="sbody">
         <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : it.src === 'manual' ? 'Moved by you' : 'Auto filed'}</div>
-        ${dueLine(it)}
+        ${dueLine(it, k)}
         ${noteTitleBody(it.text)}
         ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
       </div>
@@ -1389,6 +1418,7 @@ document.addEventListener('click', e => {
   else if (a === 'move-to') { ui.moveCat = v; if (v === 'deadline' && !ui.moveDue) ui.moveDue = iso(addDays(new Date(), 7)); render(); }
   else if (a === 'move-no') { ui.moveCat = null; render(); }
   else if (a === 'move-yes') moveNote();
+  else if (a === 'due-done') markDue(v);
   else if (a === 'heatmap') { state.heatmap = v; save(); render(); }
   else if (a === 'add') addEntry();
   else if (a === 'refresh' || a === 'retry') boot();
