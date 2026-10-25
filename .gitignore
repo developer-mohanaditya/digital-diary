@@ -2,6 +2,9 @@ node_modules/
 .wrangler/
 .dev.vars
 *.log
+# A copy of wrangler.toml without the [ai] binding, so `wrangler dev` can run without a
+# Cloudflare API token. Scratch config for a local preview; never deployed.
+wrangler.local.toml
 logo-drafts/
 .env
 

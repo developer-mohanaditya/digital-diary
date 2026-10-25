@@ -189,7 +189,9 @@ describe('cleanup', () => {
   function fakeRefiner(answer: string | null | Error) {
     const refine = vi.fn(async () => {
       if (answer instanceof Error) throw answer;
-      return answer;
+      if (answer === null) return null;
+      // The tokens stand in for what Workers AI reports; the handler stores them as given.
+      return { text: answer, model: 'test-model', tokensIn: 31, tokensOut: 12 };
     });
     return { refiner: { refine } as Refiner, refine };
   }
@@ -202,6 +204,9 @@ describe('cleanup', () => {
     expect(store.insertThought).toHaveBeenCalledWith(expect.objectContaining({
       clean_text: 'Had coffee with Ram.',
       raw_text: 'um so i had a coffee with ram, yeah',
+      tokens_in: 31,
+      tokens_out: 12,
+      cleanup_model: 'test-model',
     }));
     // Three lines: filed under, what cleanup did, what was stored.
     expect(n.reply.mock.calls[0][1].split('\n')).toEqual([

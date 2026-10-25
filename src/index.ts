@@ -8,6 +8,7 @@ import { BACKUP_MODEL, BIG_MODEL, SMALL_MODEL, readOutput, workersAiRefiner, typ
 import {
   SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
 } from './session';
+import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -17,7 +18,7 @@ export interface Env {
   TELEGRAM_WEBHOOK_SECRET: string;
   ALLOWED_CHAT_ID: string;
   DIARY_TZ: string; // IANA timezone, e.g. "Asia/Kolkata"
-  DIARY_PASSPHRASE?: string;     // secret: the one password that opens the diary page
+  DIARY_PASSPHRASE?: string;     // secret: seeds the passphrase, and keeps the page closed
   DIARY_SESSION_SECRET?: string; // secret: signs cookies; defaults to the passphrase
   AI?: AiRunner;                 // Workers AI binding, wired up in wrangler.toml
 }
@@ -173,28 +174,93 @@ function json(body: unknown, status = 200, extra: Record<string, string> = {}): 
   });
 }
 
-// Everything the cookie signature needs. Defaulting to the passphrase keeps setup to
-// one secret; DIARY_SESSION_SECRET only matters if the passphrase is ever rotated and
-// you want existing sessions to survive (or die) on a separate schedule.
-function sessionSecret(env: Env): string | null {
-  return env.DIARY_SESSION_SECRET || env.DIARY_PASSPHRASE || null;
+// The passphrase Settings saved, or null when it has never been changed from the page. Throws
+// when the database cannot answer, which every caller turns into a refusal: an unreadable lock
+// must not open.
+async function readPassphrase(env: Env): Promise<string | null> {
+  const base = `${env.SUPABASE_URL}/rest/v1`;
+  const headers = { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` };
+  const res = await fetch(`${base}/settings?key=eq.${PASSPHRASE_KEY}&select=value`, { headers });
+  if (!res.ok) {
+    const text = await res.text();
+    // A settings table that was never created (migration 0002 not run) must not lock the owner
+    // out: no row means no saved passphrase, and the env secret is still the passphrase.
+    if (res.status === 404 || /PGRST205|42P01/.test(text)) {
+      console.warn('settings table missing: run migrations/0002_settings.sql; using DIARY_PASSPHRASE');
+      return null;
+    }
+    throw new Error(`Supabase ${res.status}: ${text}`);
+  }
+  const rows = (await res.json()) as { value: string }[];
+  return rows[0]?.value ?? null;
 }
 
-async function signedIn(request: Request, env: Env): Promise<boolean> {
-  // No passphrase on the Worker means no gate: this is a one-person diary and the owner
-  // asked to read it without signing in. Setting DIARY_PASSPHRASE closes it again.
-  if (!env.DIARY_PASSPHRASE) return true;
-  // If Cloudflare Access is ever enabled, it authenticates visitors before the Worker
-  // and stamps this header. The cookie covers the case where Access is not set up.
-  if (request.headers.get('Cf-Access-Jwt-Assertion')) return true;
-  const secret = sessionSecret(env);
-  if (!secret) return false;
+async function writePassphrase(env: Env, hash: string): Promise<void> {
+  const base = `${env.SUPABASE_URL}/rest/v1`;
+  const headers = { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` };
+  const res = await fetch(`${base}/settings?on_conflict=key`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ key: PASSPHRASE_KEY, value: hash, updated_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+}
+
+// Everything the cookie signature needs. Until Settings saves a passphrase the env secret signs
+// the cookie, as it always did; afterwards the stored hash does, so changing the passphrase
+// signs every other device out. DIARY_SESSION_SECRET overrides both and keeps sessions across a
+// change.
+function sessionSecret(env: Env, stored: string | null): string | null {
+  return env.DIARY_SESSION_SECRET || stored || env.DIARY_PASSPHRASE || null;
+}
+
+// The gate is on when either place holds a passphrase. With neither, this is a one-person diary
+// and the owner reads it without signing in.
+function gateOn(env: Env, stored: string | null): boolean {
+  return Boolean(stored || env.DIARY_PASSPHRASE);
+}
+
+function cookieOk(request: Request, secret: string): Promise<boolean> {
   return sessionValid(readCookie(request, SESSION_COOKIE), secret, new Date());
 }
 
+async function signedIn(request: Request, env: Env): Promise<boolean> {
+  let stored: string | null;
+  try {
+    stored = await readPassphrase(env);
+  } catch {
+    return false;
+  }
+  if (!gateOn(env, stored)) return true;
+  // If Cloudflare Access is ever enabled, it authenticates visitors before the Worker
+  // and stamps this header. The cookie covers the case where Access is not set up.
+  if (request.headers.get('Cf-Access-Jwt-Assertion')) return true;
+  const secret = sessionSecret(env, stored);
+  if (!secret) return false;
+  return cookieOk(request, secret);
+}
+
+// Does the typed value open this diary? A saved passphrase wins over the env secret, so the two
+// can never both be right and disagree.
+async function passphraseMatches(env: Env, stored: string | null, given: string): Promise<boolean> {
+  if (stored) return verifyPassphrase(given, stored);
+  return env.DIARY_PASSPHRASE ? sameSecret(given, env.DIARY_PASSPHRASE) : false;
+}
+
+// A short pause makes guessing over the network expensive without needing storage.
+const wrongGuessPause = () => new Promise((resolve) => setTimeout(resolve, 400));
+
 // POST /api/session { passphrase } -> sets the signed cookie.
 async function signIn(request: Request, env: Env): Promise<Response> {
-  if (!env.DIARY_PASSPHRASE) {
+  let stored: string | null;
+  try {
+    stored = await readPassphrase(env);
+  } catch (err) {
+    console.error('passphrase read failed', err);
+    return json({ ok: false, error: 'Could not read the lock. Try again.' }, 502);
+  }
+  const secret = sessionSecret(env, stored);
+  if (!secret) {
     return json({ ok: false, error: 'No passphrase is set on the Worker. Add the DIARY_PASSPHRASE secret.' }, 503);
   }
   let body: { passphrase?: unknown };
@@ -204,12 +270,56 @@ async function signIn(request: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: 'Send JSON: { "passphrase": "..." }' }, 400);
   }
   const given = typeof body.passphrase === 'string' ? body.passphrase : '';
-  if (!sameSecret(given, env.DIARY_PASSPHRASE)) {
-    // A short pause makes guessing over the network expensive without needing storage.
-    await new Promise((resolve) => setTimeout(resolve, 400));
+  if (!(await passphraseMatches(env, stored, given))) {
+    await wrongGuessPause();
     return json({ ok: false, error: 'That passphrase is not right.' }, 401);
   }
-  const token = await issueSession(sessionSecret(env)!, new Date());
+  const token = await issueSession(secret, new Date());
+  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(token) });
+}
+
+// POST /api/passphrase { current, next }: change the diary's passphrase from Settings. This is
+// the one credential the Worker can change, so the page no longer needs the Cloudflare dashboard
+// for it — though the dashboard is still the way back in once you cannot sign in at all.
+async function passphraseApi(request: Request, env: Env): Promise<Response> {
+  let stored: string | null;
+  try {
+    stored = await readPassphrase(env);
+  } catch (err) {
+    console.error('passphrase read failed', err);
+    return json({ ok: false, error: 'Could not read the lock. Try again.' }, 502);
+  }
+  const secret = sessionSecret(env, stored);
+  if (!secret) {
+    return json({ ok: false, error: 'The page has no passphrase yet. Set DIARY_PASSPHRASE on the Worker first.' }, 409);
+  }
+  if (!(await cookieOk(request, secret))) {
+    return json({ ok: false, need: 'login', error: 'Sign in to change the passphrase.' }, 401);
+  }
+  let body: { current?: unknown; next?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: 'Send JSON: { "current": "...", "next": "..." }' }, 400);
+  }
+  const current = typeof body.current === 'string' ? body.current : '';
+  const next = typeof body.next === 'string' ? body.next.trim() : '';
+  if (!(await passphraseMatches(env, stored, current))) {
+    await wrongGuessPause();
+    return json({ ok: false, error: 'That is not the current passphrase.' }, 403);
+  }
+  const problem = passphraseProblem(next, current);
+  if (problem) return json({ ok: false, error: problem }, 400);
+  const hash = await hashPassphrase(next);
+  try {
+    await writePassphrase(env, hash);
+  } catch (err) {
+    console.error('passphrase write failed', err);
+    return json({ ok: false, error: 'Could not save the new passphrase. Nothing changed.' }, 502);
+  }
+  // The cookie is signed with the new hash, so every other device is locked out and this one
+  // gets a fresh 30-day cookie in the same answer, instead of being signed out by its own change.
+  const token = await issueSession(sessionSecret(env, hash)!, new Date());
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(token) });
 }
 
@@ -261,12 +371,21 @@ async function repairUntouched(env: Env, limit: number): Promise<RepairResult> {
   for (const r of untouched) {
     try {
       const out = await refiner.refine({ text: r.raw_text!, mode: r.mode as 'refine' | 'reason' | 'think', category: r.category });
-      if (!out || out === r.clean_text) continue;
-      const patch = await fetch(`${base}/thoughts?id=eq.${r.id}`, {
+      if (!out || out.text === r.clean_text) continue;
+      // The repair spends neurons too, so it records what it cost on the row it rewrote.
+      const send = (body: Record<string, unknown>) => fetch(`${base}/thoughts?id=eq.${r.id}`, {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ clean_text: out }),
+        body: JSON.stringify(body),
       });
+      let patch = await send({
+        clean_text: out.text,
+        tokens_in: out.tokensIn,
+        tokens_out: out.tokensOut,
+        cleanup_model: out.model,
+      });
+      // The rewrite matters more than its cost, so a missing 0006 costs the counters, not the repair.
+      if (patch.status === 400) patch = await send({ clean_text: out.text });
       if (!patch.ok) throw new Error(`Supabase ${patch.status}: ${await patch.text()}`);
       cleaned++;
     } catch (err) {
@@ -312,9 +431,19 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
 
   const base = `${env.SUPABASE_URL}/rest/v1`;
   const headers = { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` };
+  // The usage columns arrive with migration 0006. Asking for a column that does not exist
+  // yet is a 400 from PostgREST, and that would blank the diary page for everyone between a
+  // deploy and the migration being run, so the read falls back to the older column set.
+  const readThoughts = async (select: string) =>
+    fetch(`${base}/thoughts?day=gte.${from}&day=lte.${to}&select=${select}&order=day.asc&limit=1000`, { headers });
+  const withUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id,tokens_in,tokens_out,cleanup_model';
+  const withoutUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id';
   try {
     const [thoughtsRes, remindersRes] = await Promise.all([
-      fetch(`${base}/thoughts?day=gte.${from}&day=lte.${to}&select=id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id&order=day.asc&limit=1000`, { headers }),
+      (async () => {
+        const first = await readThoughts(withUsage);
+        return first.status === 400 ? readThoughts(withoutUsage) : first;
+      })(),
       fetch(`${base}/reminders?select=capture_id,kind,title,due_at,next_remind_at,status&order=next_remind_at.asc&limit=200`, { headers }),
     ]);
     if (!thoughtsRes.ok) {
@@ -370,13 +499,16 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
   let clean = text;
   let cleanup: NoteCleanup = 'unavailable';
   let refineError: string | null = null;
+  let usage: { tokensIn: number | null; tokensOut: number | null; model: string | null } =
+    { tokensIn: null, tokensOut: null, model: null };
   if (mode === 'verbatim') {
     cleanup = 'verbatim';
   } else if (env.AI) {
     try {
       const out = await workersAiRefiner(env.AI).refine({ text, mode, category });
-      if (out && !sameWords(out, text)) {
-        clean = out;
+      if (out) usage = { tokensIn: out.tokensIn, tokensOut: out.tokensOut, model: out.model };
+      if (out && !sameWords(out.text, text)) {
+        clean = out.text;
         cleanup = 'formatted';
       } else {
         cleanup = 'unchanged';
@@ -421,20 +553,30 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
     if (!captureRows.length) return json({ ok: false, error: 'The note was not stored.' }, 502);
     const captureId = captureRows[0].id;
 
-    const thoughtRes = await fetch(`${base}/thoughts`, {
+    const row = {
+      capture_id: captureId,
+      day: localDay(now, tz),
+      captured_at: now.toISOString(),
+      category,
+      category_source: chosen ? 'tag' : 'auto',
+      mode,
+      clean_text: clean,
+      raw_text: text,
+    };
+    const writeThought = (body: Record<string, unknown>) => fetch(`${base}/thoughts`, {
       method: 'POST',
       headers: { ...headers, Prefer: 'return=representation' },
-      body: JSON.stringify([{
-        capture_id: captureId,
-        day: localDay(now, tz),
-        captured_at: now.toISOString(),
-        category,
-        category_source: chosen ? 'tag' : 'auto',
-        mode,
-        clean_text: clean,
-        raw_text: text,
-      }]),
+      body: JSON.stringify([body]),
     });
+    let thoughtRes = await writeThought({
+      ...row,
+      tokens_in: usage.tokensIn,
+      tokens_out: usage.tokensOut,
+      cleanup_model: usage.model,
+    });
+    // Same reason as the read above: a deploy can reach production before the migration
+    // does, and a note that was captured must still be stored.
+    if (thoughtRes.status === 400) thoughtRes = await writeThought(row);
     if (!thoughtRes.ok) {
       return json({ ok: false, error: `Supabase ${thoughtRes.status}: ${await thoughtRes.text()}` }, 502);
     }
@@ -445,9 +587,7 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
     // days before the due date, then daily until it is marked done.
     const due = typeof body.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.due) ? body.due : null;
     if (category === 'deadline' && due) {
-      const dueAt = new Date(`${due}T09:00:00.000Z`);
-      const first = new Date(dueAt.getTime() - 3 * 86400000);
-      const next = first.getTime() < now.getTime() ? now : first;
+      const { dueAt, next } = reminderTimes(due, now);
       const reminderRes = await fetch(`${base}/reminders`, {
         method: 'POST',
         headers: { ...headers, Prefer: 'return=minimal' },
@@ -467,6 +607,111 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
     }
 
     return json({ ok: true, id: thoughtId, mode, category, cleanup, error: refineError });
+  } catch (err) {
+    return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
+  }
+}
+
+// When a deadline's reminder should first fire: three days before the due date, or now when
+// that day has already passed. Shared by the composer, which sets one at capture time, and
+// by a move to Deadline, which has to add one afterwards.
+function reminderTimes(due: string, now: Date): { dueAt: Date; next: Date } {
+  const dueAt = new Date(`${due}T09:00:00.000Z`);
+  const first = new Date(dueAt.getTime() - 3 * 86400000);
+  return { dueAt, next: first.getTime() < now.getTime() ? now : first };
+}
+
+// POST /api/note/move { id, category, due? } -> files the row under another category. The demo's
+// Move button only rewrote its own array and forgot the move on reload; this is the row. A move
+// to Deadline schedules the same reminder the composer would, and a move away closes the one
+// that was pinging, so the note and the thing that reminds you cannot disagree.
+async function moveApi(request: Request, env: Env): Promise<Response> {
+  if (!(await signedIn(request, env))) {
+    return json({ ok: false, need: 'login', error: 'Sign in to move a note.' }, 401);
+  }
+  let body: { id?: unknown; category?: unknown; due?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: 'Send JSON: { "id": "...", "category": "..." }' }, 400);
+  }
+  const id = typeof body.id === 'string' ? body.id : '';
+  // The id goes into a query string and must be a row id, not something that changes the query.
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) {
+    return json({ ok: false, error: 'That note id is not one this diary issued.' }, 400);
+  }
+  const asked = typeof body.category === 'string' ? body.category : '';
+  if (!(UI_CATEGORIES as readonly string[]).includes(asked)) {
+    return json({ ok: false, error: 'Pick one of the diary categories.' }, 400);
+  }
+  const category = asked as Category;
+  const due = typeof body.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.due) ? body.due : null;
+  if (category === 'deadline' && !due) {
+    return json({ ok: false, error: 'A deadline needs a due date. Pick one and try again.' }, 400);
+  }
+
+  const base = `${env.SUPABASE_URL}/rest/v1`;
+  const headers = {
+    apikey: env.SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+  const now = new Date();
+  try {
+    const patch = await fetch(`${base}/thoughts?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { ...headers, Prefer: 'return=representation' },
+      body: JSON.stringify({ category, category_source: 'manual' }),
+    });
+    if (!patch.ok) {
+      return json({ ok: false, error: `Supabase ${patch.status}: ${await patch.text()}` }, 502);
+    }
+    const rows = (await patch.json()) as { id: string; capture_id: string | null; clean_text?: string }[];
+    if (!rows.length) return json({ ok: false, error: 'No note with that id.' }, 404);
+    const row = rows[0];
+
+    let reminder: 'set' | 'moved' | 'closed' | 'none' = 'none';
+    const pendingUrl = `${base}/reminders?thought_id=eq.${id}&status=eq.pending`;
+    if (category === 'deadline' && due) {
+      const { dueAt, next } = reminderTimes(due, now);
+      const existing = await fetch(`${pendingUrl}&select=id`, { headers });
+      const open = existing.ok ? (await existing.json()) as { id: string }[] : [];
+      if (open.length) {
+        // The note already had a reminder (moved out of Deadline and back, say): reschedule it
+        // instead of stacking a second ping on the same note.
+        const res = await fetch(`${base}/reminders?id=eq.${open[0].id}`, {
+          method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+          body: JSON.stringify({ due_at: dueAt.toISOString(), next_remind_at: next.toISOString() }),
+        });
+        reminder = res.ok ? 'moved' : 'none';
+      } else if (row.capture_id) {
+        const res = await fetch(`${base}/reminders`, {
+          method: 'POST', headers: { ...headers, Prefer: 'return=minimal' },
+          body: JSON.stringify([{
+            capture_id: row.capture_id,
+            thought_id: row.id,
+            kind: 'deadline',
+            title: (row.clean_text ?? 'Deadline').slice(0, 140),
+            due_at: dueAt.toISOString(),
+            next_remind_at: next.toISOString(),
+            status: 'pending',
+            source: 'explicit',
+          }]),
+        });
+        reminder = res.ok ? 'set' : 'none';
+      }
+      // No capture to hang a reminder on: the move still happened, and the answer says the
+      // reminder did not.
+    } else {
+      // No longer a deadline, so the due badge and the ping go with it. Deleted rather than
+      // marked done: a closed reminder would still be attached to the note and would keep
+      // drawing a due date on a Life entry.
+      const res = await fetch(`${base}/reminders?thought_id=eq.${id}`, {
+        method: 'DELETE', headers: { ...headers, Prefer: 'return=minimal' },
+      });
+      reminder = res.ok ? 'closed' : 'none';
+    }
+    return json({ ok: true, id: row.id, category, due, reminder });
   } catch (err) {
     return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
   }
@@ -551,6 +796,8 @@ export default {
     }
     if (url.pathname === '/api/entries' && request.method === 'GET') return entriesApi(request, env);
     if (url.pathname === '/api/note' && request.method === 'POST') return noteApi(request, env);
+    if (url.pathname === '/api/note/move' && request.method === 'POST') return moveApi(request, env);
+    if (url.pathname === '/api/passphrase' && request.method === 'POST') return passphraseApi(request, env);
     if (url.pathname === '/api/ai-check' && request.method === 'GET') return aiCheck(request, env);
     if (url.pathname === '/api/reclean' && request.method === 'POST') return reclean(request, env);
     return env.ASSETS.fetch(request);

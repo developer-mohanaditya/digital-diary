@@ -238,7 +238,13 @@ describe('/api/reclean', () => {
     expect(await res.json()).toMatchObject({ ok: true, scanned: 1, cleaned: 1, failed: [] });
     expect(patches).toHaveLength(1);
     expect(patches[0].url).toContain('id=eq.th-old');
-    expect(patches[0].body).toEqual({ clean_text: 'The deploy went out.\n\nStill missing: **Raw**.' });
+    expect(patches[0].body).toEqual({
+      clean_text: 'The deploy went out.\n\nStill missing: **Raw**.',
+      // The repair spends neurons too, so what it cost is recorded on the row it rewrote.
+      tokens_in: null,
+      tokens_out: null,
+      cleanup_model: expect.stringMatching(/^@cf\//),
+    });
   });
 });
 
@@ -324,14 +330,15 @@ describe('/api/note', () => {
     const bodies = wire();
     const res = await worker.fetch(note({ text: 'a note' }), env());
     expect(res.status).toBe(401);
-    expect(bodies).toHaveLength(0);
+    // The gate reads the passphrase row to know whether it is locked; nothing is written.
+    expect(bodies.filter((b) => b.body)).toHaveLength(0);
   });
 
   it('refuses an empty note instead of storing a blank row', async () => {
     const bodies = wire();
     const res = await worker.fetch(note({ text: '   ' }), env({ DIARY_PASSPHRASE: undefined }));
     expect(res.status).toBe(400);
-    expect(bodies).toHaveLength(0);
+    expect(bodies.filter((b) => b.body)).toHaveLength(0);
   });
 });
 
@@ -350,7 +357,9 @@ describe('/api/entries', () => {
     const res = await worker.fetch(request('/api/entries'), env());
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ ok: false, need: 'login' });
-    expect(calls).toHaveLength(0); // never touches the database
+    // The only read is the settings row that says whether a passphrase exists; the notes
+    // themselves are never queried for an unsigned visitor.
+    expect(calls.filter((u) => u.includes('/thoughts') || u.includes('/reminders'))).toHaveLength(0);
   });
 
   it('hands over the notes once the cookie from sign-in is presented', async () => {

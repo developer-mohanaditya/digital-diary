@@ -114,7 +114,7 @@ describe('workersAiRefiner', () => {
     const ai = { run: run({ response: 'Had coffee with Ram.' }) };
     const refiner = workersAiRefiner(ai);
     expect(await refiner.refine({ text: 'um so i had a coffee with ram', mode: 'refine', category: 'life' }))
-      .toBe('Had coffee with Ram.');
+      .toEqual({ text: 'Had coffee with Ram.', model: SMALL_MODEL, tokensIn: null, tokensOut: null });
     expect(ai.run).toHaveBeenCalledTimes(1);
     const [model, input] = ai.run.mock.calls[0] as unknown as [string, { messages: { role: string }[]; max_tokens: number }];
     expect(model).toBe(SMALL_MODEL);
@@ -145,8 +145,19 @@ describe('workersAiRefiner', () => {
       }),
     };
     expect(await workersAiRefiner(ai).refine({ text: 'um so coffee with ram', mode: 'refine', category: 'life' }))
-      .toBe('Had coffee with Ram.');
+      .toEqual({ text: 'Had coffee with Ram.', model: BIG_MODEL, tokensIn: null, tokensOut: null });
     expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
+  });
+
+  it('records the tokens the model reports, and nulls when it reports none', async () => {
+    const withUsage = { run: run({ response: 'Had coffee with Ram.', usage: { prompt_tokens: 141, completion_tokens: 22 } }) };
+    expect((await workersAiRefiner(withUsage).refine({ text: 'um coffee', mode: 'refine', category: 'life' })))
+      .toMatchObject({ tokensIn: 141, tokensOut: 22 });
+    const withoutUsage = { run: run({ response: 'Had coffee with Ram.' }) };
+    const out = await workersAiRefiner(withoutUsage).refine({ text: 'um coffee', mode: 'refine', category: 'life' });
+    // Null, not zero: an unreported cost is unknown, and a zero would draw as a free note.
+    expect(out?.tokensIn).toBeNull();
+    expect(out?.tokensOut).toBeNull();
   });
 
   it('falls through to the next model when the first one narrates its own edit', async () => {
@@ -161,7 +172,7 @@ describe('workersAiRefiner', () => {
       }),
     };
     expect(await workersAiRefiner(ai).refine({ text: 'um so coffee with ram', mode: 'refine', category: 'life' }))
-      .toBe('Had coffee with **Ram**.');
+      .toEqual({ text: 'Had coffee with **Ram**.', model: BIG_MODEL, tokensIn: null, tokensOut: null });
     expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
   });
 
@@ -175,7 +186,7 @@ describe('workersAiRefiner', () => {
       }),
     };
     expect(await workersAiRefiner(ai).refine({ text: 'um so coffee with ram', mode: 'refine', category: 'life' }))
-      .toBe('Had coffee with Ram.');
+      .toEqual({ text: 'Had coffee with Ram.', model: BIG_MODEL, tokensIn: null, tokensOut: null });
     expect(seen).toEqual([SMALL_MODEL, BIG_MODEL]);
   });
 
