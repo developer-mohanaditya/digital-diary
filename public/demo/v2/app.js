@@ -582,8 +582,11 @@ function statCardsHTML(k) {
     { n: tokens.toLocaleString(), label: 'tokens', title: `${tokens.toLocaleString()} tokens in and out` },
     { n: neurons.toFixed(1), label: 'neurons', title: `${neurons.toFixed(1)} neurons, estimated` },
   ];
+  // Any day but today carries the way back as a fifth card: same shape, accent fill.
+  const back = k === TODAY ? ''
+    : `<a class="hstat go" href="#/" title="Open today"><b>Today</b><span>back to today</span></a>`;
   return `<div class="hstats">${cards.map(c =>
-    `<div class="hstat" title="${esc(c.title)}"><b>${c.n}</b><span>${c.label}</span></div>`).join('')}</div>`;
+    `<div class="hstat" title="${esc(c.title)}"><b>${c.n}</b><span>${c.label}</span></div>`).join('')}${back}</div>`;
 }
 
 function openDeadlines() {
@@ -658,7 +661,7 @@ function monthHeatCard(k) {
   return `<section class="card railcard">
     <div class="lhead" style="margin-bottom:10px;align-items:flex-start">
       <div><span class="kicker">This month</span><h2 style="margin:2px 0 0">${MONTHS[m - 1]} ${y}</h2></div>
-      <a class="link" href="#/y/${y}/m/${m}">Open month →</a>
+      <a class="microbtn" href="#/y/${y}/m/${m}">Open month →</a>
     </div>
     <div class="mhd">${labels.map(l => `<span>${l}</span>`).join('')}</div>
     <div class="mgrid">${grid}</div>
@@ -697,19 +700,7 @@ function dueCard() {
         <span class="ltxt"><b>${esc(plainText(it.text))}</b><br><span class="muted" style="font-size:.76rem">${fmtShort2y(it.due)} · ${CAT[it.cat].label}</span></span>${duePill(it)}<button class="tick" data-action="done" data-v="${it.k}|${it.id}" title="Mark done" aria-label="Mark done">${CHECK_ICON}</button>
       </div>`).join('')
       : '<p class="muted" style="margin:0">Nothing open.</p>'}
-    <p class="note"><a class="link" href="#/dashboard">The dashboard →</a></p>
-  </section>`;
-}
-
-function goCard(k) {
-  const d = parse(k);
-  const y = d.getFullYear(), m = d.getMonth() + 1;
-  return `<section class="card railcard">
-    <span class="kicker">Go to</span>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-      <a class="btn" style="display:flex;justify-content:space-between" href="#/y/${y}/m/${m}">${MONTHS[m - 1]} ${y} <span class="muted">${monthItems(y, m).length} items</span></a>
-      <a class="btn" style="display:flex;justify-content:space-between" href="#/settings">Settings <span class="muted">preferences</span></a>
-    </div>
+    <p class="note"><a class="microbtn" href="#/dashboard">The dashboard →</a></p>
   </section>`;
 }
 
@@ -735,26 +726,18 @@ function composerSheetHTML() {
 
 function dayPage(y, m, d, home) {
   const k = `${y}-${pad(m)}-${pad(d)}`, date = parse(k), list = items(k);
-  const isToday = k === TODAY;
   const dow = date.toLocaleDateString('en-GB', { weekday: 'long' });
   const dmy = `${date.getDate()} ${MONTHS[date.getMonth()].slice(0, 3)} ${String(date.getFullYear()).slice(2)}`;
   return `
   <section class="hero dayhead">
     <div class="hrow">
-      <span class="kicker">${home ? 'Home · Today' : 'Day'}</span>
-      <div class="htools">
-        ${statCardsHTML(k)}
-        ${home ? `<button class="newbtn" data-action="compose" title="New note (n)">${PLUS_ICON}<span>New note</span></button>` : ''}
-      </div>
+      ${statCardsHTML(k)}
+      ${home ? `<button class="newbtn" data-action="compose" title="New note (n)">${PLUS_ICON}<span>New note</span></button>` : ''}
     </div>
     <div class="daynav">
       <a class="btn" href="${dayLink(addDays(date, -1))}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span class="bl-full">Previous day</span><span class="bl-short">Previous</span></a>
-      <h1 class="daytitle"><span class="dow">${dow}</span><span class="dmy">${dmy}</span></h1>
-      <a class="btn" href="${dayLink(addDays(date, 1))}"><span class="bl-full">Next day</span><span class="bl-short">Next</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a>
+      <h1 class="daytitle"><span class="dow">${dow}</span><span class="dmy">${dmy}</span></h1>      <a class="btn" href="${dayLink(addDays(date, 1))}"><span class="bl-full">Next day</span><span class="bl-short">Next</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a>
     </div>
-    <p class="muted" style="margin:10px 0 0">${home
-      ? 'Everything today holds, with the month and what is due beside it.'
-      : `${list.length} ${list.length === 1 ? 'entry' : 'entries'}${isToday ? '' : ' · <a class="link" href="#/">Back to today</a>'}`}</p>
   </section>
   <div class="split">
     <div class="stack">${entriesCardHTML(k, home)}</div>
@@ -762,7 +745,6 @@ function dayPage(y, m, d, home) {
       ${monthHeatCard(k)}
       ${dueCard()}
       ${whenCard(k)}
-      ${goCard(k)}
     </aside>
   </div>`;
 }
@@ -812,7 +794,7 @@ function statsPage(y, m) {
   const scope = isYear ? `${y}` : `${MONTHS[m-1]} ${y}`;
   const isNow = isYear ? y === now.getFullYear() : (y === now.getFullYear() && m === now.getMonth() + 1);
   const todayHref = isYear ? `#/dashboard/${now.getFullYear()}` : `#/y/${now.getFullYear()}/m/${now.getMonth() + 1}`;
-  const back = isNow ? '' : ` · <a class="link" href="${todayHref}">Back to this ${isYear ? 'year' : 'month'}</a>`;
+  const back = isNow ? '' : `<a class="microbtn" href="${todayHref}">Back to this ${isYear ? 'year' : 'month'} →</a>`;
 
   // Previous | the scope, centred | next: the day page's header, at these two sizes.
   let nav;
@@ -853,13 +835,16 @@ function statsPage(y, m) {
     : dueCard();
 
   const recentLink = isYear
-    ? `<a class="link" href="#/y/${y}/m/${now.getFullYear() === y ? now.getMonth() + 1 : 1}">Open a month →</a>`
-    : `<a class="link" href="#/dashboard/${y}">The year →</a>`;
+    ? `<a class="microbtn" href="#/y/${y}/m/${now.getFullYear() === y ? now.getMonth() + 1 : 1}">Open a month →</a>`
+    : `<a class="microbtn" href="#/dashboard/${y}">The year →</a>`;
 
   return `
   <section class="hero dayhead">
     <div class="daynav">${nav}</div>
-    <p class="muted" style="margin:10px 0 0">${list.length} ${list.length === 1 ? 'item' : 'items'} over ${activeDays} ${activeDays === 1 ? 'day' : 'days'}${back}</p>
+    <div class="subrow">
+      <p class="muted">${list.length} ${list.length === 1 ? 'item' : 'items'} over ${activeDays} ${activeDays === 1 ? 'day' : 'days'}</p>
+      ${back}
+    </div>
   </section>
 
   <section class="kpis" style="margin-top:16px">

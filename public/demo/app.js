@@ -592,19 +592,7 @@ function dueCard() {
     <span class="kicker">Deadlines</span><h2>Due</h2>
     ${open.length ? open.map(it => `<div class="lrow"><span class="ltxt"><b>${esc(plainText(it.text))}</b><br><span class="muted" style="font-size:.78rem">${fmtShort2y(it.due)}</span></span>${duePill(it)}</div>`).join('')
       : '<p class="muted">Nothing open.</p>'}
-    <p class="note"><a class="link" href="#/dashboard">Open the dashboard →</a></p>
-  </section>`;
-}
-function goCard(k) {
-  const d = parse(k);
-  const y = d.getFullYear(), m = d.getMonth() + 1;
-  return `<section class="card railcard">
-    <span class="kicker">Go to</span><h2>Elsewhere</h2>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <a class="btn" style="display:flex;justify-content:space-between" href="#/dashboard/${y}/${m}">Dashboard <span class="muted">${monthItems(y, m).length} this month</span></a>
-      <a class="btn" style="display:flex;justify-content:space-between" href="#/y/${y}/m/${m}">${MONTHS[m-1]} ${y} <span class="muted">month view</span></a>
-      <a class="btn" style="display:flex;justify-content:space-between" href="#/settings">Settings <span class="muted">preferences</span></a>
-    </div>
+    <p class="note"><a class="microbtn" href="#/dashboard">Open the dashboard →</a></p>
   </section>`;
 }
 function dayView(y, m, d) {
@@ -623,13 +611,12 @@ function dayView(y, m, d) {
   }).join('');
   return `
   <section class="hero dayhead">
-    <span class="kicker">${isToday ? 'Home · Today' : 'Day'}</span>
+    ${isToday ? '' : `<div class="jumprow"><a class="microbtn go" href="#/" title="Open today">Today →</a></div>`}
     <div class="daynav">
       <a class="btn" href="${dayLink(addDays(date, -1))}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span class="bl-full">Previous day</span><span class="bl-short">Previous</span></a>
       <h1 class="daytitle"><span class="dow">${dow}</span><span class="dmy">${dmy}</span></h1>
       <a class="btn" href="${dayLink(addDays(date, 1))}"><span class="bl-full">Next day</span><span class="bl-short">Next</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a>
     </div>
-    <p class="muted" style="margin:10px 0 0">${isToday ? 'Write, and see what today already holds.' : `${list.length} ${list.length === 1 ? 'entry' : 'entries'} · <a class="link" href="#/">Back to today</a>`}</p>
   </section>
   <div class="split">
     <div class="stack">
@@ -643,7 +630,6 @@ function dayView(y, m, d) {
     <aside class="side">
       ${glanceCard(k)}
       ${dueCard()}
-      ${goCard(k)}
     </aside>
   </div>`;
 }
@@ -671,7 +657,7 @@ function viewMonth(y, m) {
     <div class="card"><span class="kicker">Calendar</span><h2>Pick a day</h2>${monthCalendar(y, m)}</div>
     <div class="card"><span class="kicker">Mix</span><h2>Categories this month</h2>${donut(counts)}</div>
   </section>
-  <section class="card"><div class="lhead"><span class="kicker">Ledger</span><a class="link" href="#/dashboard/${y}/${m}">The dashboard for this month →</a></div><h2>Everything this month, by category</h2>${monthLedgerHTML(y, m)}</section>
+  <section class="card"><div class="lhead"><span class="kicker">Ledger</span><a class="microbtn" href="#/dashboard/${y}/${m}">The dashboard for this month →</a></div><h2>Everything this month, by category</h2>${monthLedgerHTML(y, m)}</section>
   <section class="card"><span class="kicker">Days</span><h2>Folders</h2><div class="folders">${folders}</div></section>`;
 }
 function monthLedgerHTML(y, m) {
@@ -779,7 +765,7 @@ function viewDashboard(y, m) {
   </section>
 
   <section class="card">
-    <div class="lhead"><span class="kicker">Recent notes</span><a class="link" href="#/y/${y}/m/${m}">The month view →</a></div>
+    <div class="lhead"><span class="kicker">Recent notes</span><a class="microbtn" href="#/y/${y}/m/${m}">The month view →</a></div>
     <h2>Newest first, with what each cost</h2>
     ${recent.length ? recent.map(it => `<div class="lrow clickable" data-action="open" data-v="${it.k}|${it.id}" tabindex="0" role="button" title="Open note">
       <span class="ltime">${+it.k.slice(8)} ${it.time}</span>
