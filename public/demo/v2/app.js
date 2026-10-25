@@ -1059,10 +1059,10 @@ const iconSVG = (body, attrs = '') => `<svg ${attrs}viewBox="0 0 24 24" fill="no
 const DASH_ICON = iconSVG('<rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/>');
 const HOME_BODY = '<path d="M3.4 10.5 12 3.4l8.6 7.1"/><path d="M5.6 9.4V20a.6.6 0 0 0 .6.6h4.2v-5.5h3.2v5.5h4.2a.6.6 0 0 0 .6-.6V9.4"/>';
 const HOME_ICON = iconSVG(HOME_BODY);
-// Home's own mark in the breadcrumb: the house with the diary's yellow roof and an arched
-// door, drawn rather than wired, since it is a label and not a button.
+// Home's own mark in the breadcrumb: the house with an accent roof and an arched door,
+// drawn rather than wired, since it is a label and not a button.
 const HOME_CRUMB = '<svg role="img" aria-label="Home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M12 3.1 20.8 10.5H3.2Z" fill="#fbbf24"/>' +
+  '<path d="M12 3.1 20.8 10.5H3.2Z" style="fill:var(--accent)"/>' +
   '<path d="M5.2 10.5v8.4a1.6 1.6 0 0 0 1.6 1.6h10.4a1.6 1.6 0 0 0 1.6-1.6v-8.4"/>' +
   '<path d="M10.4 20.5v-3.1a1.6 1.6 0 0 1 3.2 0v3.1Z" fill="currentColor" stroke="none"/>' +
   '</svg>';
