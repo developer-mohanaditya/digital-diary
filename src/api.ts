@@ -16,6 +16,9 @@ export interface ThoughtRow {
   raw_text?: string | null;
   created_at: string;
   capture_id?: string | null;
+  tokens_in?: number | null;
+  tokens_out?: number | null;
+  cleanup_model?: string | null;
 }
 
 // A reminder attached to the note that created it, keyed by capture id.
@@ -34,6 +37,10 @@ export interface UiEntry {
   raw: string;
   due?: string | null;
   done?: boolean;
+  // What the cleanup cost, only when there is something to say. A verbatim note was never
+  // sent to a model and an old note predates the columns, so the page gets no field at all
+  // rather than three zeroes it would draw as a free note.
+  usage?: { tokensIn: number | null; tokensOut: number | null; model: string | null };
 }
 
 // Stored modes are the command names; the interface shows the friendlier label.
@@ -66,13 +73,22 @@ export function toUiEntry(row: ThoughtRow, timeZone: string, deadline?: Deadline
     // A category the interface has no colour for would crash its renderer.
     cat: (UI_CATEGORIES as readonly string[]).includes(row.category) ? row.category : 'inbox',
     mode: displayMode(row.mode),
-    src: row.category_source === 'tag' ? 'tag' : 'auto',
+    // 'tag' and 'manual' are the two ways a person filed a note by hand; everything else was
+    // the classifier's guess. The sheet names them differently.
+    src: row.category_source === 'tag' ? 'tag' : row.category_source === 'manual' ? 'manual' : 'auto',
     text: row.clean_text,
     raw,
   };
   if (deadline) {
     entry.due = deadline.due;
     entry.done = deadline.done;
+  }
+  if (row.tokens_in != null || row.tokens_out != null || row.cleanup_model) {
+    entry.usage = {
+      tokensIn: row.tokens_in ?? null,
+      tokensOut: row.tokens_out ?? null,
+      model: row.cleanup_model ?? null,
+    };
   }
   return entry;
 }

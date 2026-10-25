@@ -27,6 +27,11 @@ export interface ThoughtInput {
   mode: Mode;
   clean_text: string;
   raw_text: string;
+  // Recorded from the cleanup, so the web page can show what a note cost instead of
+  // inventing a figure. Absent for verbatim notes and for anything older than 0006.
+  tokens_in?: number | null;
+  tokens_out?: number | null;
+  cleanup_model?: string | null;
 }
 
 // Storage and reply ports. The Supabase and Telegram adapters implement these.
@@ -282,10 +287,15 @@ export async function handleUpdate(
   // fails or answers with nothing at all costs a tidy line, never the note.
   let clean = parsed.body;
   let refineError: string | null = null;
+  let usage: { tokensIn: number | null; tokensOut: number | null; model: string | null } =
+    { tokensIn: null, tokensOut: null, model: null };
   if (refiner && parsed.mode !== 'verbatim') {
     try {
       const out = await refiner.refine({ text: parsed.body, mode: parsed.mode, category });
-      if (out) clean = out;
+      if (out) {
+        clean = out.text;
+        usage = { tokensIn: out.tokensIn, tokensOut: out.tokensOut, model: out.model };
+      }
     } catch (err) {
       // The message goes into the reply: a failed cleanup that reports only "failed"
       // leaves the owner with no way to tell a missing model from a missing binding.
@@ -303,6 +313,9 @@ export async function handleUpdate(
     mode: parsed.mode,
     clean_text: clean,
     raw_text: parsed.body,
+    tokens_in: usage.tokensIn,
+    tokens_out: usage.tokensOut,
+    cleanup_model: usage.model,
   });
   if (detected && store.insertReminder) {
     try {

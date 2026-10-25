@@ -34,12 +34,12 @@ redesign goes through `init`/`shape` first.
 
 ## This project's design truth
 
-The demo shipped in `public/demo/` is the public face of the diary; `public/demo/v2/` is
-the current one, and the Worker serves both at `/demo/` and `/demo/v2/`. `src/`, the
-Telegram handler and the migrations are backend and are out of scope for design work.
+The served app (`public/index.html`) is the v2 design: the same shell, day page, month and
+dashboard, sheets and Look page as `public/demo/v2/`, which the Worker still serves at
+`/demo/v2/` with sample data. `src/`, the Telegram handler and the migrations are backend
+and are out of scope for design work.
 
-Before changing how anything looks, run it (`npm run dev`, or
-`python3 dev-server-v2.py`) and look at the rendered result at the sizes it ships at,
-narrow phone width included. The site's tokens live in the `<style>` block of
-`public/demo/v2/index.html`: ink, paper, accent, the offset shadow, the heavy 2px edge.
-Purple is the accent; nothing else may compete with it.
+Before changing how anything looks, run it (`npm run dev`) and look at the rendered result
+at the sizes it ships at, narrow phone width included. The tokens live in
+`public/demo/diary.css`, the one stylesheet both pages link: ink, paper, accent, the offset
+shadow, the heavy 2px edge. Purple is the accent; nothing else may compete with it.

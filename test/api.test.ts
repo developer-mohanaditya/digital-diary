@@ -31,6 +31,8 @@ describe('toUiEntry', () => {
   it('marks tagged entries as tag and everything else as auto', () => {
     expect(toUiEntry(row({ category_source: 'tag' }), 'UTC').src).toBe('tag');
     expect(toUiEntry(row({ category_source: null }), 'UTC').src).toBe('auto');
+    // A note moved from the sheet is neither tagged by hand nor guessed by the classifier.
+    expect(toUiEntry(row({ category_source: 'manual' }), 'UTC').src).toBe('manual');
   });
 
   it('keeps the raw text, falling back to the clean text when absent', () => {

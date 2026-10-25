@@ -34,8 +34,18 @@ export interface RefineRequest {
   category: string;
 }
 
+// What a cleanup produced, and what it cost. The tokens are the ones Workers AI reported on
+// the response: null when the model does not report them, which is not the same as zero and
+// must not be stored as zero.
+export interface Refined {
+  text: string;
+  model: string;
+  tokensIn: number | null;
+  tokensOut: number | null;
+}
+
 export interface Refiner {
-  refine(req: RefineRequest): Promise<string | null>;
+  refine(req: RefineRequest): Promise<Refined | null>;
 }
 
 // The markup the web page can render: paragraphs, two kinds of list, and three kinds of
@@ -172,7 +182,16 @@ export function workersAiRefiner(ai: AiRunner): Refiner {
         try {
           const out = await ai.run(model, { messages, max_tokens: MAX_TOKENS, temperature: 0.2 });
           const cleaned = readOutput(out);
-          if (cleaned && isPlausible(cleaned, text)) return cleaned;
+          if (cleaned && isPlausible(cleaned, text)) {
+            const usage = (out as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null)?.usage;
+            const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
+            return {
+              text: cleaned,
+              model,
+              tokensIn: count(usage?.prompt_tokens),
+              tokensOut: count(usage?.completion_tokens),
+            };
+          }
           failures.push(`${model}: ${cleaned ? 'unusable answer' : 'empty answer'}`);
         } catch (err) {
           // Every model is tried, and every reason is kept: the reply and the capture's
