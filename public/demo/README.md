@@ -26,8 +26,9 @@ side.
   the grouped ledger with category tabs, the hours strip, and a right rail with today's numbers
   and the deadlines that are due or overdue.
 - **Home v2 (`v2/#/`)** is the same day without the composer card: four compact stat cards and a
-  **New note** button in the header (the note opens in a sheet), the entries card first, the hours
-  band under it, and a rail of this month's heatmap, the deadlines and the hours you write at.
+  **New note** button in the header (the note opens in a sheet), the entries card, the hours card
+  under it in its own frame, and a rail of this month's heatmap, the deadlines and the hours you
+  write at.
   The note sheet pins its tokens-and-neurons line to the bottom of the card, so a long
   note scrolls inside it while the cost stays put. Deadlines are completed from the note, or with
   the tick on each Due row. The wordmark carries the demo's yellow instead of a badge; the tab
