@@ -1055,8 +1055,10 @@ function changePass() {
 }
 
 /* ---------- Crumbs + render ---------- */
-const DASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/></svg>';
-const HOME_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 10.5 12 3.4l8.6 7.1"/><path d="M5.6 9.4V20a.6.6 0 0 0 .6.6h4.2v-5.5h3.2v5.5h4.2a.6.6 0 0 0 .6-.6V9.4"/></svg>';
+const iconSVG = (body, attrs = '') => `<svg ${attrs}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const DASH_ICON = iconSVG('<rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/>');
+const HOME_BODY = '<path d="M3.4 10.5 12 3.4l8.6 7.1"/><path d="M5.6 9.4V20a.6.6 0 0 0 .6.6h4.2v-5.5h3.2v5.5h4.2a.6.6 0 0 0 .6-.6V9.4"/>';
+const HOME_ICON = iconSVG(HOME_BODY);
 
 // The bar's fourth icon is wherever you are not: on the dashboard it offers the way home,
 // on every other page it offers the dashboard.
@@ -1076,8 +1078,10 @@ function renderCrumbs(r) {
   row.hidden = false;
   // The trail names where you are, on every page including today's. The day's counters
   // ride at its right end, so the page opens with the date rather than with a second row.
+  // Home names itself with the house, the way the bar does; everywhere else the trail opens
+  // with the word as a link back to it.
   let trail = '<a href="#/">Home</a>';
-  if (r.view === 'home') trail = '<span aria-current="page">Home</span>';
+  if (r.view === 'home') trail = `<span class="crumbhome" title="Home">${iconSVG(HOME_BODY, 'role="img" aria-label="Home" ')}</span>`;
   if (r.view === 'year') trail += `<span class="sep">/</span><a href="#/dashboard">Dashboard</a><span class="sep">/</span><span aria-current="page">${r.y}</span>`;
   if (r.view === 'settings') trail += '<span class="sep">/</span><span aria-current="page">Settings</span>';
   if (r.view === 'month' || r.view === 'day') trail += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
