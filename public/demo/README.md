@@ -51,9 +51,16 @@ side.
   another zoom ("Open month", "The year") are small tinted labels rather than bordered pills or
   underlined text. Closing a deadline stores the moment it was closed and shows it as
   `done 16 Oct · 10:42`; reopening clears it.
-- **Settings (`#/settings`)** carries theme, light/dark, heatmap default, week start, timezone, the
-  account the diary belongs to, **change the passphrase**, **sign out**, and a reset for the sample
-  data. The theme picker lives here only; the top bar keeps search, light/dark, dashboard, settings.
+- **Settings (`#/settings`)** carries one row summarising the look and the way into it, the heatmap
+  default, week start, timezone, the account the diary belongs to, **change the passphrase**, **sign
+  out**, and a reset for the sample data. It is a list of facts and a way back, not a theme picker;
+  the top bar keeps search, light/dark, dashboard, settings.
+- **Look (`#/settings/look`)** owns everything visual: theme, light/dark, font, accent, the ten
+  category colours, and the shape of the day's category tabs. Six shapes are offered and the sample
+  is drawn by the same renderer the day uses, so the sample cannot disagree with the page. Every
+  change lands on the diary as it is made, and it is stored in `diary-prefs-v2`; a choice saved by
+  the older `setup.html` is imported once, then that key is left alone. `setup.html` stays as the
+  lab page for ideas that have not earned a row yet.
 - **Search** sits in the top bar on every page and opens notes in the sheet. `/` focuses it.
 - **Sign out** is the one button in Settings' header, at the far right, in the alert colour with its
   door icon; the gate then asks for the passphrase. A fresh demo starts at `demo`, and Settings can
