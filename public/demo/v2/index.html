@@ -595,6 +595,15 @@
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <footer class="foot">Digital Diary. Copyright, Aditya @ aweditya.com. Demo build v2: sample entries, no server. <a class="link" href="../">The earlier layout →</a></footer>
-<script type="module" src="app.js"></script>
+<script>
+  // GitHub Pages caches app.js for ten minutes on its own schedule, which once paired a
+  // fresh page with a stale script and painted the old chip markup at full size. The
+  // stamp keeps the pair in step: whenever the page is new, the script is fetched anew.
+  var v = encodeURIComponent(document.lastModified || Date.now());
+  var s = document.createElement('script');
+  s.type = 'module';
+  s.src = 'app.js?v=' + v;
+  document.body.appendChild(s);
+</script>
 </body>
 </html>
