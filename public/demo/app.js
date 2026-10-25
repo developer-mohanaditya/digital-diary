@@ -603,7 +603,7 @@ function goCard(k) {
     <div style="display:flex;flex-direction:column;gap:8px">
       <a class="btn" style="display:flex;justify-content:space-between" href="#/dashboard/${y}/${m}">Dashboard <span class="muted">${monthItems(y, m).length} this month</span></a>
       <a class="btn" style="display:flex;justify-content:space-between" href="#/y/${y}/m/${m}">${MONTHS[m-1]} ${y} <span class="muted">month view</span></a>
-      <a class="btn" style="display:flex;justify-content:space-between" href="#/settings">Settings <span class="muted">theme, data</span></a>
+      <a class="btn" style="display:flex;justify-content:space-between" href="#/settings">Settings <span class="muted">preferences</span></a>
     </div>
   </section>`;
 }
@@ -629,7 +629,7 @@ function dayView(y, m, d) {
       <h1 class="daytitle"><span class="dow">${dow}</span><span class="dmy">${dmy}</span></h1>
       <a class="btn" href="${dayLink(addDays(date, 1))}"><span class="bl-full">Next day</span><span class="bl-short">Next</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a>
     </div>
-    <p class="muted" style="margin:10px 0 0">${isToday ? 'Write, and see what today already holds.' : `The same page as today, opened on <b>${fmtDay(date)}</b>. <a class="link" href="#/">Back to today</a>`}</p>
+    <p class="muted" style="margin:10px 0 0">${isToday ? 'Write, and see what today already holds.' : `${list.length} ${list.length === 1 ? 'entry' : 'entries'} · <a class="link" href="#/">Back to today</a>`}</p>
   </section>
   <div class="split">
     <div class="stack">
@@ -769,7 +769,7 @@ function viewDashboard(y, m) {
         <tbody>${Object.entries(byModel).sort((a, b) => b[1].neurons - a[1].neurons).map(([model, v]) =>
           `<tr><td>${esc(model.replace('@cf/', ''))}</td><td class="num">${v.calls}</td><td class="num">${(v.tin + v.tout).toLocaleString()}</td><td class="num">${v.neurons.toFixed(1)}</td></tr>`).join('')}</tbody>
       </table>
-      <p class="note">Neurons here are estimated from the token counts recorded with each note. Reconciliation against Cloudflare's billed total is a nightly job, not this page.</p>
+      <p class="note">Neurons here are estimated from the token counts recorded with each note. The billed total is reconciled nightly.</p>
     </div>
     <div class="card">
       <span class="kicker">Calendar</span><h2>${y} at a glance</h2>
@@ -807,8 +807,8 @@ function viewSettings() {
       <select id="set-tz">${['Europe/Paris','Asia/Kolkata','UTC'].map(tz => `<option${state.tz === tz ? ' selected' : ''}>${tz}</option>`).join('')}</select></div>
     <div class="setrow"><div><span class="lab">Account</span><span class="sub">aweditya.sm@gmail.com · confirmed</span></div>
       <span class="muted" style="font-size:.76rem;font-family:ui-monospace,monospace">9d6eb0f3…b3b2</span></div>
-    <div class="setrow"><div><span class="lab">Demo data</span><span class="sub">Sample entries, saved in this browser only</span></div>
-      <button class="btn" data-action="reset">Reset the demo</button></div>
+    <div class="setrow"><div><span class="lab">Entries</span><span class="sub">Stored on this device</span></div>
+      <button class="btn" data-action="reset">Reset</button></div>
   </section>`;
 }
 
@@ -864,7 +864,7 @@ function addEntry() {
   };
   if (cat === 'deadline') entry.due = iso(addDays(parse(TODAY), 7));
   (state.days[TODAY] = state.days[TODAY] || []).unshift(entry);
-  ui.addMsg = mode === 'verbatim' ? 'Saved as written. In this demo it stays in this browser.' : 'Saved and filed. In this demo it stays in this browser.';
+  ui.addMsg = mode === 'verbatim' ? 'Saved as written.' : 'Saved and filed.';
   save();
   render();
 }
@@ -896,7 +896,7 @@ document.addEventListener('click', e => {
   else if (a === 'search-open') openSearchResult(v);
   else if (a === 'signin') { state.signedIn = true; save(); render(); }
   else if (a === 'signout') { state.signedIn = false; save(); ui.openNote = null; render(); }
-  else if (a === 'reset') { state.days = seed(); save(); ui.addMsg = 'Demo data reset.'; go('#/'); }
+  else if (a === 'reset') { state.days = seed(); save(); ui.addMsg = 'Entries reset.'; go('#/'); }
 });
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'search') { searchActive = -1; renderSearchPop(); }
