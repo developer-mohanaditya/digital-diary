@@ -802,8 +802,9 @@ function monthBuckets(y, m) {
 // Every chart on these pages closes the same way: a tinted line that says what the shape
 // means. The numbers are computed from the same entries the chart draws, not typed in.
 const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const INSIGHT_ICON = '<svg class="insight" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10.5 2.5c.55 4.3 2.7 6.45 7 7-4.3.55-6.45 2.7-7 7-.55-4.3-2.7-6.45-7-7 4.3-.55 6.45-2.7 7-7Z"/><path d="M18.6 14.2c.3 2.3 1.4 3.4 3.7 3.7-2.3.3-3.4 1.4-3.7 3.7-.3-2.3-1.4-3.4-3.7-3.7 2.3-.3 3.4-1.4 3.7-3.7Z"/></svg>';
 function readingHTML(text) {
-  return text ? `<p class="reading"><span class="kicker">Reading</span>${text}</p>` : '';
+  return text ? `<p class="reading">${INSIGHT_ICON}<span>${text}</span></p>` : '';
 }
 
 function hourReading(list) {
