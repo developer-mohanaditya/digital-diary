@@ -2,6 +2,7 @@ import { parseCommand, type Category, type Mode } from './parse';
 import { parseTimeZoneCommand } from './timezone';
 import { detectReminder, type DetectedReminder } from './reminders';
 import type { Refiner } from './refine';
+import type { SummaryNote, SummaryReminder } from './summary';
 
 // Telegram update shape (only the fields we use).
 export interface TelegramUpdate {
@@ -63,6 +64,12 @@ export interface Store {
   markReminderDone?(id: string): Promise<void>;
   snoozeReminder?(id: string, nextIso: string): Promise<void>;
   health?(day: string): Promise<HealthStats>;
+  // The 10pm summary. Optional, so a store without them has no summary instead of a
+  // failing cron.
+  dayNotes?(day: string): Promise<SummaryNote[]>;
+  openReminders?(limit: number): Promise<SummaryReminder[]>;
+  summarySentOn?(): Promise<string | null>;
+  markSummarySent?(day: string): Promise<void>;
   setCaptureStatus(id: string, status: 'done' | 'failed', error?: string): Promise<void>;
   getTimeZone(): Promise<string | null>;
   setTimeZone(zone: string): Promise<void>;
