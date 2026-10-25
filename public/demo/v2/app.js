@@ -236,9 +236,16 @@ const MOON_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const THEMES = ['minimal', 'paper', 'journal'];
 const THEME_LABEL = { minimal:'Minimal', paper:'Paper', journal:'Dark Journal' };
 const prefs = { theme:'minimal', mode:'light' };
-try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF) || '{}')); } catch (_) {}
+// A first visit follows the system: the diary is read at night as often as by day, and both
+// modes exist for it. A saved choice always wins, so this only decides the first paint.
+let prefsSaved = false;
+try {
+  const raw = localStorage.getItem(PREF);
+  if (raw) { Object.assign(prefs, JSON.parse(raw)); prefsSaved = true; }
+} catch (_) {}
 if (!THEMES.includes(prefs.theme)) prefs.theme = 'minimal';
 if (!['light', 'dark'].includes(prefs.mode)) prefs.mode = 'light';
+if (!prefsSaved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) prefs.mode = 'dark';
 
 function applyPrefs() {
   document.body.dataset.theme = prefs.theme;
@@ -598,18 +605,17 @@ function statCardsHTML(k) {
   const tokens = list.reduce((a, it) => a + it.usage.tin + it.usage.tout, 0);
   const neurons = list.reduce((a, it) => a + it.usage.neurons, 0);
   const cats = Object.keys(counts).length;
+  // Six digits do not fit a phone's counter cell, and the exact figure is one hover away:
+  // the cell shows 12.3k, the tooltip keeps 12,345.
+  const compact = n => n >= 100000 ? `${Math.round(n / 1000)}k` : n >= 10000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString();
   const cards = [
     { n: list.length, label: 'entries', title: `${list.length} ${list.length === 1 ? 'entry' : 'entries'}` },
     { n: cats, label: 'categories', title: `${cats} ${cats === 1 ? 'category' : 'categories'}` },
-    { n: tokens.toLocaleString(), label: 'tokens', title: `${tokens.toLocaleString()} tokens in and out` },
+    { n: compact(tokens), label: 'tokens', title: `${tokens.toLocaleString()} tokens in and out` },
     { n: neurons.toFixed(1), label: 'neurons', title: `${neurons.toFixed(1)} neurons, estimated` },
   ];
-  // Any day but today carries the way back as a fifth card: same shape, accent fill, and the
-  // words stacked on two lines at one size.
-  const back = k === TODAY ? ''
-    : `<a class="hstat go" href="#/" title="Open today"><b>Open</b><span>Today</span></a>`;
   return `<div class="hstats">${cards.map(c =>
-    `<div class="hstat" title="${esc(c.title)}"><b>${c.n}</b><span>${c.label}</span></div>`).join('')}${back}</div>`;
+    `<div class="hstat" title="${esc(c.title)}"><b>${c.n}</b><span>${c.label}</span></div>`).join('')}</div>`;
 }
 
 function openDeadlines() {
@@ -995,8 +1001,6 @@ function viewSettings() {
       <span class="kicker">Settings</span><h1>Preferences</h1>
       <p class="muted" style="margin:0">Theme, how the month is drawn, the passphrase, and the account this diary belongs to.</p>
     </div>
-    <button class="dangerbtn" data-action="signout" title="Locks the diary until the passphrase is entered again">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Sign out</button>
   </section>
   <section class="card">
     <div class="setrow"><div><span class="lab">Theme</span><span class="sub">Minimal, Paper, Dark Journal</span></div>
@@ -1062,6 +1066,10 @@ const HOME_ICON = iconSVG(HOME_BODY);
 // Home's own mark in the breadcrumb: the bar's house, drawn the way the bar draws every icon
 // (one 1.8 stroke, round joins, no fill), in the page's ink since it sits on the page.
 const HOME_CRUMB = iconSVG(HOME_BODY, 'role="img" aria-label="Home" ');
+// Signing out is an account action, not a page heading, so it rides at the trail's right end
+// on every width rather than overhanging the card it used to float above.
+const SIGNOUT_ICON = iconSVG('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>', 'aria-hidden="true" ');
+const SIGNOUT_BTN = `<button class="dangerbtn" data-action="signout" title="Locks the diary until the passphrase is entered again">${SIGNOUT_ICON}<span>Sign out</span></button>`;
 
 // The bar's fourth icon is wherever you are not: on the dashboard it offers the way home,
 // on every other page it offers the dashboard.
@@ -1103,9 +1111,13 @@ function renderCrumbs(r) {
   }
   c.innerHTML = trail;
   c.classList.toggle('crumb-home', r.view === 'home');
+  // Every day carries the plus, not just today: a phone has no `n` key, and "I remembered
+  // something from yesterday" should not need a trip back to today first. The way back is
+  // already the trail's Home link, so the fifth cell is spent on writing.
+  tools.classList.toggle('cells', isDay);
   tools.innerHTML = isDay
-    ? `${statCardsHTML(k)}${r.view === 'home'
-        ? `<button class="newbtn" data-action="compose" title="New note (n)" aria-label="New note">${PLUS_ICON}<span>New note</span></button>` : ''}`
+    ? `${statCardsHTML(k)}<button class="newbtn" data-action="compose" title="New note (n)" aria-label="New note">${PLUS_ICON}<span>New note</span></button>`
+    : r.view === 'settings' ? SIGNOUT_BTN
     : back;
 }
 function render() {
