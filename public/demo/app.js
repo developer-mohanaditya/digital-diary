@@ -1,4 +1,4 @@
-// Digital Diary — interface demo.
+// Digital Diary: interface demo.
 // Same design system as the served app (public/): same tokens, same cards, same chips.
 // The entries are generated samples and live in this browser only; no request leaves the page.
 const CATS = [
@@ -102,8 +102,8 @@ const TEXTS = {
     'Writing something down is a way of finding out that I did not know it.',
   ],
   quote: [
-    '"The purpose of computing is insight, not numbers." — Hamming',
-    '"Simplicity is prerequisite for reliability." — Dijkstra',
+    '"The purpose of computing is insight, not numbers." (Hamming)',
+    '"Simplicity is prerequisite for reliability." (Dijkstra)',
     '"You do not rise to the level of your goals, you fall to the level of your systems."',
   ],
   work: [
@@ -124,7 +124,7 @@ const TEXTS = {
   ],
   task: [
     'Book the dentist before the end of the month.',
-    'Renew the passport application — the photo has to be recent.',
+    'Renew the passport application. The photo has to be recent.',
     'Cancel the unused hosting plan.',
     'Back up the photos to the second drive.',
   ],

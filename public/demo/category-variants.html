@@ -22,38 +22,38 @@
   .vnote { font-size:.82rem; color:var(--muted); margin:12px 0 0; }
   button { font:inherit; }
 
-  /* V1 — current pills (baseline) */
+  /* V1: current pills (baseline) */
   .v1 { display:flex; flex-wrap:wrap; gap:8px; }
   .v1 button { background:var(--bg); color:var(--ink); border:1.5px solid var(--line); border-radius:999px; padding:3px 10px; cursor:pointer; font-size:.78rem; }
   .v1 button[aria-selected="true"] { background:var(--accent); border-color:var(--accent); color:#fff; }
   .v1 button small { opacity:.75; margin-left:4px; }
 
-  /* V2 — underline tabs */
+  /* V2: underline tabs */
   .v2 { display:flex; flex-wrap:wrap; gap:4px 18px; border-bottom:1.5px solid var(--line); padding-bottom:2px; }
   .v2 button { background:none; border:0; border-bottom:2.5px solid transparent; margin-bottom:-1.75px; padding:6px 2px; cursor:pointer; font-size:.86rem; color:var(--muted); font-weight:600; }
   .v2 button sup { font-size:.68rem; margin-left:3px; }
   .v2 button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
 
-  /* V6 — underline tabs, counts + underline in each category's color */
+  /* V6: underline tabs, counts + underline in each category's color */
   .v6 { display:flex; flex-wrap:wrap; gap:4px 18px; border-bottom:1.5px solid var(--line); padding-bottom:2px; }
   .v6 button { background:none; border:0; border-bottom:2.5px solid transparent; margin-bottom:-1.75px; padding:6px 2px; cursor:pointer; font-size:.86rem; color:var(--muted); font-weight:600; }
   .v6 button sup { font-size:.72rem; font-weight:800; margin-left:4px; color:var(--c,#999); }
   .v6 button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--c,#999); }
 
-  /* V3 — dot chips */
+  /* V3: dot chips */
   .v3 { display:flex; flex-wrap:wrap; gap:8px; }
   .v3 button { display:inline-flex; align-items:center; gap:7px; background:var(--bg); border:1.5px solid var(--line); border-radius:12px; padding:4px 10px; cursor:pointer; font-size:.8rem; color:var(--ink); }
   .v3 button i { width:8px; height:8px; border-radius:50%; background:var(--c,#999); }
   .v3 button em { font-style:normal; color:var(--muted); font-size:.74rem; }
   .v3 button[aria-selected="true"] { border-color:var(--c,#999); background:color-mix(in srgb, var(--c,#999) 12%, white); }
 
-  /* V4 — segmented bar */
+  /* V4: segmented bar */
   .v4 { display:flex; gap:2px; padding:3px; border-radius:14px; border:1.5px solid var(--line); background:var(--bg); overflow-x:auto; }
   .v4 button { flex:1 0 auto; background:transparent; border:0; border-radius:10px; padding:6px 10px; cursor:pointer; font-size:.8rem; color:var(--muted); white-space:nowrap; }
   .v4 button[aria-selected="true"] { background:var(--ink); color:var(--card); font-weight:700; }
   .v4 button small { opacity:.7; margin-left:3px; }
 
-  /* V5 — dropdown */
+  /* V5: dropdown */
   .v5row { display:flex; align-items:center; gap:10px; }
   .v5wrap { position:relative; display:inline-flex; }
   .v5wrap select { appearance:none; -webkit-appearance:none; background:var(--bg); color:var(--ink); border:1.5px solid var(--line); border-radius:999px; padding:5px 32px 5px 14px; font-size:.84rem; cursor:pointer; }
@@ -66,8 +66,8 @@
 <body>
 <main>
   <a class="back" href="/">← Back to app</a>
-  <h1>Category filter — variants</h1>
-  <p class="sub">Same data everywhere (All 7 · Class 1 · Learning 2 · Thought 1 · Project 1 · Life 1 · Inbox 1, rest 0). Click around — selection is live inside each variant. Nothing here touches the real app.</p>
+  <h1>Category filter: variants</h1>
+  <p class="sub">Same data everywhere (All 7 · Class 1 · Learning 2 · Thought 1 · Project 1 · Life 1 · Inbox 1, rest 0). Click around: selection is live inside each variant. Nothing here touches the real app.</p>
 
   <section class="card">
     <span class="kicker">Variant 1 · baseline</span>
@@ -84,7 +84,7 @@
     <div class="v2" data-variant>
       <button aria-selected="true">All<sup>7</sup></button><button aria-selected="false">Class<sup>1</sup></button><button aria-selected="false">Learning<sup>2</sup></button><button aria-selected="false">Thought<sup>1</sup></button><button aria-selected="false">Project<sup>1</sup></button><button aria-selected="false">Life<sup>1</sup></button><button aria-selected="false">Inbox<sup>1</sup></button>
     </div>
-    <p class="vnote">No boxes at all — lightest possible row, one line on most phones. Counts ride as superscripts.</p>
+    <p class="vnote">No boxes at all: the lightest possible row, one line on most phones. Counts ride as superscripts.</p>
   </section>
 
   <section class="card">
@@ -111,7 +111,7 @@
     <div class="v4" data-variant>
       <button aria-selected="true">All<small>7</small></button><button aria-selected="false">Class<small>1</small></button><button aria-selected="false">Learning<small>2</small></button><button aria-selected="false">Thought<small>1</small></button><button aria-selected="false">Project<small>1</small></button><button aria-selected="false">Life<small>1</small></button><button aria-selected="false">Inbox<small>1</small></button>
     </div>
-    <p class="vnote">Reads as one control, not eleven buttons. Scrolls horizontally if a busy day overflows — never wraps to three lines.</p>
+    <p class="vnote">Reads as one control, not eleven buttons. Scrolls horizontally if a busy day overflows, and never wraps to three lines.</p>
   </section>
 
   <section class="card">
@@ -123,7 +123,7 @@
       </select></span>
       <span class="v5hint">Zero-count categories omitted, same rule as the app.</span>
     </div>
-    <p class="vnote">Smallest footprint of all — one fixed-width control. Trade-off: options hide until tapped.</p>
+    <p class="vnote">Smallest footprint of all: one fixed-width control. Trade-off: options hide until tapped.</p>
   </section>
 </main>
 <script>

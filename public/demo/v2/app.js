@@ -1,4 +1,4 @@
-// Digital Diary — interface demo.
+// Digital Diary: interface demo.
 // Same design system as the served app (public/): same tokens, same cards, same chips.
 // The entries are generated samples and live in this browser only; no request leaves the page.
 const CATS = [
@@ -102,8 +102,8 @@ const TEXTS = {
     'Writing something down is a way of finding out that I did not know it.',
   ],
   quote: [
-    '"The purpose of computing is insight, not numbers." — Hamming',
-    '"Simplicity is prerequisite for reliability." — Dijkstra',
+    '"The purpose of computing is insight, not numbers." (Hamming)',
+    '"Simplicity is prerequisite for reliability." (Dijkstra)',
     '"You do not rise to the level of your goals, you fall to the level of your systems."',
   ],
   work: [
@@ -124,7 +124,7 @@ const TEXTS = {
   ],
   task: [
     'Book the dentist before the end of the month.',
-    'Renew the passport application — the photo has to be recent.',
+    'Renew the passport application. The photo has to be recent.',
     'Cancel the unused hosting plan.',
     'Back up the photos to the second drive.',
   ],
@@ -502,7 +502,7 @@ function toggleDone(ref) {
   const found = findNote(ref);
   if (!found || found.it.cat !== 'deadline') return;
   found.it.done = !found.it.done;
-  // The moment it was ticked is stored with it — `done_at`, the column the Worker keeps — and
+  // The moment it was ticked is stored with it (`done_at`, the column the Worker keeps) and
   // cleared when the tick is undone, so a reopened deadline has no closing time.
   found.it.doneAt = found.it.done ? new Date().toISOString() : null;
   save();
@@ -598,9 +598,10 @@ function statCardsHTML(k) {
     { n: tokens.toLocaleString(), label: 'tokens', title: `${tokens.toLocaleString()} tokens in and out` },
     { n: neurons.toFixed(1), label: 'neurons', title: `${neurons.toFixed(1)} neurons, estimated` },
   ];
-  // Any day but today carries the way back as a fifth card: same shape, accent fill.
+  // Any day but today carries the way back as a fifth card: same shape, accent fill, and the
+  // words stacked on two lines at one size.
   const back = k === TODAY ? ''
-    : `<a class="hstat go" href="#/" title="Open today"><b>Today</b><span>back to today</span></a>`;
+    : `<a class="hstat go" href="#/" title="Open today"><b>Open</b><span>Today</span></a>`;
   return `<div class="hstats">${cards.map(c =>
     `<div class="hstat" title="${esc(c.title)}"><b>${c.n}</b><span>${c.label}</span></div>`).join('')}${back}</div>`;
 }
@@ -684,7 +685,7 @@ function monthHeatCard(k) {
     <div class="mlegend"><span>Less</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>More</span></div>
     <div class="mlabel"><span>Written</span><b>${elapsed ? `${written} of ${elapsed} days · ${total} items` : `${total} items`}</b></div>
     <div class="mlabel"><span>Longest run</span><b>${streak} ${streak === 1 ? 'day' : 'days'}</b></div>
-    <div class="mlabel"><span>Best day</span><b>${best.d ? `${best.d} ${MONTHS[m - 1].slice(0, 3)} · ${best.n}` : '—'}</b></div>
+    <div class="mlabel"><span>Best day</span><b>${best.d ? `${best.d} ${MONTHS[m - 1].slice(0, 3)} · ${best.n}` : 'No day yet'}</b></div>
   </section>`;
 }
 
@@ -701,7 +702,7 @@ function whenCard(k) {
       <span class="muted" style="font-size:.74rem">${MONTHS[m - 1].slice(0, 3)}</span></div>
     <div class="wbar">${bars}</div>
     <div class="wax"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
-    <p class="note" style="margin-top:8px">${list.length ? `Most notes in ${MONTHS[m - 1]} land around ${pad(peak)}:00 — ${c[peak]} of ${list.length}.` : 'Nothing this month yet.'}</p>
+    <p class="note" style="margin-top:8px">${list.length ? `Most notes in ${MONTHS[m - 1]} land around ${pad(peak)}:00, ${c[peak]} of ${list.length}.` : 'Nothing this month yet.'}</p>
   </section>`;
 }
 
@@ -804,9 +805,6 @@ function statsPage(y, m) {
   });
   const recent = newestFirst(list).slice(0, 8);
   const scope = isYear ? `${y}` : `${MONTHS[m-1]} ${y}`;
-  const isNow = isYear ? y === now.getFullYear() : (y === now.getFullYear() && m === now.getMonth() + 1);
-  const todayHref = isYear ? `#/dashboard/${now.getFullYear()}` : `#/y/${now.getFullYear()}/m/${now.getMonth() + 1}`;
-  const back = isNow ? '' : `<a class="microbtn" href="${todayHref}">Back to this ${isYear ? 'year' : 'month'} →</a>`;
 
   // Previous | the scope, centred | next: the day page's header, at these two sizes.
   let nav;
@@ -855,7 +853,6 @@ function statsPage(y, m) {
     <div class="daynav">${nav}</div>
     <div class="subrow">
       <p class="muted">${list.length} ${list.length === 1 ? 'item' : 'items'} over ${activeDays} ${activeDays === 1 ? 'day' : 'days'}</p>
-      ${back}
     </div>
   </section>
 
@@ -992,11 +989,21 @@ function renderCrumbs(r) {
   if (r.view === 'day') trail += `<span class="sep">/</span><span aria-current="page">${r.d}</span>`;
   const isDay = r.view === 'home' || r.view === 'day';
   const k = r.view === 'home' ? TODAY : `${r.y}-${pad(r.m)}-${pad(r.d)}`;
+  // A month or a year that is not the current one carries its way back here, at the row's
+  // right end, instead of under the date where it read as part of the sentence.
+  const now = parse(TODAY);
+  let back = '';
+  if (r.view === 'year' && r.y !== now.getFullYear()) {
+    back = `<a class="microbtn" href="#/dashboard/${now.getFullYear()}">Back to this year →</a>`;
+  }
+  if (r.view === 'month' && (r.y !== now.getFullYear() || r.m !== now.getMonth() + 1)) {
+    back = `<a class="microbtn" href="#/y/${now.getFullYear()}/m/${now.getMonth() + 1}">Back to this month →</a>`;
+  }
   c.innerHTML = trail;
   tools.innerHTML = isDay
     ? `${statCardsHTML(k)}${r.view === 'home'
         ? `<button class="newbtn" data-action="compose" title="New note (n)">${PLUS_ICON}<span>New note</span></button>` : ''}`
-    : '';
+    : back;
 }
 function render() {
   const r = route();

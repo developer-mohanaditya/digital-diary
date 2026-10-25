@@ -130,12 +130,13 @@
   .btn { background:var(--card); color:var(--ink); border:1.5px solid var(--line); border-radius:10px; padding:5px 12px; cursor:pointer; font-size:.88rem; display:inline-block; }
   .btn:hover { border-color:var(--accent); }
   .link { background:none; border:0; color:var(--accent); cursor:pointer; padding:0; font-weight:700; font-size:.82rem; }
-  /* A text link that opens a page: a tinted label, not a card. Flat fill, no border, no shadow. */
+  /* A text link that opens a page: a tinted label, not a card. Flat fill and one accent stroke. */
   .microbtn { display:inline-flex; align-items:center; gap:5px; text-decoration:none; white-space:nowrap;
     background:color-mix(in srgb, var(--accent) 10%, transparent); color:var(--accent);
-    border-radius:7px; padding:5px 9px; font-size:.7rem; font-weight:800;
-    text-transform:uppercase; letter-spacing:.07em; transition:background .12s, color .12s; }
-  .microbtn:hover { background:var(--accent); color:#fff; }
+    border:1.5px solid color-mix(in srgb, var(--accent) 38%, transparent);
+    border-radius:7px; padding:3.5px 8px; font-size:.7rem; font-weight:800;
+    text-transform:uppercase; letter-spacing:.07em; transition:background .12s, color .12s, border-color .12s; }
+  .microbtn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
   .microbtn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .microbtn.go { background:var(--accent); color:#fff; }
   .microbtn.go:hover { filter:brightness(1.08); }
