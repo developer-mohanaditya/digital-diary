@@ -121,6 +121,12 @@
   .btn { background:var(--card); color:var(--ink); border:1.5px solid var(--line); border-radius:10px; padding:5px 12px; cursor:pointer; font-size:.88rem; display:inline-block; }
   .btn:hover { border-color:var(--accent); }
   .link { background:none; border:0; color:var(--accent); cursor:pointer; padding:0; font-weight:700; font-size:.82rem; }
+  /* A text link that opens a page, drawn as a button small enough to sit in a card head. */
+  .microbtn { display:inline-flex; align-items:center; gap:6px; background:var(--card); color:var(--ink); text-decoration:none;
+    border:1.5px solid var(--line); border-radius:999px; padding:3px 11px; font-size:.76rem; font-weight:700; white-space:nowrap;
+    box-shadow:2px 2px 0 var(--shadow); transition:transform .12s, box-shadow .12s, border-color .12s; }
+  .microbtn:hover { border-color:var(--accent); color:var(--accent); transform:translate(-1px,-1px); box-shadow:3px 3px 0 var(--shadow); }
+  .microbtn:active { transform:translate(1px,1px); box-shadow:1px 1px 0 var(--shadow); }
 
   .chart { width:100%; height:auto; display:block; }
   .chart .grid { stroke:var(--line); stroke-dasharray:2 4; }
@@ -180,7 +186,10 @@
   .tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
   .tab { background:var(--bg); color:var(--ink); border:1.5px solid var(--line); border-radius:999px; padding:3px 10px; cursor:pointer; font-size:.78rem; }
   .tabs-inline { margin:0 0 0 auto; justify-content:flex-end; }
-  .dayhead .kicker { display:block; margin-bottom:6px; }
+  /* The counters open the page, so the date below them needs its own air. */
+  .dayhead .hrow { margin-bottom:16px; }
+  .subrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 0; }
+  .subrow p { margin:0; }
   .daynav { display:flex; align-items:center; gap:10px; }
   .daytitle { flex:1 1 auto; min-width:0; text-align:center; margin:0; font-family:var(--head); font-weight:800; letter-spacing:-.02em;
     font-size:clamp(1.25rem,3.2vw,1.8rem); display:flex; flex-wrap:nowrap; align-items:baseline; justify-content:center; gap:.45em; }
@@ -423,13 +432,18 @@
   /* ---------- v2: home as one page of entries ---------- */
   .crumbs[hidden] { display:none; }
   .hrow { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:2px; }
-  .htools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-left:auto; }
   /* Four counters, the dashboard's KPI card shrunk to fit the header row. */
   .hstats { display:flex; align-items:stretch; gap:8px; flex-wrap:wrap; }
   .hstat { background:var(--card); border:2px solid var(--edge); box-shadow:3px 3px 0 var(--shadow); border-radius:12px;
     padding:4px 11px 5px; min-width:72px; white-space:nowrap; }
   .hstat b { display:block; font-family:var(--head); font-size:1.06rem; font-weight:800; line-height:1.15; font-variant-numeric:tabular-nums; }
   .hstat span { display:block; font-size:.66rem; color:var(--muted); letter-spacing:.01em; line-height:1.2; }
+  /* Fifth card, only off today: the same counter shape in the accent, and it is a link. */
+  .hstat.go { background:var(--accent); border-color:var(--accent); color:#fff; text-decoration:none; transition:transform .12s, box-shadow .12s; }
+  .hstat.go b { font-size:.98rem; }
+  .hstat.go span { color:rgba(255,255,255,.78); }
+  .hstat.go:hover { color:#fff; transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--shadow); }
+  .hstat.go:active { transform:translate(1px,1px); box-shadow:1px 1px 0 var(--shadow); }
   .newbtn { display:inline-flex; align-items:center; gap:7px; background:var(--accent); color:#fff; border:2px solid var(--edge);
     border-radius:12px; padding:6px 13px; font-weight:800; font-size:.86rem; cursor:pointer; box-shadow:3px 3px 0 var(--shadow);
     transition:transform .12s, box-shadow .12s; }
@@ -494,7 +508,6 @@
   .toast[hidden] { display:none; }
 
   @media (max-width:700px) {
-    .htools { width:100%; margin-left:0; gap:8px; }
     .hstats { flex:1 1 100%; gap:6px; }
     .hstat { flex:1 1 0; min-width:0; padding:3px 8px 4px; border-radius:10px; box-shadow:2px 2px 0 var(--shadow); }
     .hstat b { font-size:.94rem; }

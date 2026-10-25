@@ -21,13 +21,13 @@ side.
 
 ## What is here
 
-- **Home (`#/`)** is today, pinned: the day header with previous/next, the composer, the entries as
-  the grouped ledger with category tabs, the hours strip, and a right rail with today's numbers,
-  the deadlines that are due or overdue, and links out.
+- **Home (`#/`)** is today, pinned:  the day header with previous/next, the composer, the entries as
+  the grouped ledger with category tabs, the hours strip, and a right rail with today's numbers
+  and the deadlines that are due or overdue.
 - **Home v2 (`v2/#/`)** is the same day without the composer card: four compact stat cards and a
   **New note** button in the header (the note opens in a sheet), the entries card first, the hours
-  band under it, and a rail of this month's heatmap, the deadlines, the hours you write at, and
-  links out. The note sheet pins its tokens-and-neurons line to the bottom of the card, so a long
+  band under it, and a rail of this month's heatmap, the deadlines and the hours you write at.
+  The note sheet pins its tokens-and-neurons line to the bottom of the card, so a long
   note scrolls inside it while the cost stays put. Deadlines are completed from the note, or with
   the tick on each Due row. The wordmark carries the demo's yellow instead of a badge; the tab
   title says which build is open.
@@ -38,7 +38,10 @@ side.
   day, the deadlines); the dashboard scopes it to the whole year (the year in weeks, months as
   doors, activity month by month). Both lead with the day page's header — `‹ Sep | October 2026 |
   Nov ›` — and its arrows are the only thing that differs.
-- **Day (`#/y/2026/m/10/d/24`)** is the same page as Home, opened on another date.
+- **Day (`#/y/2026/m/10/d/24`)** is the same page as Home, opened on another date; its header
+  carries no label, the counters sit at the very top, and any day but today adds a **Today** card
+  after them in the accent colour. Links to another zoom ("Open month", "The year") are small
+  bordered buttons rather than underlined text.
 - **Settings (`#/settings`)** carries theme, light/dark, heatmap default, week start, timezone, the
   account the diary belongs to, **change the passphrase**, **sign out**, and a reset for the sample
   data. The theme picker lives here only; the top bar keeps search, light/dark, dashboard, settings.
