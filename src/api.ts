@@ -25,6 +25,7 @@ export interface ThoughtRow {
 export interface DeadlineMark {
   due: string | null;   // YYYY-MM-DD
   done: boolean;
+  doneAt?: string | null; // when it was ticked: the one thing a closed note keeps that a to-do app does not
 }
 
 export interface UiEntry {
@@ -37,6 +38,7 @@ export interface UiEntry {
   raw: string;
   due?: string | null;
   done?: boolean;
+  doneLabel?: string | null; // "24 Oct · 05:36", already in the diary's timezone
   // What the cleanup cost, only when there is something to say. A verbatim note was never
   // sent to a model and an old note predates the columns, so the page gets no field at all
   // rather than three zeroes it would draw as a free note.
@@ -65,6 +67,13 @@ export function displayMode(stored: string): string {
   return MODE_UI[stored] ?? 'refined';
 }
 
+// A closed deadline's moment, in the diary's timezone: "24 Oct · 05:36".
+function stamp(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(iso)).replace(',', ' ·');
+}
+
 export function toUiEntry(row: ThoughtRow, timeZone: string, deadline?: DeadlineMark): UiEntry {
   const raw = row.raw_text || row.clean_text;
   const entry: UiEntry = {
@@ -82,6 +91,9 @@ export function toUiEntry(row: ThoughtRow, timeZone: string, deadline?: Deadline
   if (deadline) {
     entry.due = deadline.due;
     entry.done = deadline.done;
+    // Formatted here because the page has no idea which timezone the diary runs on, and a
+    // closed deadline stamped in the browser's zone could name the wrong day.
+    entry.doneLabel = deadline.doneAt ? stamp(deadline.doneAt, timeZone) : null;
   }
   if (row.tokens_in != null || row.tokens_out != null || row.cleanup_model) {
     entry.usage = {

@@ -482,19 +482,19 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
         const first = await readThoughts(withUsage);
         return first.status === 400 ? readThoughts(withoutUsage) : first;
       })(),
-      fetch(`${base}/reminders?select=capture_id,kind,title,due_at,next_remind_at,status&order=next_remind_at.asc&limit=200`, { headers }),
+      fetch(`${base}/reminders?select=capture_id,kind,title,due_at,next_remind_at,status,done_at&order=next_remind_at.asc&limit=200`, { headers }),
     ]);
     if (!thoughtsRes.ok) {
       return json({ ok: false, error: `Supabase ${thoughtsRes.status}: ${await thoughtsRes.text()}` }, 502);
     }
     const rows = (await thoughtsRes.json()) as ThoughtRow[];
-    type ReminderRow = { capture_id: string | null; kind: string; title: string; due_at: string | null; next_remind_at: string; status: string };
+    type ReminderRow = { capture_id: string | null; kind: string; title: string; due_at: string | null; next_remind_at: string; status: string; done_at: string | null };
     const allReminders = remindersRes.ok ? (await remindersRes.json()) as ReminderRow[] : [];
     // Deadlines ride along with the note that created them, so the page can show a due badge.
     const deadlines: Record<string, DeadlineMark> = {};
     for (const r of allReminders) {
       if (!r.capture_id) continue;
-      deadlines[r.capture_id] = { due: r.due_at ? r.due_at.slice(0, 10) : null, done: r.status === 'done' };
+      deadlines[r.capture_id] = { due: r.due_at ? r.due_at.slice(0, 10) : null, done: r.status === 'done', doneAt: r.done_at };
     }
     const reminders = allReminders.filter((r) => r.status === 'pending');
     return json({ ok: true, timeZone: tz, today, total: rows.length, days: groupByDay(rows, tz, deadlines), reminders });
@@ -755,6 +755,64 @@ async function moveApi(request: Request, env: Env): Promise<Response> {
   }
 }
 
+// POST /api/reminder/done { id, done } -> closes the deadline on a note, or reopens it. The
+// page used to only report this state, because the Telegram Done button owned the write; a
+// diary that can file and move a note but not finish one is half a diary. The reminder is
+// found through the note's capture, which is how both the bot and the composer attach it.
+// Reopening pushes the next ping a day out, so reopening a mistake does not page you at once.
+async function reminderDoneApi(request: Request, env: Env): Promise<Response> {
+  if (!(await signedIn(request, env))) {
+    return json({ ok: false, need: 'login', error: 'Sign in to change a deadline.' }, 401);
+  }
+  let body: { id?: unknown; done?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: 'Send JSON: { "id": "...", "done": true }' }, 400);
+  }
+  const id = typeof body.id === 'string' ? body.id : '';
+  // The id goes into a query string, so it has to be a row id and not a query.
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) {
+    return json({ ok: false, error: 'That note id is not one this diary issued.' }, 400);
+  }
+  if (typeof body.done !== 'boolean') {
+    return json({ ok: false, error: 'Say whether the deadline is done.' }, 400);
+  }
+  const done = body.done;
+
+  const base = `${env.SUPABASE_URL}/rest/v1`;
+  const headers = {
+    apikey: env.SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+  try {
+    const rowRes = await fetch(`${base}/thoughts?id=eq.${id}&select=capture_id`, { headers });
+    if (!rowRes.ok) throw new Error(`Supabase ${rowRes.status}: ${await rowRes.text()}`);
+    const rows = (await rowRes.json()) as { capture_id: string | null }[];
+    const captureId = rows[0]?.capture_id;
+    if (!captureId) return json({ ok: false, error: 'There is no deadline on this note.' }, 404);
+
+    const findRes = await fetch(`${base}/reminders?capture_id=eq.${captureId}&kind=eq.deadline&select=id&limit=1`, { headers });
+    if (!findRes.ok) throw new Error(`Supabase ${findRes.status}: ${await findRes.text()}`);
+    const found = (await findRes.json()) as { id: string }[];
+    if (!found.length) return json({ ok: false, error: 'There is no deadline on this note.' }, 404);
+
+    const now = new Date();
+    const patch = done
+      ? { status: 'done', done_at: now.toISOString() }
+      : { status: 'pending', done_at: null, next_remind_at: new Date(now.getTime() + 86400000).toISOString() };
+    const res = await fetch(`${base}/reminders?id=eq.${found[0].id}`, {
+      method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+    return json({ ok: true, id, done });
+  } catch (err) {
+    return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
+  }
+}
+
 async function webhook(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('unauthorized', { status: 401 });
@@ -852,6 +910,7 @@ export default {
     if (url.pathname === '/api/entries' && request.method === 'GET') return entriesApi(request, env);
     if (url.pathname === '/api/note' && request.method === 'POST') return noteApi(request, env);
     if (url.pathname === '/api/note/move' && request.method === 'POST') return moveApi(request, env);
+    if (url.pathname === '/api/reminder/done' && request.method === 'POST') return reminderDoneApi(request, env);
     if (url.pathname === '/api/passphrase' && request.method === 'POST') return passphraseApi(request, env);
     if (url.pathname === '/api/ai-check' && request.method === 'GET') return aiCheck(request, env);
     if (url.pathname === '/api/reclean' && request.method === 'POST') return reclean(request, env);
