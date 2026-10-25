@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:local": "wrangler dev --local",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "secret": "node scripts/set-secret.mjs",
+    "env:check": "node scripts/check-env.mjs",
+    "doctor": "node scripts/telegram-doctor.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261013.1",
