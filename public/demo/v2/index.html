@@ -298,8 +298,12 @@
     .cell { padding:4px 5px; border-radius:10px; aspect-ratio:auto; min-height:52px; }
     .cell small { font-size:.62rem; }
     .donut { flex-direction:column; align-items:flex-start; }
-    .daytitle { flex-direction:column; align-items:center; gap:0; line-height:1.22; font-size:1.3rem; }
+    /* `.hero h1` outranks a bare `.daytitle`, so the size has to be stated with more weight
+       than the hero rule or the phone keeps the 28px display size and the date collides. */
+    .hero .daytitle { flex-direction:column; align-items:center; gap:0; line-height:1.22; font-size:1.3rem; }
     .daytitle .dow { font-size:.75rem; }
+    /* A wrapped tab row reads as a list from the left, not a ragged centred line. */
+    .tabs-inline { justify-content:flex-start; margin-left:0; }
     .daynav .bl-full { display:none; }
     .daynav .bl-short { display:inline; }
     .daynav { gap:6px; }
@@ -323,19 +327,14 @@
     .search-icon { left:10px; }
     .tools { gap:10px; }
     .iconbtn { width:40px; height:40px; }
-    /* Thumb-sized controls: the ink grows where it can, and the hit area makes up the rest. */
-    .hbtn, .xbtn { width:38px; height:38px; }
-    .hbtn svg { width:18px; height:18px; }
+    /* Thumb-sized controls. The note sheet's own controls are declared later in this file, so
+       their phone sizes live in the final 600px block: a rule here of equal specificity loses
+       to a base rule that comes after it, and the buttons stayed desktop-sized on a phone. */
     .tab { min-height:34px; padding:6px 12px; }
     .utabs button { padding:9px 4px; }
     .seg button, .segbar button, .ctabs button { min-height:32px; }
-    .ltag { padding:3px 9px; }
-    .lmove { padding:8px 6px; }
     .dangerbtn { min-height:40px; }
     .microbtn { padding:6px 10px; }
-    .tick { width:28px; height:28px; }
-    .tick::after { inset:-8px; }
-    .mmenu { top:70px; }
     /* Reading is the phone's main job: 15px body is a desk size. */
     .entry p, .ltxt, .rtext, .sfull { font-size:1.0625rem; }
   }
@@ -344,8 +343,8 @@
     .brand { gap:0; }
   }
   @media (max-width:380px) {
-    /* Two 90px arrows leave the date ~104px; 1.3rem no longer fits it there. */
-    .daytitle { font-size:1.12rem; }
+    /* Two 90px arrows leave the date ~104px; 1.3rem overflows it, measured at 114px. */
+    .hero .daytitle { font-size:1.12rem; }
     /* Three 40px buttons and the logo leave the search ~110px: it shrinks instead of
        pushing the bar wider than the screen. */
     .search-wrap { min-width:0; }
@@ -391,10 +390,14 @@
   .nsheet .sbody { flex:1 1 auto; min-height:0; overflow:auto; padding-bottom:16px; }
   .nsheet .sfoot { flex:0 0 auto; border-top:1.5px solid var(--line); padding:11px 0 calc(15px + env(safe-area-inset-bottom)); }
   .nsheet .sfoot .cost { white-space:normal; }
+  /* A model id breaks at its own hyphens otherwise, leaving "instruct" alone on a line. */
+  .cost .mid { white-space:nowrap; }
   .shead { display:flex; align-items:center; gap:10px; }
   .shead .mode { font-size:.74rem; }
   .sdot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
-  .xbtn { margin-left:auto; background:none; border:1.5px solid #cf7d7d; color:#b05050; border-radius:10px; width:32px; height:32px; cursor:pointer; font-size:1.35rem; line-height:1; flex-shrink:0; transition:background .15s, color .15s, border-color .15s; }
+  .xbtn { position:relative; margin-left:auto; background:none; border:1.5px solid #cf7d7d; color:#b05050; border-radius:10px; width:32px; height:32px; cursor:pointer; font-size:1.35rem; line-height:1; flex-shrink:0; transition:background .15s, color .15s, border-color .15s; }
+  /* The sheet's controls draw at 32px and 38px; the thumb gets 44 either way. */
+  .hbtn::after, .xbtn::after { content:""; position:absolute; inset:-4px; border-radius:inherit; }
   .xbtn:hover { border-color:#a93e3e; color:#fff; background:#c05a5a; }
   .smeta { font-size:.8rem; color:var(--muted); margin:6px 0 10px; font-variant-numeric:tabular-nums; }
   .sfull { font-size:1.05rem; margin:0 0 14px; line-height:1.6; }
@@ -429,7 +432,7 @@
   .smove { display:flex; gap:8px; align-items:center; font-size:.88rem; color:var(--muted); margin-top:12px; }
 
   .gdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; }
-  .hbtn { background:none; border:1.5px solid var(--line); color:var(--muted); border-radius:10px; width:32px; height:32px; cursor:pointer;
+  .hbtn { position:relative; background:none; border:1.5px solid var(--line); color:var(--muted); border-radius:10px; width:32px; height:32px; cursor:pointer;
     display:inline-grid; place-items:center; font-size:.8rem; font-weight:800; font-family:ui-monospace, monospace; flex-shrink:0; padding:0; }
   .hbtn:hover { border-color:var(--accent); color:var(--accent); }
   .hbtn[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
@@ -542,8 +545,9 @@
     .crumbs.crumb-home { display:none; }
     /* Only the day's five cells take the whole row. Anything else that lands here — the trail's
        actions on Settings — stays on the trail's line, right-aligned. */
-    .crumbtools { gap:4px; }
-    .crumbtools.cells { width:100%; margin-left:0; flex-wrap:nowrap; align-items:stretch; justify-content:flex-end; }
+    /* Grid, not flex: five equal columns whatever each cell's content is, so the plus is the
+       same size as the counters beside it. */
+    .crumbtools.cells { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:4px; width:100%; margin-left:0; align-items:stretch; }
     .hstats { display:contents; }
     .hstat { flex:1 1 0; min-width:0; padding:4px 4px 5px; border-radius:10px; box-shadow:2px 2px 0 var(--shadow); }
     .hstat b { font-size:.95rem; overflow:hidden; text-overflow:ellipsis; }
@@ -644,6 +648,16 @@
     .weeks { border-spacing:2px; }
     .weeks th { font-size:.56rem; }
     .side .card, .card { padding:14px 14px; }
+    /* The note sheet's controls are declared further up this file, so their phone sizes are
+       repeated here: a rule in the first 600px block lost to the later base rule of the same
+       specificity, and the buttons stayed at desktop size on a phone. */
+    .hbtn, .xbtn { width:38px; height:38px; }
+    .hbtn svg { width:18px; height:18px; }
+    .tick { width:28px; height:28px; }
+    .tick::after { inset:-8px; }
+    .ltag { padding:3px 9px; }
+    .lmove { padding:8px 6px; }
+    .mmenu { top:70px; }
   }
   /* One ring for every control the demo draws: the browser default disappears on the dark
      bar and on the accent fill. */
