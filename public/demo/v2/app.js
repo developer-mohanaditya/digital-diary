@@ -474,12 +474,26 @@ function duePill(it) {
   if (n === 1) return '<span class="due soon">Due tomorrow</span>';
   return `<span class="due soon">Due in ${n}d</span>`;
 }
-function dueLine(it) {
+const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>';
+
+// A deadline is only done when someone says so, and the note is the place they are
+// looking when they decide. The button stays afterwards, to reopen a mistake.
+function dueLine(it, ref) {
   if (it.cat !== 'deadline') return '';
   const when = it.due ? fmtDay(parse(it.due)) : 'No due date';
   const n = it.due ? dueDays(it.due) : null;
   const st = it.done ? 'Done' : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
-  return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span></div>`;
+  return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span>
+    <button class="donetog" data-action="done" data-v="${ref}" aria-pressed="${it.done ? 'true' : 'false'}">${it.done ? 'Reopen' : `${CHECK_ICON}Mark done`}</button></div>`;
+}
+
+function toggleDone(ref) {
+  const found = findNote(ref);
+  if (!found || found.it.cat !== 'deadline') return;
+  found.it.done = !found.it.done;
+  save();
+  render();
+  toast(found.it.done ? 'Deadline marked done. No more pings.' : 'Deadline reopened.');
 }
 const hasRawText = it => it.mode !== 'verbatim' && !!it.raw;
 
@@ -532,7 +546,7 @@ function noteHTML(ref) {
       ${moveOpen ? `<div class="mmenu" role="menu">${ui.moveConfirm ? `<div class="mconf"><span>Move to <b>${CAT[ui.moveConfirm].label}</b>?</span><span class="row"><button class="btn" data-action="move-yes">Yes</button><button class="btn" data-action="move-no">No</button></span></div>` : CATS.map(x => `<button data-action="move-to" data-v="${x.id}" aria-checked="${x.id === it.cat}"><i style="background:${x.color}"></i>${x.label}</button>`).join('')}</div>` : ''}
       <div class="sbody">
         <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}:${pad(it.sec || 0)}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : it.src === 'manual' ? 'Moved by you' : 'Auto filed'}</div>
-        ${dueLine(it)}
+        ${dueLine(it, `${k}|${it.id}`)}
         ${noteTitleBody(it.text)}
         ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
       </div>
@@ -682,7 +696,7 @@ function dueCard() {
       <div><span class="kicker">Deadlines</span><h2 style="margin:2px 0 0">Due</h2></div>${open.length
       ? `<span class="due ${overdue ? 'over' : 'soon'}">${overdue ? `${overdue} overdue` : `${open.length} open`}</span>` : ''}</div>
     ${open.length ? open.slice(0, 5).map(it => `<div class="lrow clickable" data-action="open" data-v="${it.k}|${it.id}" tabindex="0" role="button" title="Open note">
-        <span class="ltxt"><b>${esc(plainText(it.text))}</b><br><span class="muted" style="font-size:.76rem">${fmtShort2y(it.due)} · ${CAT[it.cat].label}</span></span>${duePill(it)}
+        <span class="ltxt"><b>${esc(plainText(it.text))}</b><br><span class="muted" style="font-size:.76rem">${fmtShort2y(it.due)} · ${CAT[it.cat].label}</span></span>${duePill(it)}<button class="tick" data-action="done" data-v="${it.k}|${it.id}" title="Mark done" aria-label="Mark done">${CHECK_ICON}</button>
       </div>`).join('')
       : '<p class="muted" style="margin:0">Nothing open.</p>'}
     <p class="note"><a class="link" href="#/dashboard">The dashboard →</a></p>
@@ -1015,6 +1029,7 @@ document.addEventListener('click', e => {
   else if (a === 'close-compose') { ui.compose = false; ui.addMsg = ''; render(); }
   else if (a === 'open') { ui.openNote = v; ui.moveMenu = false; ui.moveConfirm = null; render(); }
   else if (a === 'close-note') { ui.openNote = null; ui.moveMenu = false; ui.moveConfirm = null; render(); }
+  else if (a === 'done') toggleDone(v);
   else if (a === 'raw') { ui.moveMenu = false; ui.moveConfirm = null; ui.openRaw.has(v) ? ui.openRaw.delete(v) : ui.openRaw.add(v); render(); }
   else if (a === 'move-menu') { ui.moveMenu = !ui.moveMenu; ui.moveConfirm = null; render(); }
   else if (a === 'move-to') { ui.moveConfirm = v; render(); }
