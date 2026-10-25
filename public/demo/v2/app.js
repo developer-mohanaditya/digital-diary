@@ -527,16 +527,16 @@ function noteHTML(ref) {
   const moveOpen = ui.moveMenu;
   const u = it.usage;
   return `<div class="overlay"><div class="backdrop" data-action="close-note"></div>
-    <div class="sheet" role="dialog" aria-modal="true" aria-label="Note">
+    <div class="sheet nsheet" role="dialog" aria-modal="true" aria-label="Note">
       <div class="shead"><span class="sdot" style="background:${c.color}"></span><strong>${c.label}</strong><span class="mode">${MODE_LABEL[it.mode]}</span><span class="spacer"></span>${hasRaw ? `<button class="hbtn" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}" title="${rawOpen ? 'Hide raw' : 'Show raw'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6"/></svg></button>` : ''}<button class="hbtn" data-action="move-menu" aria-expanded="${moveOpen}" title="Move to another category"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14l3 3 3-3"/></svg></button><button class="xbtn" data-action="close-note" aria-label="Close">\u00d7</button></div>
       ${moveOpen ? `<div class="mmenu" role="menu">${ui.moveConfirm ? `<div class="mconf"><span>Move to <b>${CAT[ui.moveConfirm].label}</b>?</span><span class="row"><button class="btn" data-action="move-yes">Yes</button><button class="btn" data-action="move-no">No</button></span></div>` : CATS.map(x => `<button data-action="move-to" data-v="${x.id}" aria-checked="${x.id === it.cat}"><i style="background:${x.color}"></i>${x.label}</button>`).join('')}</div>` : ''}
-      <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}:${pad(it.sec || 0)}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : it.src === 'manual' ? 'Moved by you' : 'Auto filed'}</div>
-      ${dueLine(it)}
-      ${noteTitleBody(it.text)}
-      ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
-      <div class="smeta" style="border-top:1px solid var(--line);padding-top:10px;margin-top:14px">
-        <span class="cost">${u.neurons} neurons · ${u.tin} in / ${u.tout} out tokens · ${u.model.replace('@cf/', '')}</span>
+      <div class="sbody">
+        <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}:${pad(it.sec || 0)}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : it.src === 'manual' ? 'Moved by you' : 'Auto filed'}</div>
+        ${dueLine(it)}
+        ${noteTitleBody(it.text)}
+        ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
       </div>
+      <div class="sfoot"><span class="cost">${u.neurons} neurons · ${u.tin} in / ${u.tout} out tokens · ${u.model.replace('@cf/', '')}</span></div>
     </div></div>`;
 }
 
@@ -556,28 +556,22 @@ function dayTabsHTML(defs) {
 /* ---------- Home (v2): the day's entries first, the month beside them ---------- */
 
 const PLUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
-const ICON = {
-  entries: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
-  cats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22l-9-9V3h10z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>',
-  tokens: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 8h14M5 12h14M5 16h14"/><path d="M9 4v16M15 4v16"/></svg>',
-  neurons: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.9L19 9.8l-4.2 3 .6 5.2L12 15.6 8.6 18l.6-5.2L5 9.8l5.1-1.9z"/></svg>',
-};
 
-// The stats that used to be a card, as four small chips in the header row.
-function statChipsHTML(k) {
+// The day's four counters, as compact KPI cards rather than chips.
+function statCardsHTML(k) {
   const list = items(k), counts = {};
   tallyInto(counts, list);
   const tokens = list.reduce((a, it) => a + it.usage.tin + it.usage.tout, 0);
   const neurons = list.reduce((a, it) => a + it.usage.neurons, 0);
   const cats = Object.keys(counts).length;
-  const chips = [
-    { icon: ICON.entries, n: list.length, label: 'entries', title: `${list.length} ${list.length === 1 ? 'entry' : 'entries'}` },
-    { icon: ICON.cats, n: cats, label: 'categories', title: `${cats} ${cats === 1 ? 'category' : 'categories'}` },
-    { icon: ICON.tokens, n: tokens.toLocaleString(), label: 'tokens', title: `${tokens.toLocaleString()} tokens in and out` },
-    { icon: ICON.neurons, n: neurons.toFixed(1), label: 'neurons', title: `${neurons.toFixed(1)} neurons, estimated` },
+  const cards = [
+    { n: list.length, label: 'entries', title: `${list.length} ${list.length === 1 ? 'entry' : 'entries'}` },
+    { n: cats, label: 'categories', title: `${cats} ${cats === 1 ? 'category' : 'categories'}` },
+    { n: tokens.toLocaleString(), label: 'tokens', title: `${tokens.toLocaleString()} tokens in and out` },
+    { n: neurons.toFixed(1), label: 'neurons', title: `${neurons.toFixed(1)} neurons, estimated` },
   ];
-  return `<div class="gchips">${chips.map(c =>
-    `<span class="gchip" title="${esc(c.title)}">${c.icon}<b>${c.n}</b><span class="gcl">${c.label}</span></span>`).join('')}</div>`;
+  return `<div class="hstats">${cards.map(c =>
+    `<div class="hstat" title="${esc(c.title)}"><b>${c.n}</b><span>${c.label}</span></div>`).join('')}</div>`;
 }
 
 function openDeadlines() {
@@ -737,7 +731,7 @@ function dayPage(y, m, d, home) {
     <div class="hrow">
       <span class="kicker">${home ? 'Home · Today' : 'Day'}</span>
       <div class="htools">
-        ${statChipsHTML(k)}
+        ${statCardsHTML(k)}
         ${home ? `<button class="newbtn" data-action="compose" title="New note (n)">${PLUS_ICON}<span>New note</span></button>` : ''}
       </div>
     </div>

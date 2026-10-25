@@ -355,6 +355,11 @@
   .backdrop { position:absolute; inset:0; background:rgba(10,10,25,.5); }
   .sheet { position:relative; width:min(560px,100%); min-height:min(460px,76vh); max-height:86vh; overflow:auto; background:var(--card); color:var(--ink);
     border:2px solid var(--edge); box-shadow:6px 6px 0 var(--shadow); border-radius:18px; padding:20px 22px 28px; }
+  /* The note card: header and usage line stay put, only the note itself scrolls. */
+  .nsheet { display:flex; flex-direction:column; overflow:hidden; padding-bottom:0; }
+  .nsheet .sbody { flex:1 1 auto; min-height:0; overflow:auto; padding-bottom:16px; }
+  .nsheet .sfoot { flex:0 0 auto; border-top:1.5px solid var(--line); padding:11px 0 15px; }
+  .nsheet .sfoot .cost { white-space:normal; }
   .shead { display:flex; align-items:center; gap:10px; }
   .shead .mode { font-size:.74rem; }
   .sdot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
@@ -420,11 +425,12 @@
   .crumbs[hidden] { display:none; }
   .hrow { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:2px; }
   .htools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-left:auto; }
-  .gchips { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-  .gchip { display:inline-flex; align-items:center; gap:6px; background:var(--card); border:1.5px solid var(--line); border-radius:999px;
-    padding:3px 10px 3px 8px; font-size:.72rem; color:var(--muted); white-space:nowrap; }
-  .gchip svg { width:14px; height:14px; color:var(--accent); flex-shrink:0; }
-  .gchip b { color:var(--ink); font-family:var(--head); font-size:.92rem; font-variant-numeric:tabular-nums; }
+  /* Four counters, the dashboard's KPI card shrunk to fit the header row. */
+  .hstats { display:flex; align-items:stretch; gap:8px; flex-wrap:wrap; }
+  .hstat { background:var(--card); border:2px solid var(--edge); box-shadow:3px 3px 0 var(--shadow); border-radius:12px;
+    padding:4px 11px 5px; min-width:72px; white-space:nowrap; }
+  .hstat b { display:block; font-family:var(--head); font-size:1.06rem; font-weight:800; line-height:1.15; font-variant-numeric:tabular-nums; }
+  .hstat span { display:block; font-size:.66rem; color:var(--muted); letter-spacing:.01em; line-height:1.2; }
   .newbtn { display:inline-flex; align-items:center; gap:7px; background:var(--accent); color:#fff; border:2px solid var(--edge);
     border-radius:12px; padding:6px 13px; font-weight:800; font-size:.86rem; cursor:pointer; box-shadow:3px 3px 0 var(--shadow);
     transition:transform .12s, box-shadow .12s; }
@@ -489,10 +495,11 @@
   .toast[hidden] { display:none; }
 
   @media (max-width:700px) {
-    .htools { width:100%; margin-left:0; }
-    .gchips { flex:1 1 auto; }
-    .gchip { padding:3px 8px 3px 7px; }
-    .gchip .gcl { display:none; }
+    .htools { width:100%; margin-left:0; gap:8px; }
+    .hstats { flex:1 1 100%; gap:6px; }
+    .hstat { flex:1 1 0; min-width:0; padding:3px 8px 4px; border-radius:10px; box-shadow:2px 2px 0 var(--shadow); }
+    .hstat b { font-size:.94rem; }
+    .hstat span { font-size:.6rem; overflow:hidden; text-overflow:ellipsis; }
     .newbtn { flex:0 0 auto; }
     .mc { font-size:.64rem; border-radius:6px; }
     .hbars { height:38px; }
