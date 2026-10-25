@@ -2,8 +2,9 @@
 
 A clickable preview of the diary split into **Home (today)** and a **Dashboard**, built in the same
 design system as the served app: the same tokens, themes, cards, chips, ledgers and sheet as
-`index.html` and `app.js` one directory up. The stylesheet is copied from the app, so what you see here
-is what the real pages will look like.
+`index.html` and `app.js` one directory up. This page keeps its own copy of the rules; `v2/` is the
+design the app now ships, and the two of them link `diary.css` at this level, so a change to how the
+diary looks has a single home.
 
 Everything is local. The entries are generated samples, stored in this browser, and no request
 leaves the page. Clearing site data resets them.
@@ -31,8 +32,9 @@ side.
   write at.
   The note sheet pins its tokens-and-neurons line to the bottom of the card, so a long
   note scrolls inside it while the cost stays put. Deadlines are completed from the note, or with
-  the tick on each Due row. The wordmark carries the demo's yellow instead of a badge; the tab
-  title says which build is open.
+  the tick on each Due row. The wordmark carries the demo's yellow instead of a badge — the
+  preview pages opt into it with `data-preview` on `<html>`, while the served diary keeps the
+  bar's white — and the tab title says which build is open.
 - **Month (`#/y/2026/m/10`)** and **Dashboard (`#/dashboard`)** are one page at two zooms: KPIs,
   the heatmap, activity, when you write, AI usage with tokens and estimated neurons per note and per
   model, and the newest notes with what each cost. The month scopes all of it to its 30-odd days

@@ -32,5 +32,8 @@ TELEGRAM_WEBHOOK_SECRET=
 # Used to reconcile neuron counts; the Worker never needs it.
 CLOUDFLARE_API_TOKEN=
 
-# The interim page lock. Remove it from both places once Supabase Auth ships.
+# The interim page lock, and the seed for the page's passphrase: while nothing has been saved
+# from Settings -> Access this is the passphrase, and afterwards it still keeps the page closed.
+# Changing it here does not undo a saved one; delete the `passphrase` row in settings for that
+# (README, "Changing the passphrase").
 DIARY_PASSPHRASE=

@@ -22,7 +22,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 - Commands and empty messages (`/start`, `/heartbeat`, `/timezone`, a bare `/push`, a blank message) are answered and never written to the database.
 - Puts untagged text in Inbox for now.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
-- Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`. The page is open unless a passphrase secret is set.
+- Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, save a typed note through `POST /api/note`, unlock with the passphrase at `/api/session`, and change that passphrase from Settings → Access through `POST /api/passphrase`. The page wears the demo's design: the app and the demo link the same stylesheet, `public/demo/diary.css`.
 
 ## The cleanup step
 
@@ -61,6 +61,7 @@ Both are in the current catalog. Workers AI retired eighteen older models on 30 
 - If every model fails, the note is stored as written and the Telegram reply says `Cleanup failed (<reason>), saved as written.` Nothing is ever lost, the reason is in the message, and it is also kept on the capture (`captures.last_error`) so it can be read back without the phone.
 - The binding is declared in `wrangler.toml` (`[ai] binding = "AI"`). Local `wrangler dev` cannot run it; Workers AI always runs remotely, so cleanup can only be tested after a deploy.
 - `GET /api/ai-check` runs one tiny inference per cleanup model and answers `{ ok, binding, models: [{ model, ok, ms, output | error }] }`. It separates a missing binding from a retired model id from an account that cannot use Workers AI, without writing a test note into the diary.
+- `POST /api/note/move` files a note under another category for good: `{ id, category, due? }` writes the row's `category` with `category_source='manual'`, so the sheet says "Moved by you" and the move survives a reload on every device. Moving to `deadline` needs a date and schedules the same T-3 reminder the composer would (rescheduling the one already there instead of adding a second), and moving away deletes that reminder, which takes the due badge with it.
 - `POST /api/reclean` re-runs the cleanup over notes an earlier, broken model left untouched (`clean_text` identical to `raw_text`). It only ever rewrites `clean_text`, never `raw_text`, so a bad rewrite is recoverable. It accepts either the Telegram webhook secret or the database service key in an `x-reclean-token` header, and `?limit=` caps the work (default 5, maximum 25) because the call is synchronous.
 - `/reclean` in Telegram does the same thing without a token, since the bot already knows it is you: `/reclean 10` repairs ten notes and replies with the count. That is the command to run once after a cleanup-model change; nothing else needs it.
 
@@ -104,7 +105,7 @@ src/            Worker code: webhook entry point, update handler, command parser
 test/           Tests for the parser and the handler
 migrations/     Database schema, applied in order in the Supabase SQL editor
 public/         The web app served by the Worker: index.html, app.js, logo/
-public/demo/    Sample-data preview, kept for design work
+public/demo/    Sample-data preview and diary.css, the stylesheet both pages link
 wrangler.toml   Worker configuration (name, routes, cron, timezone)
 ```
 
@@ -134,7 +135,10 @@ A secret must also exist on the deployed Worker, because Cloudflare does not rea
 ```sh
 npm run secret SUPABASE_SERVICE_KEY   # silent prompt, writes .dev.vars AND pushes to Cloudflare
 npm run env:check                     # lists every name, its home, and what is missing
+npm run bindings:check                # diffs the DEPLOYED Worker against wrangler.toml
 ```
+
+`env:check` is about this checkout. `bindings:check` is about the live Worker: it reads the deployed version's binding list from Cloudflare and compares it with `wrangler.toml` — every `[vars]` value present and equal, every required secret present *as a secret*, the `AI` and `ASSETS` bindings attached, and the compatibility date not older than the config. It exits 0 in step, 1 on drift, 2 when it cannot check. Reading the bindings needs **Workers Scripts: Read** on `CLOUDFLARE_API_TOKEN`; an analytics-only token answers 403 and the command says which permission to add.
 
 The prompt never echoes. Pushing to Cloudflare is attempted with the same `CLOUDFLARE_API_TOKEN` everything else uses; `npm run secret NAME -- --local` writes only the local file. Pushing needs that token to carry **Workers Scripts: Edit** — an analytics-only token is refused, and the command says so, leaving the value in `.dev.vars` for one paste in the dashboard (Workers → awedityasdiary → Settings → Variables and Secrets).
 
@@ -150,7 +154,7 @@ The prompt never echoes. Pushing to Cloudflare is attempted with the same `CLOUD
 | `TELEGRAM_WEBHOOK_SECRET` | `.dev.vars` | yes | Random string Telegram sends with each update |
 | `DIARY_PASSPHRASE` | `.dev.vars` | yes | Interim page lock; removed when Supabase Auth ships |
 | `SUPABASE_ANON_KEY` | `.dev.vars` | when auth ships | Public key the Worker uses for the sign-in endpoint |
-| `CLOUDFLARE_API_TOKEN` | `.dev.vars` | **no** | Account Analytics: Read, for `scripts/` only |
+| `CLOUDFLARE_API_TOKEN` | `.dev.vars` | **no** | Account Analytics: Read + Workers Scripts: Read, for `scripts/` only |
 | `DIARY_SESSION_SECRET` | `.dev.vars` | optional | Overrides the cookie signing key; defaults to `DIARY_PASSPHRASE` |
 
 ### The web page's door (optional)
@@ -159,7 +163,9 @@ The page is **open by default**: with no `DIARY_PASSPHRASE` secret, `GET /api/en
 
 If local and Cloudflare disagree, the page answers 401 to the passphrase that works locally: Cloudflare's copy wins in production, so the two must match. `npm run env:check` cannot see Cloudflare's values, which is why the same command writes both.
 
-From then on the page shows a sign-in card: `POST /api/session` with `{"passphrase":"..."}` sets an HttpOnly, 30-day signed cookie and `DELETE /api/session` clears it. Removing the secret opens the page again. Cloudflare Access also works if it is added: the Worker accepts its `Cf-Access-Jwt-Assertion` header as a signed-in visitor.
+From then on the page shows a sign-in card: `POST /api/session` with `{"passphrase":"..."}` sets an HttpOnly, 30-day signed cookie and `DELETE /api/session` clears it. Removing the secret opens the page again, unless a passphrase has been saved from Settings.
+
+**Changing the passphrase.** Settings → Access changes it without the dashboard: `POST /api/passphrase` with `{"current":"...","next":"..."}` checks the current passphrase, requires eight characters, and stores a PBKDF2-SHA-256 hash in `settings` under the key `passphrase` (so there is no migration to run). The env secret is the seed: while no hash exists it is the passphrase, and once one is saved the hash wins. Both still count as "locked", so the page stays closed even if `DIARY_PASSPHRASE` is later removed. The cookie is signed with the stored hash, so a change signs out every other device and hands the browser that made it a fresh 30-day cookie. Because the hash wins, a forgotten passphrase is not recovered by changing the env secret: delete the row (`delete from settings where key = 'passphrase';` in the Supabase SQL editor) and `DIARY_PASSPHRASE` opens the page again, after which Settings can save a new one.
 
 ## Database setup
 
