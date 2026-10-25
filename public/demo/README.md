@@ -14,8 +14,9 @@ Serve this folder (`python3 ../../dev-server.py` from the repo root, which is wh
 uses) and open the root. On the Worker it is `/demo/`; on GitHub Pages it is the site root. Opening `index.html` directly also works; the fonts need a connection.
 
 The **second home layout** lives in [`v2/`](v2/index.html) and opens at `/v2/`. It keeps the same
-design system and data, and changes only the home page: no breadcrumb, the day's entries first, the
-stats as chips in the header, the composer as a sheet, and the month heatmap in the rail. The two
+design system and data, and changes only the home page: the breadcrumb stays on every page with
+the day's counters at its right end, the day's entries first, the composer as a sheet, and the
+month heatmap in the rail. The two
 share sample data through the same browser key but keep tabs separately, so they can sit open side by
 side.
 
@@ -38,10 +39,12 @@ side.
   day, the deadlines); the dashboard scopes it to the whole year (the year in weeks, months as
   doors, activity month by month). Both lead with the day page's header — `‹ Sep | October 2026 |
   Nov ›` — and its arrows are the only thing that differs.
-- **Day (`#/y/2026/m/10/d/24`)** is the same page as Home, opened on another date; its header
-  carries no label, the counters sit at the very top, and any day but today adds a **Today** card
-  after them in the accent colour. Links to another zoom ("Open month", "The year") are small
-  bordered buttons rather than underlined text.
+- **Day (`#/y/2026/m/10/d/24`)** is the same page as Home, opened on another date. The breadcrumb
+  reads `Home / October 2026 / 24` and carries the counters of that day at its right end, with no
+  separate count; any day but today adds a **Today** card after them in the accent colour. Links to
+  another zoom ("Open month", "The year") are small tinted labels rather than bordered pills or
+  underlined text. Closing a deadline stores the moment it was closed and shows it as
+  `done 16 Oct · 10:42`; reopening clears it.
 - **Settings (`#/settings`)** carries theme, light/dark, heatmap default, week start, timezone, the
   account the diary belongs to, **change the passphrase**, **sign out**, and a reset for the sample
   data. The theme picker lives here only; the top bar keeps search, light/dark, dashboard, settings.
