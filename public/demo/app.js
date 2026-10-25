@@ -804,7 +804,7 @@ function renderCrumbs(r) {
   if (r.view === 'dashboard') html += '<span class="sep">/</span><span>Dashboard</span>';
   if (r.view === 'settings') html += '<span class="sep">/</span><span>Settings</span>';
   if (r.view === 'month' || r.view === 'day') html += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
-  if (r.view === 'day') html += `<span class="sep">/</span><span>${r.d}</span><span class="c-count">${items(`${r.y}-${pad(r.m)}-${pad(r.d)}`).length} items</span>`;
+  if (r.view === 'day') html += `<span class="sep">/</span><span aria-current="page">${r.d}</span>`;
   const c = $('#crumbs');
   if (c) c.innerHTML = html;
 }

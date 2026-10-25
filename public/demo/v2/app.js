@@ -189,11 +189,15 @@ function seed() {
     { day: iso(addDays(today, -12)), time:'11:20', text:'File the travel reimbursement.',            due: iso(addDays(today, 10)),   done:false, src:'web' },
     { day: iso(addDays(today, -20)), time:'10:15', text:'Pay the electricity bill.',                due: iso(addDays(today, -8)),   done:true,  src:'telegram' },
   ];
+  // The one already-closed sample carries the moment it was closed, like a real one.
+  const closedAt = new Date(parse(iso(addDays(today, -9))));
+  closedAt.setHours(10, 42, 0, 0);
   deadlines.forEach((dl, i) => {
     const k = dl.day;
     (days[k] = days[k] || []).push({
       id: `${k}-dl${i}`, time: dl.time, sec: 0, cat:'deadline', mode:'refined', src: dl.src,
-      text: dl.text, raw: dl.text, due: dl.due, done: dl.done, usage: usageFor(dl.text, rng(500 + i)),
+      text: dl.text, raw: dl.text, due: dl.due, done: dl.done,
+      doneAt: dl.done ? closedAt.toISOString() : null, usage: usageFor(dl.text, rng(500 + i)),
     });
     days[k].sort((a, b) => b.time.localeCompare(a.time));
   });
@@ -462,9 +466,16 @@ function donut(counts) {
 
 /* ---------- Deadlines ---------- */
 function dueDays(due) { return Math.round((parse(due) - parse(TODAY)) / 864e5); }
+// When a deadline was closed: a date and a clock time, since a done note without one
+// loses the only thing the diary keeps that a to-do app does not.
+const fmtStamp = iso => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 function duePill(it) {
   if (it.cat !== 'deadline') return '';
-  if (it.done) return '<span class="due done">Done</span>';
+  if (it.done) return `<span class="due done"${it.doneAt ? ` title="Marked done ${esc(fmtStamp(it.doneAt))}"` : ''}>Done</span>`;
   if (!it.due) return '';
   const n = dueDays(it.due);
   if (n < 0) return `<span class="due over">Overdue ${-n}d</span>`;
@@ -480,7 +491,9 @@ function dueLine(it, ref) {
   if (it.cat !== 'deadline') return '';
   const when = it.due ? fmtDay(parse(it.due)) : 'No due date';
   const n = it.due ? dueDays(it.due) : null;
-  const st = it.done ? 'Done' : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
+  const st = it.done
+    ? (it.doneAt ? `done ${fmtStamp(it.doneAt)}` : 'Done')
+    : n === null ? '' : n < 0 ? `${-n} days overdue` : n === 0 ? 'due today' : `${n} days left`;
   return `<div class="duline">${duePill(it)}<span class="muted">${esc(when)}${st ? ` · ${st}` : ''}</span>
     <button class="donetog" data-action="done" data-v="${ref}" aria-pressed="${it.done ? 'true' : 'false'}">${it.done ? 'Reopen' : `${CHECK_ICON}Mark done`}</button></div>`;
 }
@@ -489,6 +502,9 @@ function toggleDone(ref) {
   const found = findNote(ref);
   if (!found || found.it.cat !== 'deadline') return;
   found.it.done = !found.it.done;
+  // The moment it was ticked is stored with it — `done_at`, the column the Worker keeps — and
+  // cleared when the tick is undone, so a reopened deadline has no closing time.
+  found.it.doneAt = found.it.done ? new Date().toISOString() : null;
   save();
   render();
   toast(found.it.done ? 'Deadline marked done. No more pings.' : 'Deadline reopened.');
@@ -730,10 +746,6 @@ function dayPage(y, m, d, home) {
   const dmy = `${date.getDate()} ${MONTHS[date.getMonth()].slice(0, 3)} ${String(date.getFullYear()).slice(2)}`;
   return `
   <section class="hero dayhead">
-    <div class="hrow">
-      ${statCardsHTML(k)}
-      ${home ? `<button class="newbtn" data-action="compose" title="New note (n)">${PLUS_ICON}<span>New note</span></button>` : ''}
-    </div>
     <div class="daynav">
       <a class="btn" href="${dayLink(addDays(date, -1))}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span class="bl-full">Previous day</span><span class="bl-short">Previous</span></a>
       <h1 class="daytitle"><span class="dow">${dow}</span><span class="dmy">${dmy}</span></h1>      <a class="btn" href="${dayLink(addDays(date, 1))}"><span class="bl-full">Next day</span><span class="bl-short">Next</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></a>
@@ -847,7 +859,7 @@ function statsPage(y, m) {
     </div>
   </section>
 
-  <section class="kpis" style="margin-top:16px">
+  <section class="kpis">
     <div class="kpi"><b>${list.length}</b><span>items</span></div>
     <div class="kpi"><b>${activeDays}</b><span>active days</span></div>
     <div class="kpi"><b>${Object.keys(counts).length}</b><span>categories</span></div>
@@ -967,18 +979,24 @@ function changePass() {
 
 /* ---------- Crumbs + render ---------- */
 function renderCrumbs(r) {
-  const c = $('#crumbs');
-  if (!c) return;
-  // Home is nobody's child: "Home · Today" in the header is already the label, so the
-  // breadcrumb only shows on a page opened from it.
-  if (r.view === 'home') { c.hidden = true; c.innerHTML = ''; return; }
-  c.hidden = false;
-  let html = '<a href="#/">Home</a>';
-  if (r.view === 'year') html += `<span class="sep">/</span><a href="#/dashboard">Dashboard</a><span class="sep">/</span><span>${r.y}</span>`;
-  if (r.view === 'settings') html += '<span class="sep">/</span><span>Settings</span>';
-  if (r.view === 'month' || r.view === 'day') html += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
-  if (r.view === 'day') html += `<span class="sep">/</span><span>${r.d}</span><span class="c-count">${items(`${r.y}-${pad(r.m)}-${pad(r.d)}`).length} items</span>`;
-  c.innerHTML = html;
+  const row = $('#crumbrow'), c = $('#crumbs'), tools = $('#crumbtools');
+  if (!row || !c || !tools) return;
+  row.hidden = false;
+  // The trail names where you are, on every page including today's. The day's counters
+  // ride at its right end, so the page opens with the date rather than with a second row.
+  let trail = '<a href="#/">Home</a>';
+  if (r.view === 'home') trail = '<span aria-current="page">Home</span>';
+  if (r.view === 'year') trail += `<span class="sep">/</span><a href="#/dashboard">Dashboard</a><span class="sep">/</span><span aria-current="page">${r.y}</span>`;
+  if (r.view === 'settings') trail += '<span class="sep">/</span><span aria-current="page">Settings</span>';
+  if (r.view === 'month' || r.view === 'day') trail += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
+  if (r.view === 'day') trail += `<span class="sep">/</span><span aria-current="page">${r.d}</span>`;
+  const isDay = r.view === 'home' || r.view === 'day';
+  const k = r.view === 'home' ? TODAY : `${r.y}-${pad(r.m)}-${pad(r.d)}`;
+  c.innerHTML = trail;
+  tools.innerHTML = isDay
+    ? `${statCardsHTML(k)}${r.view === 'home'
+        ? `<button class="newbtn" data-action="compose" title="New note (n)">${PLUS_ICON}<span>New note</span></button>` : ''}`
+    : '';
 }
 function render() {
   const r = route();
@@ -986,7 +1004,8 @@ function render() {
   if (!state.signedIn) {
     if (signinEl) signinEl.hidden = false;
     if (appEl) appEl.hidden = true;
-    if ($('#crumbs')) { $('#crumbs').hidden = true; $('#crumbs').innerHTML = ''; }
+    const row = $('#crumbrow');
+    if (row) { row.hidden = true; $('#crumbs').innerHTML = ''; $('#crumbtools').innerHTML = ''; }
     return;
   }
   if (signinEl) signinEl.hidden = true;
