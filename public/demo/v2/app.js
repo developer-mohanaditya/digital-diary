@@ -577,7 +577,7 @@ function noteHTML(ref) {
         ${noteTitleBody(it.text)}
         ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}
       </div>
-      <div class="sfoot"><span class="cost">${u.neurons} neurons · ${u.tin} in / ${u.tout} out tokens · ${u.model.replace('@cf/', '')}</span></div>
+      <div class="sfoot"><span class="cost">${u.neurons} neurons · ${u.tin} in / ${u.tout} out tokens · <span class="mid">${u.model.replace('@cf/', '')}</span></span></div>
     </div></div>`;
 }
 
