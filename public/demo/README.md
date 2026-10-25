@@ -24,9 +24,11 @@ side.
 - **Home (`#/`)** is today, pinned: the day header with previous/next, the composer, the entries as
   the grouped ledger with category tabs, the hours strip, and a right rail with today's numbers,
   the deadlines that are due or overdue, and links out.
-- **Home v2 (`v2/#/`)** is the same day without the composer card: stat chips and a **New note**
-  button in the header (the note opens in a sheet), the entries card first, the hours band under it,
-  and a rail of this month's heatmap, the deadlines, the hours you write at, and links out.
+- **Home v2 (`v2/#/`)** is the same day without the composer card: four compact stat cards and a
+  **New note** button in the header (the note opens in a sheet), the entries card first, the hours
+  band under it, and a rail of this month's heatmap, the deadlines, the hours you write at, and
+  links out. The note sheet pins its tokens-and-neurons line to the bottom of the card, so a long
+  note scrolls inside it while the cost stays put.
 - **Dashboard (`#/dashboard`)** shows one month: KPIs, the month heatmap in **both** shapes
   (weeks table / calendar grid, switchable and remembered), activity day by day, when you write,
   AI usage with tokens and estimated neurons per note and per model, the year at a glance, folders,
