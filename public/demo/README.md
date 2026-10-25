@@ -37,8 +37,8 @@ side.
   model, and the newest notes with what each cost. The month scopes all of it to its 30-odd days
   (heatmap in **both** shapes, switchable and remembered, activity day by day, a calendar to pick a
   day, the deadlines); the dashboard scopes it to the whole year (the year in weeks, months as
-  doors, activity month by month). Both lead with the day page's header — `‹ Sep | October 2026 |
-  Nov ›` — and its arrows are the only thing that differs.
+  doors, activity month by month). Both lead with the day page's header (`‹ Sep | October 2026 |
+  Nov ›`), and its arrows are the only thing that differs.
 - **Day (`#/y/2026/m/10/d/24`)** is the same page as Home, opened on another date. The breadcrumb
   reads `Home / October 2026 / 24` and carries the counters of that day at its right end, with no
   separate count; any day but today adds a **Today** card after them in the accent colour. Links to
@@ -51,7 +51,7 @@ side.
 - **Search** sits in the top bar on every page and opens notes in the sheet. `/` focuses it.
 - **Sign out** is the one button in Settings' header, at the far right, in the alert colour with its
   door icon; the gate then asks for the passphrase. A fresh demo starts at `demo`, and Settings can
-  change it — the old one stops working immediately.
+  change it, and the old one stops working immediately.
 
 ## What is deliberately not here
 
