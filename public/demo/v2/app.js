@@ -235,7 +235,19 @@ const SUN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const MOON_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 const THEMES = ['minimal', 'paper', 'journal'];
 const THEME_LABEL = { minimal:'Minimal', paper:'Paper', journal:'Dark Journal' };
-const prefs = { theme:'minimal', mode:'light' };
+// Empty font and accent mean "whatever the theme says": the four themes pair a typeface and
+// an accent each, and an override is a deliberate departure from that pair, not a default.
+const FONTS = [['', 'Theme'], ['grotesk', 'Grotesk'], ['paper', 'Paper serif'], ['system', 'System']];
+const FONT_LABEL = Object.fromEntries(FONTS);
+const ACCENTS = ['#4338ca', '#c26a3d', '#b7791f', '#0ea5b7', '#c2578a', '#14a37f'];
+const CHIPS = [
+  ['pills', 'Pills'], ['underline', 'Underline'], ['colorline', 'Colour line'],
+  ['dotchips', 'Dot chips'], ['segmented', 'Segmented'], ['dropdown', 'Dropdown'],
+];
+const CHIP_LABEL = Object.fromEntries(CHIPS);
+const DEFAULT_CATS = Object.fromEntries(CATS.map(c => [c.id, c.color]));
+
+const prefs = { theme:'minimal', mode:'light', font:'', accent:'', cats:{}, chips:'pills' };
 // A first visit follows the system: the diary is read at night as often as by day, and both
 // modes exist for it. A saved choice always wins, so this only decides the first paint.
 let prefsSaved = false;
@@ -243,13 +255,45 @@ try {
   const raw = localStorage.getItem(PREF);
   if (raw) { Object.assign(prefs, JSON.parse(raw)); prefsSaved = true; }
 } catch (_) {}
+// The setup page wrote its own key before this page could customise anything. Read it once,
+// so a choice made there is not thrown away, then write everything to this page's key and
+// never look at the old one again: one store, one place a setting can disagree with itself.
+let importedSetup = false;
+if (!prefsSaved) {
+  try {
+    const old = JSON.parse(localStorage.getItem('diary-setup-v1'));
+    if (old) {
+      if (THEMES.includes(old.theme)) prefs.theme = old.theme;
+      if (old.mode === 'light' || old.mode === 'dark') prefs.mode = old.mode;
+      if (FONT_LABEL[old.font]) prefs.font = old.font;
+      if (ACCENTS.includes(old.accent)) prefs.accent = old.accent;
+      if (old.cats && typeof old.cats === 'object') prefs.cats = { ...old.cats };
+      if (CHIP_LABEL[old.chips]) prefs.chips = old.chips;
+      importedSetup = true;
+      prefsSaved = true;
+    }
+  } catch (_) {}
+}
 if (!THEMES.includes(prefs.theme)) prefs.theme = 'minimal';
 if (!['light', 'dark'].includes(prefs.mode)) prefs.mode = 'light';
 if (!prefsSaved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) prefs.mode = 'dark';
+if (!FONT_LABEL[prefs.font]) prefs.font = '';
+if (prefs.accent && !ACCENTS.includes(prefs.accent)) prefs.accent = '';
+if (!CHIP_LABEL[prefs.chips]) prefs.chips = 'pills';
+if (!prefs.cats || typeof prefs.cats !== 'object') prefs.cats = {};
 
 function applyPrefs() {
   document.body.dataset.theme = prefs.theme;
   document.body.dataset.mode = prefs.mode;
+  // Both are attributes the stylesheet keys on, so clearing one means removing it rather
+  // than setting an empty value the selectors would never match.
+  if (prefs.font) document.body.dataset.font = prefs.font;
+  else delete document.body.dataset.font;
+  if (prefs.accent) document.body.style.setProperty('--accent', prefs.accent);
+  else document.body.style.removeProperty('--accent');
+  // Category colour is read from this array wherever a dot or chip is painted, so an
+  // override is a mutation here, not a rule in the stylesheet.
+  CATS.forEach(c => { c.color = prefs.cats[c.id] || DEFAULT_CATS[c.id]; });
   const mb = $('#mode-btn');
   if (mb) {
     mb.innerHTML = prefs.mode === 'light' ? MOON_ICON : SUN_ICON;
@@ -257,8 +301,9 @@ function applyPrefs() {
   }
 }
 const savePrefs = () => { try { localStorage.setItem(PREF, JSON.stringify(prefs)); } catch (_) {} };
+if (importedSetup) savePrefs();
 
-const ui = { tab:'all', openNote:null, compose:false, moveMenu:false, moveConfirm:null, openRaw:new Set(), dueOpen:false, addMsg:'' };
+const ui = { tab:'all', previewTab:'all', openNote:null, compose:false, moveMenu:false, moveConfirm:null, openRaw:new Set(), dueOpen:false, addMsg:'' };
 
 /* ---------- Search (same tolerant matcher as the app) ---------- */
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -361,6 +406,7 @@ function route() {
     if (p[1] && p[2]) return { view:'month', y:+p[1], m:+p[2] };
     return { view:'year', y: +p[1] || now.getFullYear() };
   }
+  if (p[0] === 'settings' && p[1] === 'look') return { view:'look' };
   if (p[0] === 'settings') return { view:'settings' };
   return { view:'home' };
 }
@@ -589,9 +635,38 @@ function ledgerHTML(list, k) {
     return `<div class="lgrp"><i class="gdot" style="background:${c.color}"></i>${c.label} <span class="n">(${rows.length})</span></div><div class="ledg">${rows.map(it => ledgerRowHTML(it, k)).join('')}</div>`;
   }).join('');
 }
+// One renderer, six shapes. The Look page samples exactly this code, so what it shows is
+// what the day gets — a picture of the tabs cannot drift from the tabs themselves.
+const chipColor = id => (id !== 'all' && CAT[id] ? CAT[id].color : 'var(--accent)');
+function tabsHTML(defs, sel, opts = {}) {
+  const shape = opts.chips ?? prefs.chips;
+  const action = opts.preview ? 'preview-tab' : 'tab';
+  const attr = d => `data-action="${action}" data-v="${d.id}"`;
+  const role = opts.preview ? '' : ' role="tablist"';
+  const tab = opts.preview ? '' : ' role="tab"';
+  if (shape === 'underline' || shape === 'colorline') {
+    const cls = shape === 'colorline' ? 'utabs colorful' : 'utabs';
+    return `<div class="${cls}"${role}>` + defs.map(d =>
+      `<button type="button" ${attr(d)}${tab} aria-selected="${sel === d.id}"${shape === 'colorline' ? ` style="--c:${chipColor(d.id)}"` : ''}>${d.label}<sup>${d.n}</sup></button>`).join('') + '</div>';
+  }
+  if (shape === 'dotchips') {
+    return `<div class="ctabs"${role}>` + defs.map(d =>
+      `<button type="button" ${attr(d)}${tab} aria-selected="${sel === d.id}" style="--c:${chipColor(d.id)}"><i></i>${d.label}<em>${d.n}</em></button>`).join('') + '</div>';
+  }
+  if (shape === 'segmented') {
+    return `<div class="segbar"${role}>` + defs.map(d =>
+      `<button type="button" ${attr(d)}${tab} aria-selected="${sel === d.id}">${d.label}<small> ${d.n}</small></button>`).join('') + '</div>';
+  }
+  if (shape === 'dropdown') {
+    const id = opts.preview ? 'preview-tab-sel' : 'tab-sel';
+    return `<div class="dday"><select id="${id}" aria-label="Filter the day by category">` +
+      defs.map(d => `<option value="${d.id}"${sel === d.id ? ' selected' : ''}>${d.label} · ${d.n}</option>`).join('') + '</select></div>';
+  }
+  return `<div class="tabs tabs-inline"${role}>` + defs.map(d =>
+    `<button class="tab" ${attr(d)}${tab} aria-selected="${sel === d.id}">${d.label}<small>${d.n}</small></button>`).join('') + '</div>';
+}
 function dayTabsHTML(defs) {
-  return `<div class="tabs tabs-inline" role="tablist">` + defs.map(t =>
-    `<button class="tab" role="tab" data-action="tab" data-v="${t.id}" aria-selected="${ui.tab === t.id}">${t.label}<small>${t.n}</small></button>`).join('') + '</div>';
+  return tabsHTML(defs, ui.tab);
 }
 
 /* ---------- Home (v2): the day's entries first, the month beside them ---------- */
@@ -999,14 +1074,12 @@ function viewSettings() {
   <section class="hero sethead">
     <div>
       <span class="kicker">Settings</span><h1>Preferences</h1>
-      <p class="muted" style="margin:0">Theme, how the month is drawn, the passphrase, and the account this diary belongs to.</p>
+      <p class="muted" style="margin:0">How the diary looks, how the month is drawn, the passphrase, and the account it belongs to.</p>
     </div>
   </section>
   <section class="card">
-    <div class="setrow"><div><span class="lab">Theme</span><span class="sub">Minimal, Paper, Dark Journal</span></div>
-      <div class="seg">${THEMES.map(t => `<button data-action="theme-set" data-v="${t}" aria-pressed="${prefs.theme === t}">${THEME_LABEL[t]}</button>`).join('')}</div></div>
-    <div class="setrow"><div><span class="lab">Mode</span><span class="sub">Light or dark</span></div>
-      <div class="seg"><button data-action="mode-set" data-v="light" aria-pressed="${prefs.mode === 'light'}">Light</button><button data-action="mode-set" data-v="dark" aria-pressed="${prefs.mode === 'dark'}">Dark</button></div></div>
+    <div class="setrow"><div><span class="lab">Look</span><span class="sub">${lookSummary()}</span></div>
+      <a class="microbtn" href="#/settings/look">More customization →</a></div>
     <div class="setrow"><div><span class="lab">Month heatmap</span><span class="sub">Both shapes are here; this picks the default</span></div>
       <div class="seg"><button data-action="heatmap" data-v="weeks" aria-pressed="${state.heatmap === 'weeks'}">Weeks table</button><button data-action="heatmap" data-v="grid" aria-pressed="${state.heatmap === 'grid'}">Calendar grid</button></div></div>
     <div class="setrow"><div><span class="lab">Week starts</span><span class="sub">Applied to both month views</span></div>
@@ -1032,6 +1105,63 @@ function viewSettings() {
       </div>
     </form>
     <p class="note">Six characters or more. The old one stops working the moment you save, and the diary asks for the new one next time it locks.</p>
+  </section>`;
+}
+
+// The one line Settings shows for everything the Look page holds. The font name is the one
+// in effect, not the stored override: "Theme" on its own would tell you nothing.
+const themeFont = () => (prefs.theme === 'paper' ? 'paper' : 'grotesk');
+function lookSummary() {
+  return `${THEME_LABEL[prefs.theme]} · ${prefs.mode === 'light' ? 'Light' : 'Dark'} · ${FONT_LABEL[prefs.font || themeFont()]} · ${CHIP_LABEL[prefs.chips]}`;
+}
+
+// The Look page. It owns every visual choice, so Settings can stay a list of facts and a
+// way back; the day's tab shape is sampled here with the renderer the day itself uses.
+const LOOK_SAMPLE = [
+  { id:'all', label:'All', n:7 },
+  { id:'learning', label:'Learning', n:3 },
+  { id:'work', label:'Work', n:2 },
+  { id:'life', label:'Life', n:1 },
+];
+function viewLook() {
+  return `
+  <section class="hero sethead">
+    <div>
+      <span class="kicker">Look</span><h1>Appearance</h1>
+      <p class="muted" style="margin:0">Theme, type, colour, and the shape of the day's filters. Every change lands on the whole diary as you make it.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">Theme and type</span></div>
+    <div class="setrow"><div><span class="lab">Theme</span><span class="sub">Each one pairs a typeface with an accent</span></div>
+      <div class="seg">${THEMES.map(t => `<button data-action="theme-set" data-v="${t}" aria-pressed="${prefs.theme === t}">${THEME_LABEL[t]}</button>`).join('')}</div></div>
+    <div class="setrow"><div><span class="lab">Mode</span><span class="sub">Light or dark, for every theme</span></div>
+      <div class="seg"><button data-action="mode-set" data-v="light" aria-pressed="${prefs.mode === 'light'}">Light</button><button data-action="mode-set" data-v="dark" aria-pressed="${prefs.mode === 'dark'}">Dark</button></div></div>
+    <div class="setrow"><div><span class="lab">Font</span><span class="sub">Theme default unless you pick one</span></div>
+      <div class="seg">${FONTS.map(([v, label]) => `<button data-action="look-font" data-v="${v}" aria-pressed="${prefs.font === v}">${label}</button>`).join('')}</div></div>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">Colour</span></div>
+    <div class="setrow"><div><span class="lab">Accent</span><span class="sub">Buttons, links, charts and the heatmap</span></div>
+      <div class="accentrow">
+        <button class="autoacc" data-action="look-accent" data-v="" aria-pressed="${!prefs.accent}">Theme</button>
+        ${ACCENTS.map(a => `<button class="sw" data-action="look-accent" data-v="${a}" aria-pressed="${prefs.accent === a}" aria-label="Accent ${a}" title="${a}"><span style="background:${a}"></span></button>`).join('')}
+      </div></div>
+    <div class="cathead"><span class="lab">Category colours</span><span class="sub">One dot per category, wherever it appears</span></div>
+    <div class="catgrid">${CATS.map(c => `
+      <label class="catrow"><i style="background:${c.color}"></i><span>${c.label}</span>
+        <input type="color" data-cat="${c.id}" value="${prefs.cats[c.id] || DEFAULT_CATS[c.id]}" aria-label="${c.label} colour" /></label>`).join('')}</div>
+    <button class="lookreset" data-action="look-reset">Reset the whole look to the theme defaults</button>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">Category filters</span></div>
+    <h2>How the day's tabs are drawn</h2>
+    <p class="muted" style="margin:0 0 2px;font-size:.84rem">Six shapes, one job. The sample is live — click a category in it.</p>
+    <div class="tabpreview" id="tabpreview">${tabsHTML(LOOK_SAMPLE, ui.previewTab, { chips: prefs.chips, preview: true })}</div>
+    <div class="chipset">${CHIPS.map(([v, label]) => `<button class="chipopt" data-action="look-chips" data-v="${v}" aria-pressed="${prefs.chips === v}">${label}</button>`).join('')}</div>
   </section>`;
 }
 
@@ -1095,6 +1225,7 @@ function renderCrumbs(r) {
   if (r.view === 'home') trail = `<span class="crumbhome" title="Home">${HOME_CRUMB}</span>`;
   if (r.view === 'year') trail += `<span class="sep">/</span><a href="#/dashboard">Dashboard</a><span class="sep">/</span><span aria-current="page">${r.y}</span>`;
   if (r.view === 'settings') trail += '<span class="sep">/</span><span aria-current="page">Settings</span>';
+  if (r.view === 'look') trail += '<span class="sep">/</span><a href="#/settings">Settings</a><span class="sep">/</span><span aria-current="page">Look</span>';
   if (r.view === 'month' || r.view === 'day') trail += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
   if (r.view === 'day') trail += `<span class="sep">/</span><span aria-current="page">${r.d}</span>`;
   const isDay = r.view === 'home' || r.view === 'day';
@@ -1118,6 +1249,7 @@ function renderCrumbs(r) {
   tools.innerHTML = isDay
     ? `${statCardsHTML(k)}<button class="newbtn" data-action="compose" title="New note (n)" aria-label="New note">${PLUS_ICON}<span>New note</span></button>`
     : r.view === 'settings' ? SIGNOUT_BTN
+    : r.view === 'look' ? '<a class="microbtn" href="#/settings">Done →</a>'
     : back;
 }
 function render() {
@@ -1138,6 +1270,7 @@ function render() {
   appEl.innerHTML =
     r.view === 'year' ? statsPage(r.y) :
     r.view === 'settings' ? viewSettings() :
+    r.view === 'look' ? viewLook() :
     r.view === 'month' ? statsPage(r.y, r.m) :
     r.view === 'day' ? dayPage(r.y, r.m, r.d, false) :
     dayPage(t.getFullYear(), t.getMonth() + 1, t.getDate(), true);
@@ -1194,6 +1327,16 @@ document.addEventListener('click', e => {
   if (a === 'mode-toggle') { prefs.mode = prefs.mode === 'light' ? 'dark' : 'light'; applyPrefs(); savePrefs(); }
   else if (a === 'mode-set') { prefs.mode = v; applyPrefs(); savePrefs(); render(); }
   else if (a === 'theme-set') { prefs.theme = v; applyPrefs(); savePrefs(); render(); }
+  else if (a === 'look-font') { prefs.font = v; applyPrefs(); savePrefs(); render(); }
+  else if (a === 'look-accent') { prefs.accent = v; applyPrefs(); savePrefs(); render(); }
+  else if (a === 'look-chips') { prefs.chips = v; savePrefs(); render(); }
+  else if (a === 'look-reset') {
+    prefs.font = ''; prefs.accent = ''; prefs.cats = {}; prefs.chips = 'pills';
+    ui.previewTab = 'all'; applyPrefs(); savePrefs(); render();
+    toast('Look reset to the theme defaults.');
+  }
+  // The sample on the Look page is the day's own renderer, so it answers clicks too.
+  else if (a === 'preview-tab') { ui.previewTab = v; render(); }
   else if (a === 'tab') { ui.tab = v; render(); }
   else if (a === 'compose') { ui.compose = true; ui.openNote = null; ui.moveMenu = false; ui.addMsg = ''; render(); }
   else if (a === 'close-compose') { ui.compose = false; ui.addMsg = ''; render(); }
@@ -1213,7 +1356,19 @@ document.addEventListener('click', e => {
   else if (a === 'reset') { state.days = seed(); save(); ui.addMsg = 'Entries reset.'; go('#/'); }
 });
 document.addEventListener('input', e => {
-  if (e.target && e.target.id === 'search') { searchActive = -1; renderSearchPop(); }
+  if (e.target && e.target.id === 'search') { searchActive = -1; renderSearchPop(); return; }
+  // A colour picker fires as it is dragged, so this path deliberately does not re-render:
+  // rebuilding the page would close the picker mid-drag. The dot beside it and the sample
+  // tabs are patched in place instead, and the next render paints everything else.
+  const id = e.target && e.target.dataset ? e.target.dataset.cat : null;
+  if (id) {
+    prefs.cats[id] = e.target.value;
+    applyPrefs(); savePrefs();
+    const dot = e.target.previousElementSibling;
+    if (dot) dot.style.background = e.target.value;
+    const sample = $('#tabpreview');
+    if (sample) sample.innerHTML = tabsHTML(LOOK_SAMPLE, ui.previewTab, { chips: prefs.chips, preview: true });
+  }
 });
 document.addEventListener('keydown', e => {
   const inp = e.target && e.target.id === 'search' ? e.target : null;
@@ -1255,6 +1410,9 @@ document.addEventListener('keydown', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'set-week') { state.weekStart = e.target.value; save(); render(); }
   if (e.target.id === 'set-tz') { state.tz = e.target.value; save(); }
+  // The dropdown shape is the one category filter that reports a change, not a click.
+  if (e.target.id === 'tab-sel') { ui.tab = e.target.value; render(); }
+  if (e.target.id === 'preview-tab-sel') { ui.previewTab = e.target.value; render(); }
 });
 document.addEventListener('submit', e => {
   if (e.target && e.target.id === 'pass-form') { e.preventDefault(); changePass(); }

@@ -21,6 +21,11 @@
   /* Fonts. Minimal and Dark Journal use Grotesk; Paper uses its own pair. Minimal font is unchanged. */
   [data-theme="minimal"], [data-theme="journal"] { --head:"Space Grotesk", Arial, sans-serif; --font:"Instrument Sans", Arial, sans-serif; }
   [data-theme="paper"] { --head:"Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; --font:"Hanken Grotesk", "Helvetica Neue", Arial, sans-serif; }
+  /* The Look page's font choice overrides the pair the theme picked. It is an attribute on
+     <body>, so removing the attribute is what returns the theme's own face. */
+  [data-font="grotesk"] { --head:"Space Grotesk", Arial, sans-serif; --font:"Instrument Sans", Arial, sans-serif; }
+  [data-font="paper"] { --head:"Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; --font:"Hanken Grotesk", "Helvetica Neue", Arial, sans-serif; }
+  [data-font="system"] { --head:system-ui, sans-serif; --font:system-ui, sans-serif; }
   /* Setup-page font choice overrides the theme default (applied only when set). */
   [data-font="grotesk"] { --head:"Space Grotesk", Arial, sans-serif; --font:"Instrument Sans", Arial, sans-serif; }
   [data-font="paper"] { --head:"Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; --font:"Hanken Grotesk", "Helvetica Neue", Arial, sans-serif; }
@@ -330,9 +335,18 @@
     /* Thumb-sized controls. The note sheet's own controls are declared later in this file, so
        their phone sizes live in the final 600px block: a rule here of equal specificity loses
        to a base rule that comes after it, and the buttons stayed desktop-sized on a phone. */
-    .tab { min-height:34px; padding:6px 12px; }
-    .utabs button { padding:9px 4px; }
-    .seg button, .segbar button, .ctabs button { min-height:32px; }
+    /* Every shape the day's filter can take is a thumb target on a phone, including the four
+       the Look page made reachable. The segmented bar wraps rather than scrolling: a chip
+       past the right edge with nothing to say so is a chip you never find. */
+    .tab { min-height:44px; padding:6px 12px; }
+    .utabs button { min-height:44px; padding:9px 4px; }
+    .segbar button, .ctabs button { min-height:44px; }
+    .segbar { flex-wrap:wrap; overflow-x:visible; }
+    /* A wrapped row that keeps its right alignment starts its second line somewhere in the
+       middle of the card. Every shape starts from the left on a phone, like the pills do. */
+    .utabs, .ctabs, .segbar { justify-content:flex-start; margin-left:0; }
+    .dday select { min-height:44px; }
+    .seg button { min-height:32px; }
     .dangerbtn { min-height:40px; }
     .microbtn { padding:6px 10px; }
     /* Reading is the phone's main job: 15px body is a desk size. */
@@ -643,6 +657,47 @@
   .setrow:first-of-type { border-top:0; }
   .setrow .lab { font-weight:700; display:block; }
   .setrow .sub { font-size:.78rem; color:var(--muted); }
+
+  /* Look page. The swatches, the ten category dots and the tab-shape sample all sit in the
+     same rows as the rest of Settings, so they inherit its rhythm instead of inventing one. */
+  .accentrow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .autoacc { background:var(--bg); border:1.5px solid var(--line); color:var(--ink); border-radius:999px;
+    padding:0 13px; height:34px; font-size:.82rem; cursor:pointer; }
+  .autoacc[aria-pressed="true"] { background:var(--ink); border-color:var(--ink); color:var(--card); font-weight:700; }
+  .autoacc:hover { border-color:var(--accent); }
+  .sw { width:34px; height:34px; padding:2px; border-radius:50%; border:2px solid transparent; background:none; cursor:pointer; }
+  .sw span { display:block; width:100%; height:100%; border-radius:50%; box-shadow:inset 0 0 0 1px rgba(0,0,0,.16); }
+  .sw[aria-pressed="true"] { border-color:var(--ink); }
+  .cathead { display:flex; flex-direction:column; gap:2px; padding:14px 0 4px; margin-top:8px; border-top:1px solid var(--line); }
+  .cathead .lab { font-weight:700; }
+  .cathead .sub { font-size:.78rem; color:var(--muted); }
+  /* Dot, name, picker, side by side: with the picker pinned to the far edge of a 500px
+     column the row read as two unrelated things on one line. */
+  .catgrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px 20px; margin:10px 0 2px; }
+  @media (max-width:900px) { .catgrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  .catrow { display:grid; grid-template-columns:10px 8.5em 36px; align-items:center; gap:9px; font-size:.88rem; cursor:pointer; }
+  .catrow i { width:10px; height:10px; border-radius:50%; }
+  .catrow span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .catrow input[type="color"] { width:36px; height:28px; border:0; border-radius:9px; background:none; padding:0; cursor:pointer; flex:0 0 auto; }
+  .catrow input[type="color"]::-webkit-color-swatch-wrapper { padding:0; }
+  .catrow input[type="color"]::-webkit-color-swatch { border:1.5px solid var(--line); border-radius:9px; }
+  .catrow input[type="color"]::-moz-color-swatch { border:1.5px solid var(--line); border-radius:9px; }
+  .lookreset { margin-top:16px; width:max-content; max-width:100%; background:none; border:1.5px dashed var(--line); color:var(--muted);
+    border-radius:10px; padding:8px 12px; font-size:.84rem; cursor:pointer; }
+  .lookreset:hover { border-color:var(--accent); color:var(--accent); }
+  /* The sample keeps the day's own styles and only loses the day's right-alignment. */
+  .tabpreview { border:1.5px dashed var(--line); border-radius:12px; padding:14px 12px; margin:12px 0 14px; background:var(--bg); }
+  .tabpreview .tabs, .tabpreview .utabs, .tabpreview .ctabs, .tabpreview .segbar, .tabpreview .dday { margin:0; justify-content:flex-start; }
+  /* The segmented bar grows its buttons to fill whatever holds it, which in the day's header
+     is right and in this sample is a stretched control. Hug the content instead. */
+  .tabpreview .segbar { width:max-content; max-width:100%; }
+  .tabpreview .dday select { max-width:100%; }
+  .chipset { display:flex; flex-wrap:wrap; gap:8px; }
+  .chipopt { background:var(--bg); border:1.5px solid var(--line); color:var(--ink); border-radius:999px;
+    padding:6px 13px; font-size:.84rem; cursor:pointer; min-height:34px; }
+  .chipopt:hover { border-color:var(--accent); }
+  .chipopt[aria-pressed="true"] { background:var(--ink); border-color:var(--ink); color:var(--card); font-weight:700; }
+
   @media (max-width:600px) {
     .wkc { min-height:38px; padding:2px 4px; font-size:.68rem; }
     .weeks { border-spacing:2px; }
@@ -658,6 +713,26 @@
     .ltag { padding:3px 9px; }
     .lmove { padding:8px 6px; }
     .mmenu { top:70px; }
+    /* The Look page's controls are the ones a thumb hits: swatches, colour pickers and the
+       six shapes, all at the 44px floor. The category grid goes to one column so the label
+       and its picker stay on one line. */
+    .sw { width:44px; height:44px; }
+    /* Seven controls do not fit one line at 44px, so the accent row becomes six columns with
+       the Theme pill across the top: two full lines instead of five and an orphan. */
+    .accentrow { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
+    .autoacc { grid-column:1 / -1; width:100%; height:44px; }
+    .sw { justify-self:center; }
+    .catgrid { grid-template-columns:1fr; }
+    .catrow { grid-template-columns:10px 8.5em 44px; min-height:44px; }
+    .catrow input[type="color"] { width:44px; height:36px; }
+    .chipopt { min-height:44px; }
+    .tabpreview { padding:12px 10px; }
+    /* A row that could not hold its control wrapped it to a second line, left-aligned, while
+       a row that could pushed it right. Stacked, every row on Settings and Look reads the
+       same way: what it is, then what you can do about it. */
+    .setrow { flex-direction:column; align-items:flex-start; justify-content:flex-start; gap:8px; }
+    .setrow .seg { max-width:100%; }
+    .setrow .seg button { min-height:44px; }
   }
   /* One ring for every control the demo draws: the browser default disappears on the dark
      bar and on the accent fill. */
@@ -685,8 +760,19 @@
     if (p.mode !== 'light' && p.mode !== 'dark') {
       p.mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
+    // The old setup key is read here too, or a first visit after the import would paint the
+    // theme's accent and face for a frame before app.js applied the saved ones.
+    if (!localStorage.getItem('diary-prefs-v2')) {
+      try {
+        var old = JSON.parse(localStorage.getItem('diary-setup-v1') || '{}') || {};
+        if (!p.font && old.font) p.font = old.font;
+        if (!p.accent && old.accent) p.accent = old.accent;
+      } catch (e) {}
+    }
     document.body.dataset.theme = p.theme;
     document.body.dataset.mode = p.mode;
+    if (p.font) document.body.dataset.font = p.font;
+    if (p.accent) document.body.style.setProperty('--accent', p.accent);
   })();
 </script>
 <header class="top"><div class="top-inner">
