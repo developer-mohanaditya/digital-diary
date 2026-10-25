@@ -165,7 +165,10 @@
   .heat { display:grid; gap:4px; max-width:100%; overflow:hidden; }
   .heat .hrow { display:grid; grid-template-columns:34px repeat(31, minmax(0,1fr)); gap:3px; align-items:center; }
   .hm { font-size:.7rem; color:var(--muted); }
-  .hc { width:100%; aspect-ratio:1; border-radius:2px; background:var(--line); outline:1px solid color-mix(in srgb, var(--ink) 8%, transparent); outline-offset:-1px; }
+  .hc { width:100%; aspect-ratio:1; border-radius:2px; background:var(--line); outline:1px solid color-mix(in srgb, var(--ink) 8%, transparent); outline-offset:-1px;
+    display:grid; place-items:center; }
+  /* The cross on an empty day: enough to read, not enough to compete with the shading. */
+  .xmark { font-style:normal; font-size:.7rem; line-height:1; color:var(--muted); opacity:.45; }
   .hc.l1 { background:color-mix(in srgb, var(--accent) 30%, var(--card)); }
   .hc.l2 { background:color-mix(in srgb, var(--accent) 55%, var(--card)); }
   .hc.l3 { background:color-mix(in srgb, var(--accent) 80%, var(--card)); }

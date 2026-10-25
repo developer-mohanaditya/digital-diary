@@ -412,7 +412,10 @@ function yearHeat(y) {
     for (let d = 1; d <= 31; d++) {
       if (d > dim(y, m)) { h += '<span class="hc blank"></span>'; continue; }
       const k = `${y}-${pad(m)}-${pad(d)}`, n = items(k).length, future = k > TODAY;
-      h += `<a class="hc l${levelOf(n)}${future ? ' na' : ''}" href="#/y/${y}/m/${m}/d/${d}" title="${k}: ${n} items"></a>`;
+      // A day that has passed with nothing in it carries a faint cross, so an empty day
+      // reads as empty rather than as unshaded.
+      const mark = !n && !future ? '<i class="xmark" aria-hidden="true">×</i>' : '';
+      h += `<a class="hc l${levelOf(n)}${future ? ' na' : ''}" href="#/y/${y}/m/${m}/d/${d}" title="${k}: ${n ? `${n} ${n === 1 ? 'item' : 'items'}` : 'no items'}">${mark}</a>`;
     }
     h += '</div>';
   }
@@ -443,9 +446,12 @@ function monthWeeks(y, m) {
     let tot = 0, tds = '';
     for (const d of cells.slice(w * 7, w * 7 + 7)) {
       if (!d) { tds += '<td><span class="wkc blank"></span></td>'; continue; }
-      const k = `${y}-${pad(m)}-${pad(d)}`, n = items(k).length;
+      const k = `${y}-${pad(m)}-${pad(d)}`, n = items(k).length, future = k > TODAY;
       tot += n;
-      tds += `<td><a class="wkc l${levelOf(n)}${k === TODAY ? ' today' : ''}" href="#/y/${y}/m/${m}/d/${d}" title="${k}: ${n} items"><b>${d}</b><i>${n || ''}</i></a></td>`;
+      // Same reading as the year heat: a cross where the count would be, on a day that
+      // has passed without anything written. Future days stay blank.
+      const count = n ? `<i>${n}</i>` : future ? '<i></i>' : '<i class="xmark" aria-hidden="true">×</i>';
+      tds += `<td><a class="wkc l${levelOf(n)}${k === TODAY ? ' today' : ''}" href="#/y/${y}/m/${m}/d/${d}" title="${k}: ${n ? `${n} ${n === 1 ? 'item' : 'items'}` : 'no items'}"><b>${d}</b>${count}</a></td>`;
     }
     rows += `<tr>${tds}<td class="tot"><span class="wtot">${tot}</span></td></tr>`;
   }
@@ -828,7 +834,7 @@ function statsPage(y, m) {
   const heat = isYear
     ? `<section class="card"><span class="kicker">Heatmap</span><h2>The year in weeks</h2>
         ${yearHeat(y)}
-        <p class="note">One square per day of ${y}, shaded by how many items it holds.</p></section>`
+        <p class="note">One square per day of ${y}, shaded by how many items it holds; a cross marks a day that has passed with nothing written.</p></section>`
     : `<section class="card">
         <div class="navrow act-head">
           <div class="act-title"><span class="kicker">Heatmap</span><h2 style="margin:2px 0 0">${MONTHS[m-1]} in weeks</h2></div>

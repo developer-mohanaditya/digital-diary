@@ -39,7 +39,9 @@ side.
   (heatmap in **both** shapes, switchable and remembered, activity day by day, a calendar to pick a
   day, the deadlines); the dashboard scopes it to the whole year (the year in weeks, months as
   doors, activity month by month). Both lead with the day page's header (`‹ Sep | October 2026 |
-  Nov ›`), and its arrows are the only thing that differs.
+  Nov ›`), and its arrows are the only thing that differs. A day that has passed with nothing
+  written carries a faint cross in its square, in the year and in the month's weeks table; days
+  still to come stay blank.
 - **Day (`#/y/2026/m/10/d/24`)** is the same page as Home, opened on another date. The breadcrumb
   reads `Home / October 2026 / 24` and carries the counters of that day at its right end, with no
   separate count; any day but today adds a **Today** card after them in the accent colour. Links to
