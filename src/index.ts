@@ -1,5 +1,5 @@
 import {
-  handleUpdate, localDay, type TelegramUpdate, type Store, type Notifier, type RepairResult,
+  handleUpdate, localDay, type TelegramUpdate, type Store, type Notifier, type RepairResult, type ThoughtInput,
 } from './handler';
 import type { Category, Mode } from './parse';
 import { MAX_INPUT_CHARS, sameWords } from './refine';
@@ -49,10 +49,19 @@ function supabaseStore(env: Env): Store {
       return rows.length ? { inserted: true, id: rows[0].id } : { inserted: false };
     },
     async insertThought(t) {
-      await check(await fetch(`${base}/thoughts`, {
+      const write = (body: ThoughtInput) => fetch(`${base}/thoughts`, {
         method: 'POST', headers: { ...headers, Prefer: 'return=minimal' },
-        body: JSON.stringify(t),
-      }));
+        body: JSON.stringify(body),
+      });
+      let res = await write(t);
+      // The usage columns arrive with 0006, and a deploy can reach production before the
+      // migration does. The note matters more than what it cost, so a 400 retries without
+      // them — the fallback the web paths already take.
+      if (res.status === 400) {
+        const { tokens_in: _in, tokens_out: _out, cleanup_model: _model, ...bare } = t;
+        res = await write(bare);
+      }
+      await check(res);
     },
     async getTimeZone() {
       const res = await check(await fetch(`${base}/settings?key=eq.timezone&select=value`, { headers }));
