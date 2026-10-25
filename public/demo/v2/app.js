@@ -209,6 +209,8 @@ try {
   state = { signedIn: true, days: seed(), heatmap: 'weeks', weekStart: 'mon', tz: 'Europe/Paris' };
 }
 if (state.signedIn === undefined) state.signedIn = true;
+// The demo keeps its own passphrase in this browser; the real gate is Supabase.
+if (typeof state.pass !== 'string' || !state.pass) state.pass = 'demo';
 if (!state.heatmap) state.heatmap = 'weeks';
 if (!state.weekStart) state.weekStart = 'mon';
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (_) {} };
@@ -242,14 +244,8 @@ function applyPrefs() {
     mb.innerHTML = prefs.mode === 'light' ? MOON_ICON : SUN_ICON;
     mb.setAttribute('aria-label', prefs.mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
   }
-  document.querySelectorAll('[data-theme-choice]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.themeChoice === prefs.theme)));
 }
 const savePrefs = () => { try { localStorage.setItem(PREF, JSON.stringify(prefs)); } catch (_) {} };
-const themeMenu = open => {
-  const m = $('#theme-menu'), b = $('#theme-btn');
-  if (m) m.hidden = !open;
-  if (b) b.setAttribute('aria-expanded', String(open));
-};
 
 const ui = { tab:'all', openNote:null, compose:false, moveMenu:false, moveConfirm:null, openRaw:new Set(), dueOpen:false, addMsg:'' };
 
@@ -350,7 +346,9 @@ function route() {
   }
   if (p[0] === 'dashboard') {
     const now = parse(TODAY);
-    return { view:'dashboard', y:+p[1] || now.getFullYear(), m:+p[2] || now.getMonth()+1 };
+    // A month is its own page now, so older /dashboard/2026/10 links land there.
+    if (p[1] && p[2]) return { view:'month', y:+p[1], m:+p[2] };
+    return { view:'year', y: +p[1] || now.getFullYear() };
   }
   if (p[0] === 'settings') return { view:'settings' };
   return { view:'home' };
@@ -769,42 +767,23 @@ function dayPage(y, m, d, home) {
   </div>`;
 }
 
-function viewMonth(y, m) {
-  const list = monthItems(y, m);
-  const counts = {};
-  tallyInto(counts, list);
-  const days = [];
-  for (let d = 1; d <= dim(y, m); d++) days.push(d);
-  const folders = days.map(d => {
-    const kk = `${y}-${pad(m)}-${pad(d)}`, dl = items(kk), future = kk > TODAY;
-    let dot = '';
-    if (dl.length) {
-      const c = {}; tallyInto(c, dl);
-      const dominant = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0];
-      dot = `<i class="dot" style="background:${CAT[dominant].color}"></i>`;
-    }
-    return `<a class="folder${future ? ' off' : ''}" href="#/y/${y}/m/${m}/d/${d}"><strong>${d} ${MONTHS[m-1].slice(0,3)}</strong><span>${dot}${dl.length} items</span></a>`;
-  }).join('');
-  return `
-  <section class="hero"><span class="kicker">${y}</span><h1>${MONTHS[m-1]}</h1>
-    <p class="muted">${list.length} items over ${new Set(list.map(it => it.k)).size} days.</p></section>
-  <section class="grid2" style="margin-top:16px">
-    <div class="card"><span class="kicker">Calendar</span><h2>Pick a day</h2>${monthCalendar(y, m)}</div>
-    <div class="card"><span class="kicker">Mix</span><h2>Categories this month</h2>${donut(counts)}</div>
-  </section>
-  <section class="card"><div class="lhead"><span class="kicker">Ledger</span><a class="link" href="#/dashboard/${y}/${m}">The dashboard for this month →</a></div><h2>Everything this month, by category</h2>${monthLedgerHTML(y, m)}</section>
-  <section class="card"><span class="kicker">Days</span><h2>Folders</h2><div class="folders">${folders}</div></section>`;
+/* ---------- Month and year: one page at two zooms ---------- */
+// The month page and the dashboard are the same page: same blocks, same order, one scoped
+// to a month and one to the whole year it sits in. Only the buckets and the arrows differ.
+function yearItems(y) {
+  const out = [];
+  for (let m = 1; m <= 12; m++) monthItems(y, m).forEach(it => out.push(it));
+  return out;
 }
-function monthLedgerHTML(y, m) {
-  const its = monthItems(y, m);
-  if (!its.length) return '<p class="muted">Nothing here yet.</p>';
-  return CATS.filter(c => its.some(it => it.cat === c.id)).map(c => {
-    const rows = its.filter(it => it.cat === c.id).sort((a, b) => a.k === b.k ? a.time.localeCompare(b.time) : (a.k < b.k ? -1 : 1));
-    return `<div class="lgrp"><i class="gdot" style="background:${c.color}"></i>${c.label} <span class="n">(${rows.length})</span></div><div class="ledg">${rows.map(it => ledgerRowHTML(it, it.k, true)).join('')}</div>`;
-  }).join('');
+function yearBuckets(y) {
+  return MONTHS.map((name, i) => {
+    const counts = {};
+    tallyInto(counts, monthItems(y, i + 1));
+    return { label: name.slice(0, 3), counts };
+  });
 }
+const newestFirst = list => [...list].sort((a, b) => a.k === b.k ? b.time.localeCompare(a.time) : (a.k < b.k ? 1 : -1));
 
-/* ---------- Dashboard ---------- */
 function monthBuckets(y, m) {
   return Array.from({ length: dim(y, m) }, (_, i) => {
     const counts = {};
@@ -812,39 +791,75 @@ function monthBuckets(y, m) {
     return { label: String(i + 1), counts };
   });
 }
-function viewDashboard(y, m) {
-  const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y;
-  const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y;
-  const list = monthItems(y, m);
+
+function statsPage(y, m) {
+  const isYear = !m;
+  const now = parse(TODAY);
+  const list = isYear ? yearItems(y) : monthItems(y, m);
   const counts = {};
   tallyInto(counts, list);
+  const activeDays = new Set(list.map(it => it.k)).size;
   const tokensIn = list.reduce((a, it) => a + it.usage.tin, 0);
   const tokensOut = list.reduce((a, it) => a + it.usage.tout, 0);
   const neurons = list.reduce((a, it) => a + it.usage.neurons, 0);
-  const activeDays = new Set(list.map(it => it.k)).size;
   const openDl = Object.values(state.days).flat().filter(it => it.cat === 'deadline' && !it.done).length;
   const byModel = {};
   list.forEach(it => {
     const mm = (byModel[it.usage.model] = byModel[it.usage.model] || { calls:0, tin:0, tout:0, neurons:0 });
     mm.calls++; mm.tin += it.usage.tin; mm.tout += it.usage.tout; mm.neurons += it.usage.neurons;
   });
-  const folders = MONTHS.map((name, i) => {
-    const n = monthItems(y, i + 1).length;
-    const future = `${y}-${pad(i + 1)}-01` > TODAY;
-    return `<a class="folder${future ? ' off' : ''}" href="#/y/${y}/m/${i + 1}"><strong>${name}</strong><span>${n} items</span></a>`;
-  }).join('');
-  const recent = list.slice(0, 8);
+  const recent = newestFirst(list).slice(0, 8);
+  const scope = isYear ? `${y}` : `${MONTHS[m-1]} ${y}`;
+  const isNow = isYear ? y === now.getFullYear() : (y === now.getFullYear() && m === now.getMonth() + 1);
+  const todayHref = isYear ? `#/dashboard/${now.getFullYear()}` : `#/y/${now.getFullYear()}/m/${now.getMonth() + 1}`;
+  const back = isNow ? '' : ` · <a class="link" href="${todayHref}">Back to this ${isYear ? 'year' : 'month'}</a>`;
+
+  // Previous | the scope, centred | next: the day page's header, at these two sizes.
+  let nav;
+  if (isYear) {
+    nav = `<a class="btn" href="#/dashboard/${y - 1}">‹ ${y - 1}</a>
+      <h1 class="daytitle"><span class="dow">Dashboard</span><span class="dmy">${y}</span></h1>
+      <a class="btn" href="#/dashboard/${y + 1}">${y + 1} ›</a>`;
+  } else {
+    const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y;
+    const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y;
+    nav = `<a class="btn" href="#/y/${py}/m/${pm}">‹ ${MONTHS[pm-1].slice(0, 3)}</a>
+      <h1 class="daytitle"><span class="dow">${y}</span><span class="dmy">${MONTHS[m-1]}</span></h1>
+      <a class="btn" href="#/y/${ny}/m/${nm}">${MONTHS[nm-1].slice(0, 3)} ›</a>`;
+  }
+
+  const heat = isYear
+    ? `<section class="card"><span class="kicker">Heatmap</span><h2>The year in weeks</h2>
+        ${yearHeat(y)}
+        <p class="note">One square per day of ${y}, shaded by how many items it holds.</p></section>`
+    : `<section class="card">
+        <div class="navrow act-head">
+          <div class="act-title"><span class="kicker">Heatmap</span><h2 style="margin:2px 0 0">${MONTHS[m-1]} in weeks</h2></div>
+          <div class="seg">
+            <button data-action="heatmap" data-v="weeks" aria-pressed="${state.heatmap === 'weeks'}">Weeks table</button>
+            <button data-action="heatmap" data-v="grid" aria-pressed="${state.heatmap === 'grid'}">Calendar grid</button>
+          </div>
+        </div>
+        ${state.heatmap === 'weeks' ? monthWeeks(y, m) : monthCalendar(y, m)}
+        <p class="note">Shade is the number of items that day; the right-hand column totals each week. Every day opens.</p></section>`;
+
+  const pick = isYear
+    ? `<div class="card"><span class="kicker">Months</span><h2>Open a month</h2>
+        <div class="folders" style="grid-template-columns:repeat(3,1fr)">${MONTHS.map((name, i) => {
+          const n = monthItems(y, i + 1).length;
+          const future = `${y}-${pad(i + 1)}-01` > TODAY;
+          return `<a class="folder${future ? ' off' : ''}" href="#/y/${y}/m/${i + 1}"><strong>${name}</strong><span>${n} items</span></a>`;
+        }).join('')}</div></div>`
+    : dueCard();
+
+  const recentLink = isYear
+    ? `<a class="link" href="#/y/${y}/m/${now.getFullYear() === y ? now.getMonth() + 1 : 1}">Open a month →</a>`
+    : `<a class="link" href="#/dashboard/${y}">The year →</a>`;
 
   return `
-  <section class="hero">
-    <span class="kicker">Dashboard</span>
-    <h1>${MONTHS[m-1]} ${y}</h1>
-    <p class="muted">The month at a glance, its rhythm, and what the cleanup cost.</p>
-    <div class="act-datenav" style="margin-top:12px">
-      <a class="btn" href="#/dashboard/${py}/${pm}">‹ ${MONTHS[pm-1].slice(0,3)}</a>
-      <a class="btn" href="#/">Today</a>
-      <a class="btn" href="#/dashboard/${ny}/${nm}">${MONTHS[nm-1].slice(0,3)} ›</a>
-    </div>
+  <section class="hero dayhead">
+    <div class="daynav">${nav}</div>
+    <p class="muted" style="margin:10px 0 0">${list.length} ${list.length === 1 ? 'item' : 'items'} over ${activeDays} ${activeDays === 1 ? 'day' : 'days'}${back}</p>
   </section>
 
   <section class="kpis" style="margin-top:16px">
@@ -852,61 +867,49 @@ function viewDashboard(y, m) {
     <div class="kpi"><b>${activeDays}</b><span>active days</span></div>
     <div class="kpi"><b>${Object.keys(counts).length}</b><span>categories</span></div>
     <div class="kpi"><b>${openDl}</b><span>open deadlines</span></div>
-    <div class="kpi"><b>${neurons.toFixed(0)}</b><span>neurons this month</span></div>
+    <div class="kpi"><b>${neurons.toFixed(0)}</b><span>neurons ${isYear ? 'this year' : 'this month'}</span></div>
   </section>
 
-  <section class="card">
-    <div class="navrow act-head">
-      <div class="act-title"><span class="kicker">Heatmap</span><h2 style="margin:2px 0 0">Month in weeks</h2></div>
-      <div class="seg">
-        <button data-action="heatmap" data-v="weeks" aria-pressed="${state.heatmap === 'weeks'}">Weeks table</button>
-        <button data-action="heatmap" data-v="grid" aria-pressed="${state.heatmap === 'grid'}">Calendar grid</button>
-      </div>
-    </div>
-    ${state.heatmap === 'weeks' ? monthWeeks(y, m) : monthCalendar(y, m)}
-    <p class="note">Shade is the number of items that day; the right-hand column totals each week. Every day opens.</p>
-  </section>
+  ${heat}
 
   <section class="grid2">
     <div class="card">
-      <span class="kicker">Activity</span><h2>${MONTHS[m-1]}, day by day</h2>
-      ${stackChart(monthBuckets(y, m), 'Items by day, stacked by category')}
+      <span class="kicker">Activity</span><h2>${isYear ? `${y}, month by month` : `${MONTHS[m-1]}, day by day`}</h2>
+      ${isYear
+        ? stackChart(yearBuckets(y), 'Items by month, stacked by category')
+        : stackChart(monthBuckets(y, m), 'Items by day, stacked by category')}
       <div style="margin-top:14px">${compHTML(counts)}</div>
     </div>
     <div class="card">
-      <span class="kicker">When you write</span><h2>Hour of day · ${MONTHS[m-1]}</h2>
-      ${hourHistogram(list, 'Items by hour of day this month')}
+      <span class="kicker">When you write</span><h2>Hour of day · ${scope}</h2>
+      ${hourHistogram(list, `Items by hour of day, ${scope}`)}
     </div>
   </section>
 
   <section class="grid2">
     <div class="card">
-      <span class="kicker">AI usage</span><h2>${MONTHS[m-1]}, what the cleanup cost</h2>
+      <span class="kicker">AI usage</span><h2>${scope}, what the cleanup cost</h2>
       <div class="bignum">${neurons.toFixed(1)} <span>estimated neurons</span></div>
-      <div class="meter"><span style="width:${Math.min(100, neurons / 1.5)}%"></span></div>
+      <div class="meter"><span style="width:${Math.min(100, neurons / (isYear ? 16 : 1.5))}%"></span></div>
       <p class="note">${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out tokens over ${list.length} notes · ${(neurons / Math.max(1, list.length)).toFixed(2)} per note.</p>
       <table class="models">
         <thead><tr><th>Model</th><th class="num">Notes</th><th class="num">Tokens</th><th class="num">Neurons</th></tr></thead>
         <tbody>${Object.entries(byModel).sort((a, b) => b[1].neurons - a[1].neurons).map(([model, v]) =>
           `<tr><td>${esc(model.replace('@cf/', ''))}</td><td class="num">${v.calls}</td><td class="num">${(v.tin + v.tout).toLocaleString()}</td><td class="num">${v.neurons.toFixed(1)}</td></tr>`).join('')}</tbody>
       </table>
-      <p class="note">Neurons here are estimated from the token counts recorded with each note. Reconciliation against Cloudflare's billed total is a nightly job, not this page.</p>
+      <p class="note">Neurons are estimated from the token counts recorded with each note. Reconciliation against Cloudflare's billed total is a nightly job, not this page.</p>
     </div>
-    <div class="card">
-      <span class="kicker">Calendar</span><h2>${y} at a glance</h2>
-      ${yearHeat(y)}
-      <div class="folders" style="margin-top:14px;grid-template-columns:repeat(3,1fr)">${folders}</div>
-    </div>
+    ${pick}
   </section>
 
   <section class="card">
-    <div class="lhead"><span class="kicker">Recent notes</span><a class="link" href="#/y/${y}/m/${m}">The month view →</a></div>
+    <div class="lhead"><span class="kicker">Recent notes</span>${recentLink}</div>
     <h2>Newest first, with what each cost</h2>
     ${recent.length ? recent.map(it => `<div class="lrow clickable" data-action="open" data-v="${it.k}|${it.id}" tabindex="0" role="button" title="Open note">
-      <span class="ltime">${+it.k.slice(8)} ${it.time}</span>
+      <span class="ltime${isYear ? ' wide' : ''}">${isYear ? fmtShort2y(it.k) : +it.k.slice(8)} ${it.time}</span>
       <span class="ltxt clamp"><i class="dot" style="background:${CAT[it.cat].color}"></i>${esc(plainText(it.text))}</span>
       <span class="cost">${it.usage.neurons} n · ${it.usage.tin + it.usage.tout} tok</span>
-    </div>`).join('') : '<p class="muted">Nothing this month.</p>'}
+    </div>`).join('') : `<p class="muted">Nothing in ${scope} yet.</p>`}
   </section>`;
 }
 
@@ -914,7 +917,7 @@ function viewDashboard(y, m) {
 function viewSettings() {
   return `
   <section class="hero"><span class="kicker">Settings</span><h1>Preferences</h1>
-    <p class="muted">Theme, how the month is drawn, and the account this diary belongs to.</p></section>
+    <p class="muted">Theme, how the month is drawn, the passphrase, and the account this diary belongs to.</p></section>
   <section class="card">
     <div class="setrow"><div><span class="lab">Theme</span><span class="sub">Minimal, Paper, Dark Journal</span></div>
       <div class="seg">${THEMES.map(t => `<button data-action="theme-set" data-v="${t}" aria-pressed="${prefs.theme === t}">${THEME_LABEL[t]}</button>`).join('')}</div></div>
@@ -930,7 +933,52 @@ function viewSettings() {
       <span class="muted" style="font-size:.76rem;font-family:ui-monospace,monospace">9d6eb0f3…b3b2</span></div>
     <div class="setrow"><div><span class="lab">Demo data</span><span class="sub">Sample entries, saved in this browser only</span></div>
       <button class="btn" data-action="reset">Reset the demo</button></div>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.78rem">This demo checks it in the browser</span></div>
+    <h2>Change the passphrase</h2>
+    <form class="passform" id="pass-form" autocomplete="off">
+      <label class="field"><span>Current passphrase</span><input id="pass-cur" type="password" autocomplete="current-password" /></label>
+      <label class="field"><span>New passphrase</span><input id="pass-new" type="password" autocomplete="new-password" /></label>
+      <label class="field"><span>Repeat the new one</span><input id="pass-rep" type="password" autocomplete="new-password" /></label>
+      <div class="passrow">
+        <button class="cbtn" type="submit">Save the new passphrase</button>
+        <span class="pmsg" id="pass-msg" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+    <p class="note">Six characters or more. The old one stops working the moment you save, and the diary asks for the new one next time it locks.</p>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">Session</span></div>
+    <h2>Sign out</h2>
+    <p class="note" style="margin-top:0">Locks the diary on this device until the passphrase is entered again. Nothing is deleted.</p>
+    <button class="dangerbtn" data-action="signout">Sign out of the diary</button>
   </section>`;
+}
+
+// The demo's gate, in the browser only. The rules are the ones the Worker enforces: a wrong
+// current passphrase, a short one, and a mismatch each say which field is at fault.
+function changePass() {
+  const cur = $('#pass-cur'), nw = $('#pass-new'), rp = $('#pass-rep'), msg = $('#pass-msg');
+  if (!cur || !nw || !rp) return;
+  const fail = (text, el) => {
+    [cur, nw, rp].forEach(i => i.removeAttribute('aria-invalid'));
+    el.setAttribute('aria-invalid', 'true');
+    el.focus();
+    if (msg) { msg.textContent = text; msg.className = 'pmsg err'; }
+  };
+  if (cur.value !== state.pass) return fail('That is not the current passphrase.', cur);
+  if (nw.value.length < 6) return fail('Use at least six characters.', nw);
+  if (nw.value !== rp.value) return fail('The two new ones do not match.', rp);
+  if (nw.value === state.pass) return fail('That is the passphrase you already have.', nw);
+  state.pass = nw.value;
+  save();
+  cur.value = ''; nw.value = ''; rp.value = '';
+  [cur, nw, rp].forEach(i => i.removeAttribute('aria-invalid'));
+  if (msg) { msg.textContent = 'Saved. It is the only passphrase that opens this diary now.'; msg.className = 'pmsg ok'; }
+  toast('Passphrase changed.');
 }
 
 /* ---------- Crumbs + render ---------- */
@@ -942,7 +990,7 @@ function renderCrumbs(r) {
   if (r.view === 'home') { c.hidden = true; c.innerHTML = ''; return; }
   c.hidden = false;
   let html = '<a href="#/">Home</a>';
-  if (r.view === 'dashboard') html += '<span class="sep">/</span><span>Dashboard</span>';
+  if (r.view === 'year') html += `<span class="sep">/</span><a href="#/dashboard">Dashboard</a><span class="sep">/</span><span>${r.y}</span>`;
   if (r.view === 'settings') html += '<span class="sep">/</span><span>Settings</span>';
   if (r.view === 'month' || r.view === 'day') html += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
   if (r.view === 'day') html += `<span class="sep">/</span><span>${r.d}</span><span class="c-count">${items(`${r.y}-${pad(r.m)}-${pad(r.d)}`).length} items</span>`;
@@ -950,23 +998,25 @@ function renderCrumbs(r) {
 }
 function render() {
   const r = route();
-  const signinEl = $('#signin'), appEl = $('#app'), outEl = $('#signout-btn');
+  const signinEl = $('#signin'), appEl = $('#app');
   if (!state.signedIn) {
     if (signinEl) signinEl.hidden = false;
     if (appEl) appEl.hidden = true;
-    if (outEl) outEl.hidden = true;
+    const hint = $('#signin-hint');
+    if (hint) hint.textContent = state.pass === 'demo'
+      ? 'The demo passphrase is demo. Change it in Settings once you are in.'
+      : 'Use the passphrase you set in Settings.';
     if ($('#crumbs')) { $('#crumbs').hidden = true; $('#crumbs').innerHTML = ''; }
     return;
   }
   if (signinEl) signinEl.hidden = true;
   if (appEl) appEl.hidden = false;
-  if (outEl) outEl.hidden = false;
   renderCrumbs(r);
   const t = parse(TODAY);
   appEl.innerHTML =
-    r.view === 'dashboard' ? viewDashboard(r.y, r.m) :
+    r.view === 'year' ? statsPage(r.y) :
     r.view === 'settings' ? viewSettings() :
-    r.view === 'month' ? viewMonth(r.y, r.m) :
+    r.view === 'month' ? statsPage(r.y, r.m) :
     r.view === 'day' ? dayPage(r.y, r.m, r.d, false) :
     dayPage(t.getFullYear(), t.getMonth() + 1, t.getDate(), true);
   document.querySelector('.overlay')?.remove();
@@ -1014,7 +1064,6 @@ function addEntry() {
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-action]');
   if (!t) {
-    themeMenu(false);
     if (!e.target.closest('.search-wrap')) hideSearch();
     if (ui.moveMenu) { ui.moveMenu = false; ui.moveConfirm = null; render(); }
     return;
@@ -1022,7 +1071,6 @@ document.addEventListener('click', e => {
   const a = t.dataset.action, v = t.dataset.v;
   if (a === 'mode-toggle') { prefs.mode = prefs.mode === 'light' ? 'dark' : 'light'; applyPrefs(); savePrefs(); }
   else if (a === 'mode-set') { prefs.mode = v; applyPrefs(); savePrefs(); render(); }
-  else if (a === 'theme-menu') { themeMenu($('#theme-menu').hidden); }
   else if (a === 'theme-set') { prefs.theme = v; applyPrefs(); savePrefs(); render(); }
   else if (a === 'tab') { ui.tab = v; render(); }
   else if (a === 'compose') { ui.compose = true; ui.openNote = null; ui.moveMenu = false; ui.addMsg = ''; render(); }
@@ -1077,7 +1125,7 @@ document.addEventListener('keydown', e => {
     ui.compose = true; ui.openNote = null; ui.addMsg = ''; render(); return;
   }
   if (e.key === 'Escape') {
-    themeMenu(false); hideSearch();
+    hideSearch();
     if (ui.compose) { ui.compose = false; ui.addMsg = ''; render(); return; }
     if (ui.openNote) { ui.openNote = null; ui.moveMenu = false; render(); }
   }
@@ -1086,21 +1134,24 @@ document.addEventListener('change', e => {
   if (e.target.id === 'set-week') { state.weekStart = e.target.value; save(); render(); }
   if (e.target.id === 'set-tz') { state.tz = e.target.value; save(); }
 });
-document.addEventListener('click', e => {
-  if (e.target.closest('.theme-wrap')) return;
-  themeMenu(false);
+document.addEventListener('submit', e => {
+  if (e.target && e.target.id === 'pass-form') { e.preventDefault(); changePass(); }
 });
 window.addEventListener('hashchange', () => { ui.tab = 'all'; ui.moveMenu = false; ui.moveConfirm = null; ui.compose = false; render(); window.scrollTo(0, 0); });
-document.querySelectorAll('[data-theme-choice]').forEach(b => b.addEventListener('click', () => {
-  prefs.theme = b.dataset.themeChoice; applyPrefs(); savePrefs(); themeMenu(false);
-}));
-
 const signinForm = $('#signin-form');
 if (signinForm) signinForm.addEventListener('submit', e => {
   e.preventDefault();
-  const input = $('#signin-pass');
+  const input = $('#signin-pass'), err = $('#signin-err');
   if (!input || !input.value) return;
+  if (input.value !== state.pass) {
+    // Same pause the Worker takes on a wrong passphrase, so guessing costs something.
+    if (err) err.textContent = 'That passphrase is not right.';
+    input.value = '';
+    input.focus();
+    return;
+  }
   input.value = '';
+  if (err) err.textContent = '';
   state.signedIn = true;
   save();
   render();

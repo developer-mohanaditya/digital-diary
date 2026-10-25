@@ -28,17 +28,24 @@ side.
   **New note** button in the header (the note opens in a sheet), the entries card first, the hours
   band under it, and a rail of this month's heatmap, the deadlines, the hours you write at, and
   links out. The note sheet pins its tokens-and-neurons line to the bottom of the card, so a long
-  note scrolls inside it while the cost stays put.
-- **Dashboard (`#/dashboard`)** shows one month: KPIs, the month heatmap in **both** shapes
-  (weeks table / calendar grid, switchable and remembered), activity day by day, when you write,
-  AI usage with tokens and estimated neurons per note and per model, the year at a glance, folders,
-  and the newest notes with what each cost. `‹ Sep · Today · Nov ›` move it between months.
-- **Month (`#/y/2026/m/10`)** and **Day (`#/y/2026/m/10/d/24`)** are the app's existing views; a day
-  is the same page as Home, opened on another date.
+  note scrolls inside it while the cost stays put. Deadlines are completed from the note, or with
+  the tick on each Due row. The wordmark carries the demo's yellow instead of a badge; the tab
+  title says which build is open.
+- **Month (`#/y/2026/m/10`)** and **Dashboard (`#/dashboard`)** are one page at two zooms: KPIs,
+  the heatmap, activity, when you write, AI usage with tokens and estimated neurons per note and per
+  model, and the newest notes with what each cost. The month scopes all of it to its 30-odd days
+  (heatmap in **both** shapes, switchable and remembered, activity day by day, a calendar to pick a
+  day, the deadlines); the dashboard scopes it to the whole year (the year in weeks, months as
+  doors, activity month by month). Both lead with the day page's header — `‹ Sep | October 2026 |
+  Nov ›` — and its arrows are the only thing that differs.
+- **Day (`#/y/2026/m/10/d/24`)** is the same page as Home, opened on another date.
 - **Settings (`#/settings`)** carries theme, light/dark, heatmap default, week start, timezone, the
-  account the diary belongs to, and a reset for the sample data.
+  account the diary belongs to, **change the passphrase**, **sign out**, and a reset for the sample
+  data. The theme picker lives here only; the top bar keeps search, light/dark, dashboard, settings.
 - **Search** sits in the top bar on every page and opens notes in the sheet. `/` focuses it.
-- **Sign out** in the header shows the login card; any passphrase unlocks it again.
+- **Sign out** lives in Settings, in the same card language as New note but in the alert colour;
+  the gate asks for the passphrase. A fresh demo starts at `demo`, and Settings can change it — the
+  old one stops working immediately.
 
 ## What is deliberately not here
 
