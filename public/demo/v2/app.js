@@ -916,8 +916,14 @@ function statsPage(y, m) {
 /* ---------- Settings ---------- */
 function viewSettings() {
   return `
-  <section class="hero"><span class="kicker">Settings</span><h1>Preferences</h1>
-    <p class="muted">Theme, how the month is drawn, the passphrase, and the account this diary belongs to.</p></section>
+  <section class="hero sethead">
+    <div>
+      <span class="kicker">Settings</span><h1>Preferences</h1>
+      <p class="muted" style="margin:0">Theme, how the month is drawn, the passphrase, and the account this diary belongs to.</p>
+    </div>
+    <button class="dangerbtn" data-action="signout" title="Locks the diary until the passphrase is entered again">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Sign out</button>
+  </section>
   <section class="card">
     <div class="setrow"><div><span class="lab">Theme</span><span class="sub">Minimal, Paper, Dark Journal</span></div>
       <div class="seg">${THEMES.map(t => `<button data-action="theme-set" data-v="${t}" aria-pressed="${prefs.theme === t}">${THEME_LABEL[t]}</button>`).join('')}</div></div>
@@ -948,13 +954,6 @@ function viewSettings() {
       </div>
     </form>
     <p class="note">Six characters or more. The old one stops working the moment you save, and the diary asks for the new one next time it locks.</p>
-  </section>
-
-  <section class="card">
-    <div class="lhead"><span class="kicker">Session</span></div>
-    <h2>Sign out</h2>
-    <p class="note" style="margin-top:0">Locks the diary on this device until the passphrase is entered again. Nothing is deleted.</p>
-    <button class="dangerbtn" data-action="signout">Sign out of the diary</button>
   </section>`;
 }
 

@@ -553,6 +553,10 @@
   .pmsg { font-size:.82rem; color:var(--muted); }
   .pmsg.ok { color:var(--ink); font-weight:700; }
   .pmsg.err { color:var(--alert); font-weight:700; }
+  /* Settings opens with its own Sign out at the far right, the way the bar used to hold it. */
+  .sethead { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .sethead .dangerbtn { margin-left:auto; flex:0 0 auto; }
+  .dangerbtn svg { width:15px; height:15px; flex:0 0 auto; }
   .dangerbtn { display:inline-flex; align-items:center; gap:8px; background:var(--alert); color:#fff; border:2px solid var(--edge);
     border-radius:12px; padding:7px 15px; font-weight:800; font-size:.9rem; cursor:pointer; box-shadow:3px 3px 0 var(--shadow);
     transition:transform .12s, box-shadow .12s; }

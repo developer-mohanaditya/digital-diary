@@ -43,9 +43,9 @@ side.
   account the diary belongs to, **change the passphrase**, **sign out**, and a reset for the sample
   data. The theme picker lives here only; the top bar keeps search, light/dark, dashboard, settings.
 - **Search** sits in the top bar on every page and opens notes in the sheet. `/` focuses it.
-- **Sign out** lives in Settings, in the same card language as New note but in the alert colour;
-  the gate asks for the passphrase. A fresh demo starts at `demo`, and Settings can change it — the
-  old one stops working immediately.
+- **Sign out** is the one button in Settings' header, at the far right, in the alert colour with its
+  door icon; the gate then asks for the passphrase. A fresh demo starts at `demo`, and Settings can
+  change it — the old one stops working immediately.
 
 ## What is deliberately not here
 
