@@ -37,7 +37,7 @@
   .top-inner { width:min(1100px,100%); margin:0 auto; padding:0 24px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px; }
   .brand { font-weight:800; font-size:1.05rem; display:inline-flex; align-items:center; gap:10px; justify-self:start; white-space:nowrap; }
   .brand img { display:block; width:36px; height:36px; border-radius:10px; }
-  .brand-name { display:inline; }
+  .brand-name { display:inline; color:#fbbf24; }
   .tools { display:flex; gap:8px; align-items:center; justify-self:end; }
   .search-wrap { position:relative; width:100%; max-width:560px; min-width:0; margin:0; justify-self:center; }
   .search-input { position:relative; z-index:0; width:100%; height:38px; color:#f5f5ff; border-radius:999px; padding:8px 14px 8px 37px; font-size:.88rem; outline:none;
@@ -417,8 +417,6 @@
   footer.foot { border-top:1px solid var(--line); padding:18px 24px; color:var(--muted); font-size:.85rem; text-align:center; }
 
   /* ---------- demo additions: all in the same tokens and card language ---------- */
-  .demo-tag { font-size:.56rem; letter-spacing:.14em; text-transform:uppercase; font-weight:800;
-    color:#0c0a1f; background:#fbbf24; border-radius:999px; padding:2px 7px; margin-left:2px; }
   .split { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:18px; align-items:start; }
   @media (max-width:980px) { .split { grid-template-columns:minmax(0,1fr); } }
   .side .card { padding:16px 18px; }
@@ -468,7 +466,7 @@
 </head>
 <body data-theme="minimal" data-mode="light">
 <header class="top"><div class="top-inner">
-  <a class="brand" href="#/" aria-label="Digital Diary home"><img src="logo/mark.svg" width="36" height="36" alt="Digital Diary logo" /><span class="brand-name">Digital Diary</span><span class="demo-tag">demo</span></a>
+  <a class="brand" href="#/" aria-label="Digital Diary home"><img src="logo/mark.svg" width="36" height="36" alt="Digital Diary logo" /><span class="brand-name">Digital Diary</span></a>
   <div class="search-wrap">
     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     <input id="search" class="search-input" type="search" placeholder="Search notes…" autocomplete="off" aria-label="Search notes" />
@@ -494,7 +492,7 @@
     <form class="signin-card" id="signin-form">
       <img src="logo/mark.svg" width="42" height="42" alt="" />
       <h1>Your diary is locked</h1>
-      <p class="muted" style="margin:0">Any passphrase opens this demo. The real gate becomes your Supabase account.</p>
+      <p class="muted" style="margin:0">Enter the passphrase for this diary.</p>
       <input id="signin-pass" type="password" autocomplete="current-password" placeholder="Passphrase" aria-label="Passphrase" />
       <button class="btn" type="submit">Unlock</button>
       <p class="signin-err" id="signin-err" role="alert"></p>
@@ -503,7 +501,7 @@
   <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
   <div id="app"></div>
 </main>
-<footer class="foot">Digital Diary. Copyright, Aditya @ aweditya.com. Demo build: sample entries, no server. <a class="link" href="v2/">The v2 home →</a></footer>
+<footer class="foot">Digital Diary · Aditya @ aweditya.com</footer>
 <script type="module" src="app.js"></script>
 </body>
 </html>

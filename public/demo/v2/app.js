@@ -708,7 +708,7 @@ function goCard(k) {
     <span class="kicker">Go to</span>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
       <a class="btn" style="display:flex;justify-content:space-between" href="#/y/${y}/m/${m}">${MONTHS[m - 1]} ${y} <span class="muted">${monthItems(y, m).length} items</span></a>
-      <a class="btn" style="display:flex;justify-content:space-between" href="#/settings">Settings <span class="muted">theme, data</span></a>
+      <a class="btn" style="display:flex;justify-content:space-between" href="#/settings">Settings <span class="muted">preferences</span></a>
     </div>
   </section>`;
 }
@@ -754,7 +754,7 @@ function dayPage(y, m, d, home) {
     </div>
     <p class="muted" style="margin:10px 0 0">${home
       ? 'Everything today holds, with the month and what is due beside it.'
-      : `The same page as today, opened on <b>${fmtDay(date)}</b>${isToday ? '' : '. <a class="link" href="#/">Back to today</a>'}`}</p>
+      : `${list.length} ${list.length === 1 ? 'entry' : 'entries'}${isToday ? '' : ' · <a class="link" href="#/">Back to today</a>'}`}</p>
   </section>
   <div class="split">
     <div class="stack">${entriesCardHTML(k, home)}</div>
@@ -897,7 +897,7 @@ function statsPage(y, m) {
         <tbody>${Object.entries(byModel).sort((a, b) => b[1].neurons - a[1].neurons).map(([model, v]) =>
           `<tr><td>${esc(model.replace('@cf/', ''))}</td><td class="num">${v.calls}</td><td class="num">${(v.tin + v.tout).toLocaleString()}</td><td class="num">${v.neurons.toFixed(1)}</td></tr>`).join('')}</tbody>
       </table>
-      <p class="note">Neurons are estimated from the token counts recorded with each note. Reconciliation against Cloudflare's billed total is a nightly job, not this page.</p>
+      <p class="note">Estimated from the tokens recorded with each note. The billed total is reconciled nightly.</p>
     </div>
     ${pick}
   </section>
@@ -937,12 +937,12 @@ function viewSettings() {
       <select id="set-tz">${['Europe/Paris','Asia/Kolkata','UTC'].map(tz => `<option${state.tz === tz ? ' selected' : ''}>${tz}</option>`).join('')}</select></div>
     <div class="setrow"><div><span class="lab">Account</span><span class="sub">aweditya.sm@gmail.com · confirmed</span></div>
       <span class="muted" style="font-size:.76rem;font-family:ui-monospace,monospace">9d6eb0f3…b3b2</span></div>
-    <div class="setrow"><div><span class="lab">Demo data</span><span class="sub">Sample entries, saved in this browser only</span></div>
-      <button class="btn" data-action="reset">Reset the demo</button></div>
+    <div class="setrow"><div><span class="lab">Entries</span><span class="sub">Stored on this device</span></div>
+      <button class="btn" data-action="reset">Reset</button></div>
   </section>
 
   <section class="card">
-    <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.78rem">This demo checks it in the browser</span></div>
+    <div class="lhead"><span class="kicker">Access</span></div>
     <h2>Change the passphrase</h2>
     <form class="passform" id="pass-form" autocomplete="off">
       <label class="field"><span>Current passphrase</span><input id="pass-cur" type="password" autocomplete="current-password" /></label>
@@ -1001,10 +1001,6 @@ function render() {
   if (!state.signedIn) {
     if (signinEl) signinEl.hidden = false;
     if (appEl) appEl.hidden = true;
-    const hint = $('#signin-hint');
-    if (hint) hint.textContent = state.pass === 'demo'
-      ? 'The demo passphrase is demo. Change it in Settings once you are in.'
-      : 'Use the passphrase you set in Settings.';
     if ($('#crumbs')) { $('#crumbs').hidden = true; $('#crumbs').innerHTML = ''; }
     return;
   }
@@ -1087,7 +1083,7 @@ document.addEventListener('click', e => {
   else if (a === 'search-open') openSearchResult(v);
   else if (a === 'signin') { state.signedIn = true; save(); render(); }
   else if (a === 'signout') { state.signedIn = false; save(); ui.openNote = null; ui.compose = false; render(); }
-  else if (a === 'reset') { state.days = seed(); save(); ui.addMsg = 'Demo data reset.'; go('#/'); }
+  else if (a === 'reset') { state.days = seed(); save(); ui.addMsg = 'Entries reset.'; go('#/'); }
 });
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'search') { searchActive = -1; renderSearchPop(); }
