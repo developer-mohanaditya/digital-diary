@@ -799,6 +799,21 @@ function viewSettings() {
 }
 
 /* ---------- Crumbs + render ---------- */
+const DASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/></svg>';
+const HOME_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 10.5 12 3.4l8.6 7.1"/><path d="M5.6 9.4V20a.6.6 0 0 0 .6.6h4.2v-5.5h3.2v5.5h4.2a.6.6 0 0 0 .6-.6V9.4"/></svg>';
+
+// The bar's fourth icon is wherever you are not: on the dashboard it offers the way home,
+// on every other page it offers the dashboard.
+function syncNav(r) {
+  const a = $('#nav-dash');
+  if (!a) return;
+  const onDash = r.view === 'dashboard';
+  a.setAttribute('href', onDash ? '#/' : '#/dashboard');
+  a.setAttribute('title', onDash ? 'Home' : 'Dashboard');
+  a.setAttribute('aria-label', onDash ? 'Home' : 'Dashboard');
+  a.innerHTML = onDash ? HOME_ICON : DASH_ICON;
+}
+
 function renderCrumbs(r) {
   let html = '<a href="#/">Home</a>';
   if (r.view === 'dashboard') html += '<span class="sep">/</span><span>Dashboard</span>';
@@ -821,6 +836,7 @@ function render() {
   if (signinEl) signinEl.hidden = true;
   if (appEl) appEl.hidden = false;
   if (outEl) outEl.hidden = false;
+  syncNav(r);
   renderCrumbs(r);
   const t = parse(TODAY);
   appEl.innerHTML =
