@@ -1059,6 +1059,13 @@ const iconSVG = (body, attrs = '') => `<svg ${attrs}viewBox="0 0 24 24" fill="no
 const DASH_ICON = iconSVG('<rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/>');
 const HOME_BODY = '<path d="M3.4 10.5 12 3.4l8.6 7.1"/><path d="M5.6 9.4V20a.6.6 0 0 0 .6.6h4.2v-5.5h3.2v5.5h4.2a.6.6 0 0 0 .6-.6V9.4"/>';
 const HOME_ICON = iconSVG(HOME_BODY);
+// Home's own mark in the breadcrumb: the house with the diary's yellow roof and an arched
+// door, drawn rather than wired, since it is a label and not a button.
+const HOME_CRUMB = '<svg role="img" aria-label="Home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M12 3.1 20.8 10.5H3.2Z" fill="#fbbf24"/>' +
+  '<path d="M5.2 10.5v8.4a1.6 1.6 0 0 0 1.6 1.6h10.4a1.6 1.6 0 0 0 1.6-1.6v-8.4"/>' +
+  '<path d="M10.4 20.5v-3.1a1.6 1.6 0 0 1 3.2 0v3.1Z" fill="currentColor" stroke="none"/>' +
+  '</svg>';
 
 // The bar's fourth icon is wherever you are not: on the dashboard it offers the way home,
 // on every other page it offers the dashboard.
@@ -1081,7 +1088,7 @@ function renderCrumbs(r) {
   // Home names itself with the house, the way the bar does; everywhere else the trail opens
   // with the word as a link back to it.
   let trail = '<a href="#/">Home</a>';
-  if (r.view === 'home') trail = `<span class="crumbhome" title="Home">${iconSVG(HOME_BODY, 'role="img" aria-label="Home" ')}</span>`;
+  if (r.view === 'home') trail = `<span class="crumbhome" title="Home">${HOME_CRUMB}</span>`;
   if (r.view === 'year') trail += `<span class="sep">/</span><a href="#/dashboard">Dashboard</a><span class="sep">/</span><span aria-current="page">${r.y}</span>`;
   if (r.view === 'settings') trail += '<span class="sep">/</span><span aria-current="page">Settings</span>';
   if (r.view === 'month' || r.view === 'day') trail += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
