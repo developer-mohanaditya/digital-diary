@@ -4,3 +4,6 @@ node_modules/
 *.log
 logo-drafts/
 .env
+
+# Impeccable ships a per-platform launcher binary; it re-downloads on demand.
+.agents/skills/impeccable/scripts/bin/
