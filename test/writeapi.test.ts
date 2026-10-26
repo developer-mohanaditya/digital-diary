@@ -28,6 +28,9 @@ interface StubOpts {
   scopes?: string[];
   policy?: Record<string, unknown> | null;
   ai?: 'ok' | 'throws' | 'none';
+  // The first capture insert reports no row although the row is there: what a second request
+  // arriving at the same moment looks like from the losing side of the race.
+  raceFirstCapture?: boolean;
 }
 
 function stub(opts: StubOpts = {}) {
@@ -70,8 +73,13 @@ function stub(opts: StubOpts = {}) {
         .map((c) => ({ id: c.id, source_update_id: c.source_update_id })));
     }
     if (method === 'POST' && url.includes('/captures?')) {
+      const row = body[0];
+      if (opts.raceFirstCapture && captures.length === 0) {
+        captures.push({ id: 'cap-race', ...row });
+        return json([]);
+      }
       const id = `cap-${captures.length + 1}`;
-      captures.push({ id, ...body[0] });
+      captures.push({ id, ...row });
       return json([{ id }]);
     }
     if (method === 'PATCH' && url.includes('/captures?')) return noContent();
@@ -197,6 +205,20 @@ describe('POST /api/v1/notes', () => {
     const answer = await retry.json() as any;
     expect(s.captures).toHaveLength(2);
     expect(answer.receipt.notes.map((n: any) => n.status)).toEqual(['duplicate', 'duplicate']);
+  });
+
+  it('names the note that lost a race instead of leaving it out of the receipt', async () => {
+    // Two requests with the same key arriving together: this one's insert finds the row already
+    // there and gets no id back. The note is in the diary, so the receipt has to say so.
+    const s = stub({ raceFirstCapture: true });
+    const res = await worker.fetch(post({ notes: [note()] }, { headers: { 'Idempotency-Key': 'race-1' } }), env());
+    expect(res.status).toBe(200);
+    const answer = await res.json() as any;
+    expect(answer.receipt.notes[0]).toMatchObject({ status: 'duplicate', id: 'cap-race', day: parisDay() });
+    expect(answer.receipt.counts.notes).toBe(0);
+    expect(answer.receipt.duplicate).toBe(true);
+    expect(answer.receipt.telegram).toBe('skipped');
+    expect(s.captures).toHaveLength(1);
   });
 
   it('refuses a key without the write scope, and writes nothing', async () => {

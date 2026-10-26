@@ -41,13 +41,17 @@ const onLine = async (line) => {
 };
 
 let buffer = '';
+// Requests are handled one at a time, in the order they arrived. A client may pipeline them, and
+// filing notes out of order — or twice at once — would let two identical requests race each other
+// into the diary. The queue is the whole of the concurrency policy: one message, then the next.
+let queue = Promise.resolve();
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
   buffer += chunk;
   for (let at = buffer.indexOf('\n'); at >= 0; at = buffer.indexOf('\n')) {
     const line = buffer.slice(0, at);
     buffer = buffer.slice(at + 1);
-    void onLine(line);
+    queue = queue.then(() => onLine(line));
   }
 });
 process.stdin.on('end', () => {

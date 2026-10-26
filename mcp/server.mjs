@@ -91,7 +91,7 @@ function receiptSummary(receipt) {
     const tally = Object.entries(receipt.counts?.byCategory ?? {}).map(([c, n]) => `${c} ${n}`).join(', ');
     lines.push(`Filed ${stored} note${stored === 1 ? '' : 's'} (${tally}) · ${receipt.counts?.words ?? 0} words.`);
   }
-  if (duplicates) lines.push(`${duplicates} ${duplicates === 1 ? 'note was' : 'notes were'} already stored by an earlier request.`);
+  if (duplicates) lines.push(`${duplicates} ${duplicates === 1 ? 'note was' : 'notes were'} already in the diary, so nothing was filed twice.`);
   for (const r of receipt.reminders ?? []) lines.push(`Deadline ${r.due}, first ping ${r.firstPingAt.slice(0, 10)}.`);
   if (receipt.telegram === 'sent') lines.push('Confirmed on Telegram.');
   if (receipt.telegram === 'failed') lines.push('Telegram confirmation failed; the notes are stored.');
