@@ -330,7 +330,25 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
         client: input.client,
         dedupeKey: input.dedupeKey,
       });
-      if (!capture.inserted || !capture.id) continue; // another request got there first
+      if (!capture.inserted || !capture.id) {
+        // The row was already there: almost always the same request arriving twice at once, each
+        // getting past the lookup before the other had written. Ask again which capture holds it
+        // rather than moving on — a receipt that omits a note that is in the diary is exactly the
+        // thing this answer exists to prevent, and saying nothing looks like nothing was stored.
+        const found = (await store.findCaptures('api', [seed]).catch(() => [])).find((c) => c.sourceUpdateId === seed);
+        if (found) {
+          seen.set(seed, found.id);
+          captureAt.set(i, found.id);
+          notes.push({ id: found.id, day: note.day, category: note.category, mode: note.mode, status: 'duplicate', cleanup: 'duplicate', words: words(note.text), error: null });
+        } else {
+          notes.push({
+            id: null, day: note.day, category: note.category, mode: note.mode, status: 'failed', cleanup: 'failed', words: 0,
+            error: 'The note was not stored and no existing copy could be found.',
+          });
+          failures.push('one note was neither stored nor found');
+        }
+        continue;
+      }
       captureAt.set(i, capture.id);
 
       const cleaned = await cleanNote(deps.refiner, { text: note.text, mode: note.mode, category: note.category });

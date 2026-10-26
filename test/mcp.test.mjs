@@ -140,6 +140,54 @@ describe('the MCP server', () => {
     expect(res.error.code).toBe(-32601);
   });
 
+  it('handles pipelined requests one at a time, in the order they arrived', async () => {
+    // The first answer is held back on purpose. Two identical requests must not race each other
+    // into the diary, and a client that pipelines them must get its answers back in order.
+    let asked = 0;
+    const api = createServer((_req, res) => {
+      const n = ++asked;
+      const reply = () => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+          ok: true,
+          key: {
+            name: `answer ${n}`, prefix: 'ddk_live_abc', scopes: ['notes:write'],
+            policy: { categories: null, from: null, to: null, text: 'clean' }, perMinute: 30, perDay: 300,
+          },
+        }));
+      };
+      if (n === 1) setTimeout(reply, 300); else reply();
+    });
+    await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve));
+    const port = api.address().port;
+
+    const child = spawn(process.execPath, [ENTRY], {
+      env: { ...process.env, DIARY_API_URL: `http://127.0.0.1:${port}`, DIARY_API_KEY: KEY },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const lines = [];
+    let rest = '';
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('the server did not answer in time')), 10000);
+      child.stdout.on('data', (chunk) => {
+        rest += chunk;
+        for (let at = rest.indexOf('\n'); at >= 0; at = rest.indexOf('\n')) {
+          lines.push(JSON.parse(rest.slice(0, at)));
+          rest = rest.slice(at + 1);
+        }
+        if (lines.length >= 2) { clearTimeout(timer); resolve(); }
+      });
+      child.on('error', reject);
+      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'diary_whoami', arguments: {} } })}\n`);
+      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'diary_whoami', arguments: {} } })}\n`);
+    });
+    child.kill();
+    await new Promise((resolve) => api.close(resolve));
+
+    expect(lines.map((l) => l.id)).toEqual([1, 2]);
+    expect(asked).toBe(2);
+  });
+
   it('runs as a process: one JSON message a line, and nothing else on stdout', async () => {
     const api = createServer((_req, res) => {
       res.setHeader('Content-Type', 'application/json');
