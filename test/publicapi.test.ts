@@ -197,9 +197,35 @@ describe('GET /api/v1/notes', () => {
     expect((await worker.fetch(api('/api/v1/notes?day=2026-10-25&month=2026-10'), env())).status).toBe(400);
     expect((await worker.fetch(api('/api/v1/notes?day=2026-02-31'), env())).status).toBe(400);
     expect((await worker.fetch(api('/api/v1/notes?category=holiday'), env())).status).toBe(400);
-    expect((await worker.fetch(api('/api/v1/notes?limit=0'), env())).status).toBe(400);
     expect((await worker.fetch(api('/api/v1/notes?cursor=made-up'), env())).status).toBe(400);
     expect(calls.filter((c) => c.url.includes('/thoughts?'))).toHaveLength(0);
+  });
+
+  // A limit is digits or nothing: Number() would read 0x10, 1e3 and +1 as quantities, and a
+  // page size that silently becomes 16 is worse than a refusal.
+  it('takes a limit written in decimal only', async () => {
+    stub();
+    for (const q of ['limit=0', 'limit=-5', 'limit=1.5', 'limit=abc', 'limit=', 'limit=0x10', 'limit=1e3', 'limit=%2B1']) {
+      const res = await worker.fetch(api(`/api/v1/notes?${q}`), env());
+      expect(res.status, q).toBe(400);
+    }
+    expect((await worker.fetch(api('/api/v1/notes?limit=3'), env())).status).toBe(200);
+  });
+
+  it('refuses a cursor that does not point at a row id', async () => {
+    const { calls } = stub();
+    const cursor = (text: string) => encodeURIComponent(btoa(text).replace(/=+$/, ''));
+    const forged = await worker.fetch(api(`/api/v1/notes?cursor=${cursor('2026-10-25T00:00:00Z|note-1')}`), env());
+    expect(forged.status).toBe(400);
+    expect(await forged.json()).toMatchObject({ error: { code: 'bad_cursor' } });
+    expect(calls.filter((c) => c.url.includes('/thoughts?'))).toHaveLength(0);
+
+    const real = await worker.fetch(
+      api(`/api/v1/notes?cursor=${cursor('2026-10-24T00:00:00Z|9f1c1a2b-0000-4000-8000-123456789abc')}`),
+      env(),
+    );
+    expect(real.status).toBe(200);
+    expect(calls.find((c) => c.url.includes('/thoughts?'))!.url).toContain('id.lt.9f1c1a2b-0000-4000-8000-123456789abc');
   });
 
   it('clamps a page to 500 and says where the next one starts', async () => {
@@ -266,11 +292,15 @@ describe('GET /api/v1/notes', () => {
     expect(missing.status).toBe(404);
   });
 
-  it('refuses an id that could rewrite the query', async () => {
+  it('refuses an id that is not a row id, before it reaches the database', async () => {
     const { calls } = stub();
-    expect((await worker.fetch(api('/api/v1/notes/abc'), env())).status).toBe(400);
-    expect((await worker.fetch(api("/api/v1/notes/9f1c1a2b' or 1=1--"), env())).status).toBe(400);
+    for (const bad of ['abc', 'abcdefgh', "9f1c1a2b' or 1=1--", '9f1c1a2b-0000-4000-8000-123456789abz']) {
+      const res = await worker.fetch(api(`/api/v1/notes/${encodeURIComponent(bad)}`), env());
+      expect(res.status, bad).toBe(400);
+    }
+    expect((await worker.fetch(api('/api/v1/deadlines/abcdefgh'), env())).status).toBe(400);
     expect(calls.filter((c) => c.url.includes('/thoughts?id=eq.'))).toHaveLength(0);
+    expect(calls.filter((c) => c.url.includes('/reminders?id=eq.'))).toHaveLength(0);
   });
 
   it('sets no CORS header, so another page cannot read the answer', async () => {
@@ -426,6 +456,9 @@ describe('/api/keys', () => {
     const body = (await list.json()) as { keys: { prefix: string; key?: string }[] };
     expect(body.keys[0].key).toBeUndefined();
     expect(body.keys[0].prefix).toHaveLength(16);
+
+    // A made-up id is the caller's mistake, not a database failure.
+    expect((await worker.fetch(post('/api/keys/abcdefgh/revoke', {}, cookie), e)).status).toBe(400);
 
     const res = await worker.fetch(post('/api/keys/9f1c1a2b-0000-4000-8000-123456789abc/revoke', {}, cookie), e);
     expect(res.status).toBe(200);

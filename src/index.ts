@@ -10,7 +10,7 @@ import {
 } from './session';
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
-import { createApiKey, listApiKeys, publicApi, revokeApiKey } from './publicapi';
+import { createApiKey, isRowId, listApiKeys, publicApi, revokeApiKey } from './publicapi';
 import { expiryFrom, keyNameProblem, normaliseScopes } from './apikey';
 
 export interface Env {
@@ -858,8 +858,10 @@ async function keysApi(request: Request, env: Env): Promise<Response> {
       // The one response that ever carries the key itself.
       return json({ ok: true, ...created });
     }
-    const revoke = /^\/api\/keys\/([A-Za-z0-9-]{8,64})\/revoke$/.exec(path);
+    const revoke = /^\/api\/keys\/([^/]+)\/revoke$/.exec(path);
     if (request.method === 'POST' && revoke) {
+      // Checked here, not by Postgres: a cast error would answer as a database failure.
+      if (!isRowId(revoke[1])) return json({ ok: false, error: 'That is not a key id this diary issued.' }, 400);
       const done = await revokeApiKey(env, revoke[1]);
       if (!done) return json({ ok: false, error: 'No live key with that id.' }, 404);
       return json({ ok: true });
