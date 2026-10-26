@@ -91,9 +91,9 @@ A key also carries a **policy**, stored beside its scopes and enforced on every 
 | --- | --- |
 | `categories` | the only categories it may read; a request that names another is `403 out_of_policy` |
 | `from` / `to` | the earliest and latest day it may read; a wider period is clamped to the window, and a note outside it is `404` |
-| `text` | `clean` reads the sentences; `none` answers counts, days, categories and word counts with no `text` field, refuses `q=` and `fields=text`, and cannot export |
+| `text` | `clean` reads the sentences; `none` answers counts, days, categories and word counts with no `text` field, refuses `q=` and `fields=text`, cannot export, and gets `"A deadline"` in place of a deadline's title (a title is the note's own first line) |
 
-The defaults are every category, any day and full text, which is what every key did before limits existed. A note outside a key's policy does not exist as far as that key is concerned (`404`, never `403`), the day and count rollups are narrowed to the policy's categories and window, and a deadline whose note is outside it is hidden or `404` as well.
+The defaults are every category, any day and full text, which is what every key did before limits existed. A note outside a key's policy does not exist as far as that key is concerned (`404`, never `403`), the day and count rollups are narrowed to the policy's categories and window, and a deadline whose note is outside it is hidden or `404` as well — including one whose note cannot be found to check.
 
 | Scope | Reads |
 | --- | --- |
@@ -154,6 +154,9 @@ A note comes back as `{ id, day, time, at, category, type, source, text, words, 
 - Nothing the caller sends reaches a query unfiltered. Each value is checked against a shape (a real date, a known category, a known type) and the PostgREST query is rebuilt server-side. There is no endpoint that proxies the database.
 - Only the method, path, status, row count and key prefix are ever logged. Never a note, never a query value, never the caller's address.
 - Each key is limited per minute and per day — 60 and 5,000 by default, 30 and 300 for a key that may add notes. Every answer carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a spent allowance answers `429` with `Retry-After`. The counter is one atomic Postgres function, so a burst cannot slip past a read-then-write race.
+- A write spends the ceiling per **note**, not per request: a batch of 25 costs 25 of the 300, because each note is a model call. If the counter cannot be reached, a write is refused rather than filed uncounted; a read carries on.
+- Twenty keys that do not work, a minute, per client address, and the answer stops costing a database round trip. The count is per Worker instance, so it is a speed bump; a rate-limiting rule on `/api/v1/*` in Cloudflare is the wall.
+- Every authenticated call writes one line to Worker Logs: `api <key prefix> <method> <path> <status>`. No query string (a search term is note text) and no body.
 
 ### Writing to the diary
 
@@ -198,7 +201,7 @@ The answer is a receipt, not just “ok”:
 
 Each note is its own row, so a batch is not all-or-nothing on purpose: the receipt says per note what happened (`stored`, `duplicate`, or `failed` with the reason), and a retry with the same `Idempotency-Key` skips whatever already landed. Nothing stored and something failed answers `502`. A pure retry answers `200` with `duplicate: true` and no Telegram message, because the owner has seen that one already.
 
-A write key carries the same limits as a read key, read the other way round: `categories` is what it may **file into**, `from`/`to` is which days it may **date**, and reaching past either is `403 out_of_policy`. `text: none` is a read limit and does not block writing. `deadline` gets no scope of its own: every deadline in this schema has a note behind it, so the category policy is what guards it.
+A write key carries the same limits as a read key, read the other way round: `categories` is what it may **file into**, `from`/`to` is which days it may **date**, and reaching past either is `403 out_of_policy`. `text: none` is a read limit and does not block writing. `deadline` gets no scope of its own: every deadline in this schema has a note behind it — through `thought_id`, or through the capture when the reminder came from this API — so the category policy is what guards it. A deadline whose note cannot be found is not shown to a limited key at all.
 
 The owner gets the receipt on Telegram, which is the point of the whole thing:
 
@@ -209,7 +212,7 @@ work 1 · deadline 1 (first ping 30 Oct)
 Receipt rc_9f1a20
 ```
 
-`"ack": false` writes silently. A Telegram failure comes back as `"telegram": "failed"` and never fails the write.
+It cannot be silenced. There is no ack field: a caller may not switch off the one real-time trace of a write nobody watched arrive, so every request that stores a note is acknowledged (a pure retry is not, because you have seen that message). A Telegram failure comes back as `"telegram": "failed"` and never fails the write.
 
 ### Telling Claude Code, Codex or Freebuff about it
 
@@ -332,13 +335,15 @@ From then on the page shows a sign-in card: `POST /api/session` with `{"passphra
 
 ## Database setup
 
-Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`. Every one is safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`. Every one is safe to run again.
 
 `0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Access says the same; the rest of the diary is unaffected.
 
 `0008` adds `api_keys.policy` and gives `diary_stats` and `diary_days` a `p_categories` argument, so a limited key cannot count its way around its limit. Until it has been run, a key with limits answers `403 policy` rather than reading more than it should; the defaults keep every existing key open.
 
 `0009` adds `captures.client` and `captures.dedupe_key`: which app filed an API note, and the caller's `Idempotency-Key` kept verbatim. Until it has been run an API capture stores both as null — idempotency still holds, because it rides the older `source_update_id` — so only the readable key is lost.
+
+`0010` adds `bump_api_notes`, which spends a write key's allowance once per note instead of once per request. **Run it before deploying the Worker that calls it**: a write of two or more notes answers `503` naming the file until the function exists, because a key that can spend money is refused rather than filed uncounted. A single-note write does not call it, so the old behaviour survives in the meantime.
 
 ## Contributing
 
