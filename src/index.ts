@@ -3,7 +3,7 @@ import {
 } from './handler';
 import type { Category, Mode } from './parse';
 import { MAX_INPUT_CHARS, cleanNote, type CleanupKind } from './refine';
-import { UI_CATEGORIES, groupByDay, type DeadlineMark, type ThoughtRow } from './api';
+import { UI_CATEGORIES, groupByDay, type DeadlineMark, type NoteOrigin, type ThoughtRow } from './api';
 import { BACKUP_MODEL, BIG_MODEL, SMALL_MODEL, readOutput, workersAiRefiner, type AiRunner } from './refine';
 import { reminderTimes } from './reminders';
 import {
@@ -532,7 +532,12 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
   // deploy and the migration being run, so the read falls back to the older column set.
   const readThoughts = async (select: string) =>
     fetch(`${base}/thoughts?day=gte.${from}&day=lte.${to}&select=${select}&order=day.asc&limit=1000`, { headers });
-  const withUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id,tokens_in,tokens_out,cleanup_model';
+  // The capture rides along as an embed, because the capture is where a note's origin lives —
+  // the door it came through and, for an API note, the app that filed it. One request, and the
+  // row already carries the id it joins on. It needs captures.client (0009): on an older
+  // database the whole read answers 400, so the plain column set is the fallback, and then a
+  // note simply has no origin to show.
+  const withUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id,tokens_in,tokens_out,cleanup_model,captures(source,client)';
   const withoutUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id';
   try {
     const [thoughtsRes, remindersRes] = await Promise.all([
@@ -546,6 +551,14 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
       return json({ ok: false, error: `Supabase ${thoughtsRes.status}: ${await thoughtsRes.text()}` }, 502);
     }
     const rows = (await thoughtsRes.json()) as ThoughtRow[];
+    // Keyed by capture, so a note picks up its origin the way it picks up its deadline.
+    const origins: Record<string, NoteOrigin> = {};
+    for (const row of rows) {
+      const capture = row.captures;
+      if (row.capture_id && capture && typeof capture.source === 'string') {
+        origins[row.capture_id] = { source: capture.source, client: capture.client ?? null };
+      }
+    }
     type ReminderRow = { capture_id: string | null; kind: string; title: string; due_at: string | null; next_remind_at: string; status: string; done_at: string | null };
     const allReminders = remindersRes.ok ? (await remindersRes.json()) as ReminderRow[] : [];
     // Deadlines ride along with the note that created them, so the page can show a due badge.
@@ -555,7 +568,7 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
       deadlines[r.capture_id] = { due: r.due_at ? r.due_at.slice(0, 10) : null, done: r.status === 'done', doneAt: r.done_at };
     }
     const reminders = allReminders.filter((r) => r.status === 'pending');
-    return json({ ok: true, timeZone: tz, today, total: rows.length, days: groupByDay(rows, tz, deadlines), reminders });
+    return json({ ok: true, timeZone: tz, today, total: rows.length, days: groupByDay(rows, tz, deadlines, origins), reminders });
   } catch (err) {
     return json({ ok: false, error: err instanceof Error ? err.message : 'unknown error' }, 502);
   }

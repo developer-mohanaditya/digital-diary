@@ -20,6 +20,16 @@ const supabaseStub = () => {
   const stub = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     calls.push(url);
+    if (url.includes('/thoughts?') && url.includes('captures(source,client)')) {
+      return new Response(JSON.stringify([{
+        id: 'th-1', day: '2026-10-23', category: 'inbox', category_source: 'auto', mode: 'refine',
+        clean_text: 'Had a coffee with Ram.', raw_text: 'Had a coffee with Ram.',
+        created_at: '2026-10-23T15:08:00.000Z', capture_id: 'cap-1',
+        captures: { source: 'telegram', client: null },
+      }]), { headers: { 'Content-Type': 'application/json' } });
+    }
+    // The same rows without the capture embed: what a database that predates captures.client
+    // answers, and the second read the fallback makes.
     if (url.includes('/thoughts?')) {
       return new Response(JSON.stringify([{
         id: 'th-1', day: '2026-10-23', category: 'inbox', category_source: 'auto', mode: 'refine',
@@ -363,7 +373,7 @@ describe('/api/entries', () => {
   });
 
   it('hands over the notes once the cookie from sign-in is presented', async () => {
-    supabaseStub();
+    const calls = supabaseStub();
     const login = await worker.fetch(request('/api/session', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passphrase: 'open sesame' }),
     }), env());
@@ -372,11 +382,43 @@ describe('/api/entries', () => {
     const res = await worker.fetch(request('/api/entries', { headers: { Cookie: cookie } }), env());
     expect(res.status).toBe(200);
     const body = await res.json() as {
-      ok: boolean; total: number; days: Record<string, { text: string }[]>;
+      ok: boolean; total: number;
+      days: Record<string, { text: string; origin?: { source: string; client: string | null } }[]>;
     };
     expect(body.ok).toBe(true);
     expect(body.total).toBe(1);
     expect(body.days['2026-10-23'][0].text).toBe('Had a coffee with Ram.');
+    // The note is marked with where it came in from, which rides on the capture the read embeds.
+    expect(body.days['2026-10-23'][0].origin).toEqual({ source: 'telegram', client: null });
+    expect(calls.some((u) => u.includes('/thoughts?') && u.includes('captures(source,client)'))).toBe(true);
+  });
+
+  it('serves the notes without an origin when the capture cannot be read', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      // A database that predates captures.client refuses the embed outright.
+      if (url.includes('/thoughts?') && url.includes('captures(source,client)')) return new Response('bad', { status: 400 });
+      if (url.includes('/thoughts?')) {
+        return new Response(JSON.stringify([{
+          id: 'th-1', day: '2026-10-23', category: 'inbox', category_source: 'auto', mode: 'refine',
+          clean_text: 'Had a coffee with Ram.', raw_text: 'Had a coffee with Ram.',
+          created_at: '2026-10-23T15:08:00.000Z', capture_id: 'cap-1',
+        }]), { headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    const login = await worker.fetch(request('/api/session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passphrase: 'open sesame' }),
+    }), env());
+    const res = await worker.fetch(request('/api/entries', { headers: { Cookie: cookieFrom(login) } }), env());
+    expect(res.status).toBe(200);
+    const body = await res.json() as { total: number; days: Record<string, { origin?: unknown }[]> };
+    expect(body.total).toBe(1);
+    expect(body.days['2026-10-23'][0].origin).toBeUndefined();
+    expect(calls.filter((u) => u.includes('/thoughts?'))).toHaveLength(2);
   });
 
   it('rejects a cookie that was not signed with the passphrase', async () => {

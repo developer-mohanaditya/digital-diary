@@ -35,6 +35,12 @@ describe('toUiEntry', () => {
     expect(toUiEntry(row({ category_source: 'manual' }), 'UTC').src).toBe('manual');
   });
 
+  it('carries the origin of the capture the note arrived in', () => {
+    expect(toUiEntry(row(), 'UTC').origin).toBeUndefined();
+    expect(toUiEntry(row(), 'UTC', undefined, { source: 'api', client: 'claude-code' }).origin)
+      .toEqual({ source: 'api', client: 'claude-code' });
+  });
+
   it('keeps the raw text, falling back to the clean text when absent', () => {
     expect(toUiEntry(row(), 'UTC').raw).toBe('a thought, and yeah');
     expect(toUiEntry(row({ raw_text: null }), 'UTC').raw).toBe('A thought');
@@ -80,5 +86,24 @@ describe('groupByDay', () => {
     expect(first.due).toBe('2026-11-03');
     expect(first.done).toBe(false);
     expect(second.due).toBeUndefined();
+  });
+
+  // Each note is marked with its own capture's origin, not the page's: a day can hold a note
+  // typed on the page, one sent to the bot and one filed by an agent, and they are told apart.
+  it('attaches each note the origin of its own capture', () => {
+    const days = groupByDay(
+      [row({ id: 'a', capture_id: 'cap-1' }), row({ id: 'b', capture_id: 'cap-2' })],
+      'UTC',
+      {},
+      { 'cap-1': { source: 'telegram', client: null }, 'cap-2': { source: 'api', client: 'codex' } },
+    );
+    const [first, second] = days['2026-10-23'];
+    expect(first.origin).toEqual({ source: 'telegram', client: null });
+    expect(second.origin).toEqual({ source: 'api', client: 'codex' });
+  });
+
+  it('shows no origin when the captures were not read', () => {
+    const days = groupByDay([row({ id: 'a', capture_id: 'cap-1' })], 'UTC');
+    expect(days['2026-10-23'][0].origin).toBeUndefined();
   });
 });
