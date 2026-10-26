@@ -63,7 +63,7 @@ try again with different categories to get around it.
 The same thing over HTTP, with the key in `DIARY_API_KEY`:
 
 ```sh
-curl -s -X POST "${DIARY_API_URL:-https://awedityasdiary.aweditya-sm.workers.dev}/api/v1/notes" \
+curl -s -X POST "${DIARY_API_URL:-https://ink.aweditya.com}/api/v1/notes" \
   -H "Authorization: Bearer $DIARY_API_KEY" \
   -H "Idempotency-Key: claude-code-$(date +%Y-%m-%d)-session" \
   -d '{"client":"claude-code","notes":[{"text":"…","category":"work"}]}'
