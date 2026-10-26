@@ -10,7 +10,7 @@
 #   npm run env:check
 #
 # The same six names must also exist on the deployed Worker:
-#   Cloudflare -> Workers -> awedityasdiary -> Settings -> Variables and Secrets
+#   Cloudflare -> Workers -> ink -> Settings -> Variables and Secrets
 # or, with a token that has Workers Scripts: Edit, `npm run secret NAME -- --push`.
 
 # Supabase -> Settings -> API -> service_role (or the `sb_secret_...` key).

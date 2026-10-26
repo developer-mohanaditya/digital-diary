@@ -251,7 +251,7 @@ Where MCP is not set up, [integrations/diary-session.md](integrations/diary-sess
 
 - `main` is the only branch that deploys. A push to `main` builds the Worker and the web app; nothing else reaches the live diary.
 - Work happens on a short-lived branch per change (`fix/raw-tag`, `feat/reclean`), merged into `main` by pull request.
-- Cloudflare Workers Builds still tries to build every pushed branch, and those preview builds fail because they have no production secrets. Turn that off in the dashboard: **Workers & Pages → awedityasdiary → Settings → Build → Branch control → Build production branch only**. Failed preview builds are not a problem with the code.
+- Cloudflare Workers Builds still tries to build every pushed branch, and those preview builds fail because they have no production secrets. Turn that off in the dashboard: **Workers & Pages → ink → Settings → Build → Branch control → Build production branch only**. Failed preview builds are not a problem with the code.
 - The demo in `public/demo/` is published to GitHub Pages from `main` only, by `.github/workflows/pages-demo.yml`.
 - Titles: the live site's tab reads **Digital Diary**; the demo reads **Preview · Digital Diary**, so a screenshot always says which one it is.
 
@@ -306,7 +306,7 @@ npm run bindings:check                # diffs the DEPLOYED Worker against wrangl
 
 `env:check` is about this checkout. `bindings:check` is about the live Worker: it reads the deployed version's binding list from Cloudflare and compares it with `wrangler.toml` — every `[vars]` value present and equal, every required secret present *as a secret*, the `AI` and `ASSETS` bindings attached, and the compatibility date not older than the config. It exits 0 in step, 1 on drift, 2 when it cannot check. Reading the bindings needs **Workers Scripts: Read** on `CLOUDFLARE_API_TOKEN`; an analytics-only token answers 403 and the command says which permission to add.
 
-The prompt never echoes. Pushing to Cloudflare is attempted with the same `CLOUDFLARE_API_TOKEN` everything else uses; `npm run secret NAME -- --local` writes only the local file. Pushing needs that token to carry **Workers Scripts: Edit** — an analytics-only token is refused, and the command says so, leaving the value in `.dev.vars` for one paste in the dashboard (Workers → awedityasdiary → Settings → Variables and Secrets).
+The prompt never echoes. Pushing to Cloudflare is attempted with the same `CLOUDFLARE_API_TOKEN` everything else uses; `npm run secret NAME -- --local` writes only the local file. Pushing needs that token to carry **Workers Scripts: Edit** — an analytics-only token is refused, and the command says so, leaving the value in `.dev.vars` for one paste in the dashboard (Workers → ink → Settings → Variables and Secrets).
 
 | Name | Home | On Cloudflare? | What it is |
 | --- | --- | --- | --- |
@@ -335,7 +335,7 @@ From then on the page shows a sign-in card: `POST /api/session` with `{"passphra
 
 ## Database setup
 
-Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`. Every one is safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`, `0011_archive_notes.sql`. Every one is safe to run again.
 
 `0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Access says the same; the rest of the diary is unaffected.
 
@@ -344,6 +344,14 @@ Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_
 `0009` adds `captures.client` and `captures.dedupe_key`: which app filed an API note, and the caller's `Idempotency-Key` kept verbatim. Until it has been run an API capture stores both as null — idempotency still holds, because it rides the older `source_update_id` — so only the readable key is lost.
 
 `0010` adds `bump_api_notes`, which spends a write key's allowance once per note instead of once per request. **Run it before deploying the Worker that calls it**: a write of two or more notes answers `503` naming the file until the function exists, because a key that can spend money is refused rather than filed uncounted. A single-note write does not call it, so the old behaviour survives in the meantime.
+
+`0011` is a one-off housekeeping run, not a behaviour the code depends on. It shelves the notes
+written while building the diary — 22 sent to the bot and one filed through the write API — into
+`archived_notes`, with the thought row and its capture store verbatim, then deletes them from
+`thoughts`, `captures` and `reminders`, along with the deadline one of them carried. Nothing
+reads the archive at runtime; it is there so a future fixture, demo or restore has the text. The
+six notes written by hand are named as the ones to keep and are the only rows left. Running it
+again does nothing: the notes it names are gone and the shelf is `on conflict do nothing`.
 
 ## Contributing
 
