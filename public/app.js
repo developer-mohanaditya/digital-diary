@@ -1075,7 +1075,7 @@ function viewSettings() {
   <section class="card">
     <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">Read-only · /api/v1</span></div>
     <h2>API keys</h2>
-    <p class="muted" style="margin:0 0 2px;font-size:.84rem">Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Each key sees the whole diary, so give every project its own and revoke the one that leaks.</p>
+    <p class="muted" style="margin:0 0 2px;font-size:.84rem">Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Give every project its own key, and set its limits as you create it: which categories, which dates, and whether it may read the text at all. A key that leaks then exposes only the slice it was given.</p>
     ${keysHTML()}
   </section>
 
@@ -1152,7 +1152,21 @@ const SCOPE_UI = [
 ];
 const SCOPE_LABEL = Object.fromEntries(SCOPE_UI.map(([id, label]) => [id, label]));
 const keyWhen = ts => new Date(ts).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+const keyDay = d => new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
 const keyscopes = () => SCOPE_UI.map(([id, label]) => `<label><input type="checkbox" data-scope="${id}"${id === 'raw:read' ? '' : ' checked'} />${label}</label>`).join('');
+const keycats = () => CATS.map(c => `<label><input type="checkbox" data-cat="${c.id}" checked />${c.label}</label>`).join('');
+
+// A key's limits in the words the form used to set them, so the row can be read at a glance:
+// "work, project · since 1 Jan 2026 · counts only".
+function policyWords(p) {
+  if (!p) return 'limits could not be read — this key is refused';
+  const cats = p.categories ? p.categories.map(c => (CAT[c] ? CAT[c].label : c)).join(', ') : 'every category';
+  const days = p.from && p.to ? `${keyDay(p.from)} – ${keyDay(p.to)}`
+    : p.from ? `since ${keyDay(p.from)}`
+    : p.to ? `until ${keyDay(p.to)}`
+    : 'any day';
+  return `${cats} · ${days} · ${p.text === 'none' ? 'counts only, no note text' : 'full text'}`;
+}
 
 function keysHTML() {
   if (state.newKey) {
@@ -1164,7 +1178,7 @@ function keysHTML() {
         <input class="keymono" id="key-value" readonly value="${esc(k.key)}" aria-label="New API key" />
         <button class="cbtn" data-action="key-copy">Copy</button>
       </div>
-      <p class="note" style="margin-top:8px">${esc(k.name)} · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')}. ${expires}
+      <p class="note" style="margin-top:8px">${esc(k.name)} · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')}. ${esc(policyWords(k.policy))}. ${expires}
         This is the only time it is shown: the diary keeps a hash, so it cannot be read back.
         Put it in the other project's environment secrets, never in a browser bundle.</p>
       <div class="passrow" style="margin-top:10px"><button class="btn" data-action="key-done">Done</button></div>
@@ -1187,6 +1201,7 @@ function keysHTML() {
               <div style="min-width:0">
                 <span class="lab">${esc(k.name)} <span class="keypill ${pill}">${k.revokedAt ? 'revoked' : expired ? 'expired' : 'live'}</span></span>
                 <span class="sub"><code>${esc(k.prefix)}…</code> · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')} · ${when}</span>
+                <span class="keypolicy">${esc(policyWords(k.policy))}</span>
               </div>
               ${k.revokedAt ? '' : `<button class="microbtn danger" data-action="key-revoke" data-v="${esc(k.id)}" data-name="${esc(k.name)}">Revoke</button>`}
             </div>`;
@@ -1200,6 +1215,17 @@ function keysHTML() {
         <option value="90">in 90 days</option><option value="365">in a year</option><option value="never">never</option>
       </select></label>
       <div class="keyscopes">${keyscopes()}</div>
+      <div class="keylimits">
+        <span class="klab">Categories it may read</span>
+        <div class="keyscopes">${keycats()}</div>
+      </div>
+      <label class="field"><span>Written since</span><input type="date" id="key-from" /></label>
+      <label class="field"><span>Written until</span><input type="date" id="key-to" /></label>
+      <label class="field keywide"><span>Note text</span><select id="key-text">
+        <option value="clean">Full text — the notes themselves</option>
+        <option value="none">Counts only — days, categories and word counts, no sentences</option>
+      </select></label>
+      <p class="keyhint">Limits are enforced on every read. Leave the dates empty for any day and keep every category ticked for the whole diary.</p>
       <div class="passrow"><button class="cbtn" type="submit" id="key-create">Create a key</button><span class="pmsg" id="key-msg" role="status" aria-live="polite"></span></div>
     </form>`;
 }
@@ -1235,13 +1261,28 @@ async function createKey() {
   if (scopes.includes('raw:read') && !scopes.includes('notes:read')) {
     return fail('Original text is read through notes, so tick Notes too.');
   }
+  const catBoxes = Array.from(document.querySelectorAll('.keyform input[data-cat]'));
+  const cats = catBoxes.filter(i => i.checked).map(i => i.dataset.cat);
+  if (catBoxes.length && !cats.length) return fail('Pick at least one category, or tick them all for every one.');
+  const fromEl = $('#key-from'), toEl = $('#key-to'), textEl = $('#key-text');
+  const from = fromEl && fromEl.value ? fromEl.value : null;
+  const to = toEl && toEl.value ? toEl.value : null;
+  if (from && to && from > to) return fail('The window ends before it starts.');
+  const text = textEl ? textEl.value : 'clean';
+  if (text === 'none' && scopes.includes('raw:read')) {
+    return fail('Counts-only keys cannot read original text, so untick Original text.');
+  }
+  const policy = {
+    categories: catBoxes.length && cats.length < catBoxes.length ? cats : null,
+    from, to, text,
+  };
   if (btn) btn.disabled = true;
   let data = null, status = 0;
   try {
     const res = await fetch('/api/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, scopes, expiresInDays: expEl ? expEl.value : 'never' }),
+      body: JSON.stringify({ name, scopes, expiresInDays: expEl ? expEl.value : 'never', policy }),
     });
     status = res.status;
     data = await res.json().catch(() => null);

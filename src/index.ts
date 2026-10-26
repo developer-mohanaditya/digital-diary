@@ -10,7 +10,7 @@ import {
 } from './session';
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
-import { createApiKey, isRowId, listApiKeys, publicApi, revokeApiKey } from './publicapi';
+import { createApiKey, isRowId, listApiKeys, normalisePolicy, publicApi, revokeApiKey } from './publicapi';
 import { expiryFrom, keyNameProblem, normaliseScopes } from './apikey';
 
 export interface Env {
@@ -844,7 +844,7 @@ async function keysApi(request: Request, env: Env): Promise<Response> {
     }
     if (request.method === 'POST' && path === '/api/keys') {
       const body = (await request.json().catch(() => null)) as
-        { name?: unknown; scopes?: unknown; expiresInDays?: unknown } | null;
+        { name?: unknown; scopes?: unknown; expiresInDays?: unknown; policy?: unknown } | null;
       if (!body) return json({ ok: false, error: 'Send JSON: { "name": "...", "scopes": [...] }' }, 400);
       const nameProblem = keyNameProblem(body.name);
       if (nameProblem) return json({ ok: false, error: nameProblem }, 400);
@@ -852,8 +852,16 @@ async function keysApi(request: Request, env: Env): Promise<Response> {
       if ('error' in scopes) return json({ ok: false, error: scopes.error }, 400);
       const expiry = expiryFrom(body.expiresInDays, new Date());
       if ('error' in expiry) return json({ ok: false, error: expiry.error }, 400);
+      // Omitted limits mean the whole diary, which is what every key did before they existed.
+      const policy = normalisePolicy(body.policy);
+      if ('error' in policy) return json({ ok: false, error: policy.error }, 400);
+      // Original text is text: a counts-only key that also holds raw:read would be two
+      // answers to one question, so the pair is refused here rather than silently resolved.
+      if (policy.policy.text === 'none' && scopes.scopes.includes('raw:read')) {
+        return json({ ok: false, error: 'A counts-only key cannot read original text. Untick Original text.' }, 400);
+      }
       const created = await createApiKey(env, {
-        name: (body.name as string).trim(), scopes: scopes.scopes, expiresAt: expiry.at,
+        name: (body.name as string).trim(), scopes: scopes.scopes, policy: policy.policy, expiresAt: expiry.at,
       });
       // The one response that ever carries the key itself.
       return json({ ok: true, ...created });

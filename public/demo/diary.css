@@ -675,6 +675,11 @@
   .keyscopes label { display:inline-flex; align-items:center; gap:7px; font-size:.8rem; font-weight:700;
     background:var(--bg); border:1.5px solid var(--line); border-radius:9px; padding:6px 10px; cursor:pointer; }
   .keyscopes label:has(input:checked) { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+  .keyform input[type="checkbox"] { width:auto; padding:0; border:0; background:none; accent-color:var(--accent); }
+  .keyform .keylimits { grid-column:1 / -1; display:flex; flex-direction:column; gap:7px; }
+  .keyform .keylimits .klab { font-size:.76rem; font-weight:800; color:var(--muted); letter-spacing:.02em; }
+  .keyform .field.keywide, .keyform .keyhint { grid-column:1 / -1; }
+  .keyform .keyhint { margin:0; font-size:.78rem; color:var(--muted); }
   .keymono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.84rem; }
   .keyline { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
   .keyline input { flex:1; min-width:220px; padding:9px 11px; border:1.5px solid var(--accent); border-radius:10px;
@@ -690,6 +695,7 @@
   .keyrow .microbtn.danger { color:var(--alert); background:color-mix(in srgb, var(--alert) 8%, transparent);
     border-color:color-mix(in srgb, var(--alert) 40%, transparent); }
   .keyrow .microbtn.danger:hover { background:var(--alert); color:#fff; border-color:var(--alert); }
+  .keyrow .keypolicy { display:block; font-size:.78rem; color:var(--muted); margin-top:1px; }
   @media (max-width:700px) { .keyform { grid-template-columns:1fr; } }
   .setrow:first-of-type { border-top:0; }
   .setrow .lab { font-weight:700; display:block; }
