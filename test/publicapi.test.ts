@@ -31,6 +31,7 @@ interface Stub {
   scopes?: Scope[];
   revoked?: boolean;
   expires?: string | null;
+  policy?: Record<string, unknown> | null;
   rows?: Record<string, unknown>[];
   reminders?: Record<string, unknown>[];
   bump?: { minute_count: number; day_count: number };
@@ -50,6 +51,7 @@ function stub(opts: Stub = {}) {
     prefix: lookupPrefix(KEY),
     hash: keyHash,
     scopes: opts.scopes ?? ['notes:read', 'deadlines:read', 'stats:read'],
+    policy: opts.policy ?? null,
     per_minute: 60,
     per_day: 5000,
     last_used_at: new Date().toISOString(),
@@ -81,7 +83,11 @@ function stub(opts: Stub = {}) {
       return json([{ id: 'key-new', created_at: new Date().toISOString(), last_used_at: null, expires_at: null, revoked_at: null, ...body }]);
     }
     if (url.includes('/api_keys?select=id,name')) {
-      return json([{ id: 'key-1', name: 'portfolio', prefix: lookupPrefix(KEY), scopes: ['notes:read'], created_at: '2026-10-01T00:00:00Z', last_used_at: null, expires_at: null, revoked_at: null }]);
+      return json([{
+        id: 'key-1', name: 'portfolio', prefix: lookupPrefix(KEY), scopes: ['notes:read'],
+        policy: { categories: ['work'], from: null, to: null, text: 'clean' },
+        created_at: '2026-10-01T00:00:00Z', last_used_at: null, expires_at: null, revoked_at: null,
+      }]);
     }
     if (url.includes('/api_keys?id=eq.')) return json([{ id: 'key-1' }]);
 
@@ -318,7 +324,7 @@ describe('the aggregate endpoints', () => {
     const res = await worker.fetch(api('/api/v1/stats?year=2026&by=year'), env());
     expect(res.status).toBe(200);
     const call = calls.find((c) => c.url.includes('/rpc/diary_stats'))!;
-    expect(call.body).toEqual({ p_from: '2026-01-01', p_to: '2026-12-31', p_by: 'year' });
+    expect(call.body).toEqual({ p_from: '2026-01-01', p_to: '2026-12-31', p_by: 'year', p_categories: null });
     const body = (await res.json()) as { groups: { key: string; notes: number }[]; meta: { totals: { notes: number } } };
     expect(body.groups[0]).toMatchObject({ key: '2026-10', notes: 12 });
     expect(body.meta.totals.notes).toBe(12);
@@ -385,6 +391,103 @@ describe('GET /api/v1/export', () => {
   });
 });
 
+// A key is no longer the whole diary: it carries a policy, and every read has to honour it.
+describe('a key’s limits', () => {
+  const NOTE_ID = '9f1c1a2b-0000-4000-8000-123456789abc';
+  const workOnly = { categories: ['work'], from: null, to: null, text: 'clean' };
+  const noteOn = (day: string, category = 'work') => ({
+    id: 'note-1', day, category, category_source: 'tag', mode: 'refine',
+    clean_text: 'Merged the release candidate.', raw_text: 'merged rc',
+    created_at: `${day}T19:41:02Z`, capture_id: CAPTURE,
+  });
+
+  it('narrows a note read to the categories it was given, and refuses a reach past them', async () => {
+    const { calls } = stub({ policy: workOnly });
+    const asked = await worker.fetch(api('/api/v1/notes?month=2026-10'), env());
+    expect(asked.status).toBe(200);
+    expect(calls.find((c) => c.url.includes('/thoughts?'))!.url).toContain('category=in.(work)');
+
+    // Silent narrowing would hide the misconfiguration, so the refusal names the category.
+    const outside = await worker.fetch(api('/api/v1/notes?category=life'), env());
+    expect(outside.status).toBe(403);
+    expect(await outside.json()).toMatchObject({ error: { code: 'out_of_policy' } });
+  });
+
+  it('clamps the date window, and treats a note outside it as missing', async () => {
+    const since = { categories: null, from: '2026-10-01', to: null, text: 'clean' };
+    const { calls } = stub({ policy: since });
+    expect((await worker.fetch(api('/api/v1/notes?month=2026-09'), env())).status).toBe(200);
+    const query = calls.find((c) => c.url.includes('/thoughts?'))!.url;
+    expect(query).toContain('day=gte.2026-10-01');
+    // A month before the window is narrowed to nothing rather than refused: an empty answer.
+    expect(query).toContain('day=lte.2026-09-30');
+
+    // 404, never 403: the answer must not confirm that a note is there to want.
+    stub({ policy: since, rows: [noteOn('2026-09-20')] });
+    expect((await worker.fetch(api(`/api/v1/notes/${NOTE_ID}`), env())).status).toBe(404);
+    stub({ policy: since, rows: [noteOn('2026-10-15')] });
+    expect((await worker.fetch(api(`/api/v1/notes/${NOTE_ID}`), env())).status).toBe(200);
+  });
+
+  it('hides a deadline whose note is outside the limits', async () => {
+    const reminder = {
+      id: 'r1', capture_id: CAPTURE, thought_id: 'note-1', title: 'Proposal',
+      due_at: '2026-11-03T09:00:00Z', status: 'pending', done_at: null, created_at: '2026-10-10T09:00:00Z',
+    };
+    // The reminder is on a work note; this key may only read life.
+    stub({ policy: { categories: ['life'], from: null, to: null, text: 'clean' }, reminders: [reminder] });
+    const body = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as { deadlines: unknown[] };
+    expect(body.deadlines).toHaveLength(0);
+
+    // One deadline answers 404 for the same reason a note does.
+    stub({ policy: { categories: ['life'], from: null, to: null, text: 'clean' }, reminders: [reminder] });
+    const one = await worker.fetch(api('/api/v1/deadlines/9f1c1a2b-0000-4000-8000-123456789abc'), env());
+    expect(one.status).toBe(404);
+  });
+
+  it('drops the sentences from a counts-only key, and closes the ways around it', async () => {
+    stub({ policy: { categories: null, from: null, to: null, text: 'none' } });
+    const body = (await (await worker.fetch(api('/api/v1/notes'), env())).json()) as {
+      notes: { text?: string; words: number }[];
+    };
+    expect(body.notes[0].text).toBeUndefined();
+    expect(body.notes[0].words).toBe(4);
+    expect((await worker.fetch(api('/api/v1/notes?fields=text'), env())).status).toBe(403);
+    // A word search would rebuild the text one query at a time.
+    expect((await worker.fetch(api('/api/v1/notes?q=release'), env())).status).toBe(403);
+    expect((await worker.fetch(api('/api/v1/export?format=csv'), env())).status).toBe(403);
+  });
+
+  it('keeps the deadline but not the sentence behind it', async () => {
+    const reminder = {
+      id: 'r1', capture_id: CAPTURE, thought_id: 'note-1', title: 'Proposal',
+      due_at: '2026-11-03T09:00:00Z', status: 'pending', done_at: null, created_at: '2026-10-10T09:00:00Z',
+    };
+    stub({ policy: { categories: null, from: null, to: null, text: 'none' }, reminders: [reminder] });
+    const body = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as {
+      deadlines: { note?: { id: string; day: string; text?: string } }[];
+    };
+    expect(body.deadlines[0].note).toEqual({ id: 'note-1', day: '2026-10-15' });
+  });
+
+  it('counts only the categories it may read, inside the window', async () => {
+    const { calls } = stub({ policy: { categories: ['work'], from: '2026-10-01', to: null, text: 'clean' } });
+    expect((await worker.fetch(api('/api/v1/stats?year=2026'), env())).status).toBe(200);
+    const stat = calls.find((c) => c.url.includes('/rpc/diary_stats'))!;
+    expect(stat.body).toMatchObject({ p_from: '2026-10-01', p_categories: ['work'] });
+
+    expect((await worker.fetch(api('/api/v1/days?year=2026'), env())).status).toBe(200);
+    const days = calls.find((c) => c.url.includes('/rpc/diary_days'))!;
+    expect(days.body).toMatchObject({ p_from: '2026-10-01', p_categories: ['work'] });
+  });
+
+  it('tells the caller its own limits', async () => {
+    stub({ policy: workOnly });
+    const body = (await (await worker.fetch(api('/api/v1/me'), env())).json()) as { key: { policy: unknown } };
+    expect(body.key.policy).toEqual(workOnly);
+  });
+});
+
 describe('/api/keys', () => {
   async function signedIn(e = env()) {
     const res = await worker.fetch(new Request('https://diary.test/api/session', {
@@ -429,6 +532,43 @@ describe('/api/keys', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 
+  it('stores the limits a new key was given', async () => {
+    const e = env();
+    const { calls } = stub();
+    const cookie = await signedIn(e);
+    const policy = { categories: ['work', 'learning'], from: '2026-01-01', to: null, text: 'none' };
+    const res = await worker.fetch(post('/api/keys', {
+      name: 'Habit tracker', scopes: ['notes:read', 'stats:read'], expiresInDays: 'never', policy,
+    }, cookie), e);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { policy: unknown }).policy).toEqual(policy);
+    const write = calls.find((c) => c.url.endsWith('/api_keys') && c.method === 'POST')!;
+    expect(write.body[0].policy).toEqual(policy);
+  });
+
+  it('refuses limits it could not enforce', async () => {
+    const e = env();
+    const { calls } = stub();
+    const cookie = await signedIn(e);
+    const bad = [
+      { categories: ['holiday'], from: null, to: null, text: 'clean' },
+      { categories: [], from: null, to: null, text: 'clean' },
+      { categories: null, from: '2026-02-31', to: null, text: 'clean' },
+      { categories: null, from: '2026-10-01', to: '2026-09-01', text: 'clean' },
+      { categories: null, from: null, to: null, text: 'all' },
+    ];
+    for (const policy of bad) {
+      const res = await worker.fetch(post('/api/keys', { name: 'x', scopes: ['notes:read'], policy }, cookie), e);
+      expect(res.status, JSON.stringify(policy)).toBe(400);
+    }
+    // Two answers to one question: counts only, but also the original text.
+    const contradictory = await worker.fetch(post('/api/keys', {
+      name: 'x', scopes: ['notes:read', 'raw:read'], policy: { categories: null, from: null, to: null, text: 'none' },
+    }, cookie), e);
+    expect(contradictory.status).toBe(400);
+    expect(calls.filter((c) => c.method === 'POST' && c.url.endsWith('/api_keys'))).toHaveLength(0);
+  });
+
   it('refuses a nameless key, no scopes, and raw text without notes', async () => {
     const e = env();
     stub();
@@ -453,9 +593,10 @@ describe('/api/keys', () => {
     const cookie = await signedIn(e);
     const list = await worker.fetch(new Request('https://diary.test/api/keys', { headers: { Cookie: cookie } }), e);
     expect(list.status).toBe(200);
-    const body = (await list.json()) as { keys: { prefix: string; key?: string }[] };
+    const body = (await list.json()) as { keys: { prefix: string; key?: string; policy: unknown }[] };
     expect(body.keys[0].key).toBeUndefined();
     expect(body.keys[0].prefix).toHaveLength(16);
+    expect(body.keys[0].policy).toEqual({ categories: ['work'], from: null, to: null, text: 'clean' });
 
     // A made-up id is the caller's mistake, not a database failure.
     expect((await worker.fetch(post('/api/keys/abcdefgh/revoke', {}, cookie), e)).status).toBe(400);
