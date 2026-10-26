@@ -24,6 +24,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 - Sends one summary at 22:00 in the diary's timezone: the day's count and its categories, each note on one line with its hour, and whatever is still open. Two cron entries (`0 20` and `0 21` UTC) cover CET and CEST, the Worker sends only when the local clock has reached 22:00, and a `daily_summary` row in `settings` keeps it to one message a day, so the hour the clocks go back cannot repeat it. A day with nothing written says so rather than skipping the message.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
 - Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, save a typed note through `POST /api/note`, unlock with the passphrase at `/api/session`, and change that passphrase from Settings → Access through `POST /api/passphrase`. The page wears the demo's design: the app and the demo link the same stylesheet, `public/demo/diary.css`.
+- Serves a read-only API at `/api/v1`, so other projects of mine can read the diary (by day, month, year, category, type, every deadline, and the counts) with a key minted in Settings → Access. Keys are hashed at rest and revoked one at a time; the API itself is uncached, has no CORS headers, and answers `503` naming the migration until `0007_api_keys.sql` has been run.
 
 ## The cleanup step
 
@@ -75,6 +76,72 @@ The deploy went out, but **Raw** is still missing on the old notes: they predate
 ```
 
 Line two is one of `Formatted, <before> -> <after> characters.`, `Cleaned up, no change needed.`, `Saved as written, no cleanup.` for `/push`, or `Cleanup failed (<reason>), saved as written.`
+
+## The API
+
+`/api/v1` is how another project reads the diary. It is read-only, it is a separate door from the page's passphrase, and every answer is a JSON envelope.
+
+### Keys
+
+Settings → Access mints one per project. A key looks like `ddk_live_…` (52 characters) and is shown **once**: the database keeps only its SHA-256 beside a 16-character lookup prefix, so there is nothing to read back. Give each project its own key — a key reads the whole diary, so the only way to withdraw one consumer is to revoke that key, which takes effect on its next request.
+
+| Scope | Reads |
+| --- | --- |
+| `notes:read` | notes, one note, the category list, exports |
+| `deadlines:read` | deadlines, one deadline |
+| `stats:read` | the per-day rollup and the grouped counts |
+| `raw:read` | the original text, next to `notes:read` |
+
+`notes`, `deadlines` and `stats` are on every new key. `raw:read` is not: the original is the part of a note the cleanup was meant to replace, so it is granted deliberately.
+
+```sh
+curl -s "https://<site>/api/v1/notes?month=2026-10&category=work" \
+  -H "Authorization: Bearer ddk_live_…"
+```
+
+A request without a valid key is `401`, and the answer never says whether the key was unknown, revoked or expired. A valid key without the scope an endpoint needs is `403`, naming the scope.
+
+### Endpoints
+
+| Endpoint | Scope | Answers |
+| --- | --- | --- |
+| `GET /api/v1` | — | the API describing itself (no note content) |
+| `GET /api/v1/me` | — | this key: name, scopes, limits, last use |
+| `GET /api/v1/notes` | `notes:read` | notes, filtered and paged |
+| `GET /api/v1/notes/{id}` | `notes:read` | one note |
+| `GET /api/v1/days` | `stats:read` | per day: notes, words, category tally, first and last hour |
+| `GET /api/v1/stats` | `stats:read` | grouped counts, `by=day\|week\|month\|year\|category\|type\|source` |
+| `GET /api/v1/deadlines` | `deadlines:read` | open, done or all, with `daysLeft`, `daysLate`, `openDays` and the note behind each |
+| `GET /api/v1/deadlines/{id}` | `deadlines:read` | one deadline |
+| `GET /api/v1/categories` | `notes:read` | id, label, order |
+| `GET /api/v1/export` | `notes:read` | a range as `json`, `csv` or `md` |
+
+### Filters on `/notes`
+
+| Parameter | Meaning |
+| --- | --- |
+| `day=2026-10-25`, `month=2026-10`, `year=2026` | one time selector, never two |
+| `from=2026-01-01&to=2026-10-31` | an explicit range; either end may stand alone |
+| `category=work,life` | one or more of the diary's categories |
+| `type=refined,verbatim,reason,think` | what the note went through |
+| `source=tag,auto,manual` | filed by hand or by the classifier |
+| `q=proposal` | a word search over the cleaned text (two characters or more, sixty at most) |
+| `has=deadline`, `done=true\|false` | notes that carry a deadline, or only the closed/open ones |
+| `fields=id,day,text` | cut the shape down (`raw` needs `raw:read`) |
+| `limit=100&cursor=…` | keyset paging; `meta.next` is the next cursor, or null |
+| `order=asc\|desc` | newest first by default |
+
+`/days`, `/stats` and `/export` take the same time selectors. `/deadlines` takes `status=open|done|all`, `due_before`, `due_after` and `limit`.
+
+A note comes back as `{ id, day, time, at, category, type, source, text, words, due?, done?, doneAt?, usage?, raw? }`. `day` and `time` are the diary's local day and clock (`DIARY_TZ`), `at` is the stored timestamp, and `words` is counted from the cleaned text. The envelope is `{ ok, meta: { version, timeZone, count, next }, … }`.
+
+### What the transport guarantees
+
+- Every answer carries `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`, so neither Cloudflare's edge nor a proxy keeps a page of notes.
+- No CORS header is ever sent: a web page on another origin cannot read a response even if a key is pasted into it. Server-to-server calls are unaffected.
+- Nothing the caller sends reaches a query unfiltered. Each value is checked against a shape (a real date, a known category, a known type) and the PostgREST query is rebuilt server-side. There is no endpoint that proxies the database.
+- Only the method, path, status, row count and key prefix are ever logged. Never a note, never a query value, never the caller's address.
+- Each key is limited to 60 requests a minute and 5,000 a day by default. Every answer carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a spent allowance answers `429` with `Retry-After`. The counter is one atomic Postgres function, so a burst cannot slip past a read-then-write race.
 
 ## What is not built yet
 
@@ -170,7 +237,9 @@ From then on the page shows a sign-in card: `POST /api/session` with `{"passphra
 
 ## Database setup
 
-Open the Supabase SQL editor and run each file in `migrations/` in order (`0001_init.sql`, then `0002_settings.sql`, then `0003_row_level_security.sql`, then `0004_service_role_grants.sql`). All four are safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`. Every one is safe to run again.
+
+`0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Access says the same; the rest of the diary is unaffected.
 
 ## Contributing
 
