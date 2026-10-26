@@ -31,6 +31,10 @@ interface StubOpts {
   // The first capture insert reports no row although the row is there: what a second request
   // arriving at the same moment looks like from the losing side of the race.
   raceFirstCapture?: boolean;
+  // The counter function itself fails, which is not the same as a key being over its limit.
+  counterDown?: boolean;
+  // What the note-weighted bump answers: over 300 in a day is a spent allowance.
+  batch?: { minute_count: number; day_count: number };
 }
 
 function stub(opts: StubOpts = {}) {
@@ -63,7 +67,12 @@ function stub(opts: StubOpts = {}) {
     // --- the key ---
     const asked = /\/api_keys\?prefix=eq\.([^&]+)/.exec(url);
     if (asked) return json(asked[1] === lookupPrefix(KEY) ? [keyRow] : []);
-    if (url.includes('/rpc/bump_api_usage')) return json([{ minute_count: 1, day_count: 1 }]);
+    if (url.includes('/rpc/bump_api_usage')) {
+      return opts.counterDown ? json({ message: 'counter down' }, 500) : json([{ minute_count: 1, day_count: 1 }]);
+    }
+    if (url.includes('/rpc/bump_api_notes')) {
+      return opts.counterDown ? json({ message: 'counter down' }, 500) : json([opts.batch ?? { minute_count: 2, day_count: 2 }]);
+    }
 
     // --- captures, as the two tables the write path touches ---
     if (method === 'GET' && url.includes('/captures?')) {
@@ -324,12 +333,44 @@ describe('POST /api/v1/notes', () => {
     expect(s.thoughts[0].cleanup_model).toBeNull();
   });
 
-  it('stays silent when the caller asks for no acknowledgement', async () => {
+  it('cannot be silenced by the caller: an old ack field does nothing', async () => {
+    // A stolen key used to be able to write without the one message that says it did, so the
+    // request no longer owns that decision. The note still lands, and the phone still hears.
     const s = stub();
     const res = await worker.fetch(post({ notes: [note()], ack: false }), env());
-    expect((await res.json() as any).receipt.telegram).toBe('skipped');
-    expect(s.calls.filter((c) => c.url.includes('api.telegram.org'))).toHaveLength(0);
+    const answer = await res.json() as any;
+    expect(answer.receipt.telegram).toBe('sent');
+    expect(s.calls.filter((c) => c.url.includes('api.telegram.org'))).toHaveLength(1);
     expect(s.captures).toHaveLength(1);
+    // A field that is neither truthy nor false is still a mistake worth naming.
+    const bad = await worker.fetch(post({ notes: [note()], ack: 'no' }), env());
+    expect(bad.status).toBe(400);
+  });
+
+  it('spends the key’s allowance once per note, not once per request', async () => {
+    // Three notes are three model calls, so they cost three of the day's 300, not one.
+    const s = stub();
+    const res = await worker.fetch(post({ notes: [note(), note({ text: 'Two.' }), note({ text: 'Three.' })] }), env());
+    expect(res.status).toBe(200);
+    const bump = s.calls.filter((c) => c.url.includes('/rpc/bump_api_notes'));
+    expect(bump).toHaveLength(1);
+    expect(bump[0].body).toEqual({ k: 'key-write', extra: 2 });
+  });
+
+  it('refuses a batch that would spend more of the day than is left', async () => {
+    stub({ batch: { minute_count: 4, day_count: 301 } });
+    const res = await worker.fetch(post({ notes: [note(), note({ text: 'Two.' })] }), env());
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('3600');
+  });
+
+  it('files nothing when the counter cannot answer', async () => {
+    // Reads survive a counter hiccup because they cost nothing. A write spends money and sends
+    // a message, so it is refused rather than filed uncounted.
+    const s = stub({ counterDown: true });
+    const res = await worker.fetch(post({ notes: [note()] }), env());
+    expect(res.status).toBe(503);
+    expect(s.captures).toHaveLength(0);
   });
 
   it('needs a key like every other endpoint', async () => {

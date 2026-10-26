@@ -35,6 +35,8 @@ interface Stub {
   rows?: Record<string, unknown>[];
   reminders?: Record<string, unknown>[];
   bump?: { minute_count: number; day_count: number };
+  // The counter function fails: the read path carries on, the write path does not.
+  counterDown?: boolean;
 }
 
 // The real digest of KEY, so a stub row can hold a hash that verifies. A request for any other
@@ -92,7 +94,10 @@ function stub(opts: Stub = {}) {
     if (url.includes('/api_keys?id=eq.')) return json([{ id: 'key-1' }]);
 
     // --- counters and aggregates ---
-    if (url.includes('/rpc/bump_api_usage')) return json([state.bump]);
+    if (url.includes('/rpc/bump_api_usage')) {
+      return opts.counterDown ? json({ message: 'counter down' }, 500) : json([state.bump]);
+    }
+    if (url.includes('/rpc/bump_api_notes')) return json([{ minute_count: 1, day_count: 1 }]);
     if (url.includes('/rpc/diary_stats')) return json([{ bucket: '2026-10', notes: 12, words: 340, days: 9 }]);
     if (url.includes('/rpc/diary_days')) {
       return json([{ day: '2026-10-25', notes: 2, words: 30, categories: { work: 2 }, first_at: '2026-10-25T09:00:00Z', last_at: '2026-10-25T19:41:02Z' }]);
@@ -461,15 +466,61 @@ describe('a key’s limits', () => {
   });
 
   it('keeps the deadline but not the sentence behind it', async () => {
+    // The title of a deadline is the note's own first line, so it goes too: a counts-only key
+    // once read a personal note back out of this field.
     const reminder = {
-      id: 'r1', capture_id: CAPTURE, thought_id: 'note-1', title: 'Proposal',
+      id: 'r1', capture_id: CAPTURE, thought_id: 'note-1', title: 'Therapy session notes are private.',
       due_at: '2026-11-03T09:00:00Z', status: 'pending', done_at: null, created_at: '2026-10-10T09:00:00Z',
     };
     stub({ policy: { categories: null, from: null, to: null, text: 'none' }, reminders: [reminder] });
     const body = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as {
-      deadlines: { note?: { id: string; day: string; text?: string } }[];
+      deadlines: { title: string; note?: { id: string; day: string; text?: string } }[];
     };
     expect(body.deadlines[0].note).toEqual({ id: 'note-1', day: '2026-10-15' });
+    expect(body.deadlines[0].title).toBe('A deadline');
+
+    // One deadline, same rule.
+    stub({ policy: { categories: null, from: null, to: null, text: 'none' }, reminders: [reminder] });
+    const one = (await (await worker.fetch(api(`/api/v1/deadlines/${NOTE_ID}`), env())).json()) as { deadline: { title: string } };
+    expect(one.deadline.title).toBe('A deadline');
+
+    // An open key still reads the words it is allowed to read.
+    stub({ reminders: [reminder] });
+    const open = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as { deadlines: { title: string }[] };
+    expect(open.deadlines[0].title).toBe('Therapy session notes are private.');
+  });
+
+  it('checks a deadline whose only link is the capture it was filed from', async () => {
+    // A reminder the write API makes carries the capture, not a thought id. Without following
+    // that link the policy has nothing to test, and every API deadline escaped it.
+    const reminder = {
+      id: 'r1', capture_id: CAPTURE, thought_id: null, title: 'Tax file for the accountant',
+      due_at: '2026-11-03T09:00:00Z', status: 'pending', done_at: null, created_at: '2026-10-10T09:00:00Z',
+    };
+    stub({ policy: workOnly, reminders: [reminder] });
+    const shown = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as { deadlines: { title: string }[] };
+    expect(shown.deadlines.map((d) => d.title)).toEqual(['Tax file for the accountant']);
+
+    // The same reminder on a note this key may not read is not there, at all.
+    stub({ policy: { categories: ['life'], from: null, to: null, text: 'clean' }, reminders: [reminder] });
+    const hidden = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as { deadlines: unknown[] };
+    expect(hidden.deadlines).toHaveLength(0);
+    stub({ policy: { categories: ['life'], from: null, to: null, text: 'clean' }, reminders: [reminder] });
+    expect((await worker.fetch(api(`/api/v1/deadlines/${NOTE_ID}`), env())).status).toBe(404);
+  });
+
+  it('hides a deadline it cannot check from a limited key, and shows it to an open one', async () => {
+    const orphan = {
+      id: 'r9', capture_id: null, thought_id: null, title: 'A deadline with no note left',
+      due_at: '2026-11-03T09:00:00Z', status: 'pending', done_at: null, created_at: '2026-10-10T09:00:00Z',
+    };
+    stub({ policy: workOnly, rows: [], reminders: [orphan] });
+    const hidden = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as { deadlines: unknown[] };
+    expect(hidden.deadlines).toHaveLength(0);
+
+    stub({ rows: [], reminders: [orphan] });
+    const shown = (await (await worker.fetch(api('/api/v1/deadlines'), env())).json()) as { deadlines: { title: string }[] };
+    expect(shown.deadlines[0].title).toBe('A deadline with no note left');
   });
 
   it('counts only the categories it may read, inside the window', async () => {
@@ -487,6 +538,57 @@ describe('a key’s limits', () => {
     stub({ policy: workOnly });
     const body = (await (await worker.fetch(api('/api/v1/me'), env())).json()) as { key: { policy: unknown } };
     expect(body.key.policy).toEqual(workOnly);
+  });
+});
+
+// A well-shaped key that matches nothing still costs a database round trip, and anyone can send
+// one. The throttle is per isolate, so it is a speed bump; these tests pin the behaviour.
+describe('a key that does not work', () => {
+  const attempt = (ip: string, key: string) => worker.fetch(new Request('https://diary.test/api/v1/me', {
+    headers: { Authorization: `Bearer ${key}`, 'CF-Connecting-IP': ip },
+  }), env());
+
+  it('stops costing a database round trip after twenty misses from one client', async () => {
+    const { calls } = stub();
+    const bogus = generateKey();
+    const statuses: number[] = [];
+    for (let i = 0; i < 21; i++) statuses.push((await attempt('203.0.113.9', bogus)).status);
+    expect(statuses.slice(0, 20).every((s) => s === 401)).toBe(true);
+    expect(statuses[20]).toBe(429);
+    // Twenty lookups for twenty-one requests: the last one never reached the database.
+    expect(calls.filter((c) => c.url.includes('/api_keys?prefix=eq.'))).toHaveLength(20);
+  });
+
+  it('leaves a key that works alone, from the same address', async () => {
+    stub();
+    for (let i = 0; i < 5; i++) expect((await attempt('203.0.113.10', KEY)).status).toBe(200);
+  });
+});
+
+// The counters only say how many calls a key made. This is the record of which pages it asked
+// for, and it must not become a record of what it searched for.
+describe('the audit line', () => {
+  it('names the key and the route, never the query string', async () => {
+    stub();
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await worker.fetch(api('/api/v1/notes?q=release'), env());
+      // A refusal is worth a line too: it is what a stolen key looks like when it reaches.
+      await worker.fetch(api('/api/v1/notes?fields=raw'), env());
+      const lines = spy.mock.calls.map((c) => String(c[0]));
+      expect(lines.some((l) => l.startsWith('api ddk_live_') && l.endsWith('GET /api/v1/notes 200'))).toBe(true);
+      expect(lines.some((l) => l.endsWith('GET /api/v1/notes 403'))).toBe(true);
+      expect(lines.join('\n')).not.toContain('release');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('when the counter is down', () => {
+  it('still reads, because a read spends nothing', async () => {
+    stub({ counterDown: true });
+    expect((await worker.fetch(api('/api/v1/notes'), env())).status).toBe(200);
   });
 });
 

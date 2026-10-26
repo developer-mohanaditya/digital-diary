@@ -72,7 +72,8 @@ describe('the MCP server', () => {
     expect(url).toBe('https://diary.test/api/v1/notes');
     expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBe(`Bearer ${KEY}`);
-    expect(JSON.parse(init.body)).toEqual({ notes: [{ text: 'Shipped the write API.' }], ack: true, client: 'claude-code', idempotencyKey: 'session-1' });
+    // No ack field: the phone is told about every write, and the caller cannot turn that off.
+    expect(JSON.parse(init.body)).toEqual({ notes: [{ text: 'Shipped the write API.' }], client: 'claude-code', idempotencyKey: 'session-1' });
     expect(res.result.isError).toBeUndefined();
     expect(res.result.content[0].text).toContain('Filed 1 note (work 1)');
     expect(res.result.content[0].text).toContain('Confirmed on Telegram.');
