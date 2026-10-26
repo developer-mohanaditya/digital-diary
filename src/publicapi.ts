@@ -11,11 +11,12 @@
 
 import { sameSecret } from './session';
 import {
-  DEFAULT_SCOPES, SCOPE_LABEL, SCOPES, generateKey, hashKey, hasScope, keyShaped, lookupPrefix,
+  DEFAULT_SCOPES, SCOPE_LABEL, SCOPES, generateKey, hashKey, hasScope, keyShaped, limitsFor, lookupPrefix,
   type Scope,
 } from './apikey';
-import { UI_CATEGORIES, clock, displayMode, type ThoughtRow } from './api';
+import { UI_CATEGORIES, clock, displayMode, isDay, type ThoughtRow } from './api';
 import { localDay } from './handler';
+import { MAX_NOTES, isProblem, normaliseWrite, writeNotes, type WriteDeps } from './writeapi';
 import type { Env } from './index';
 
 export const API_VERSION = 'v1';
@@ -274,6 +275,10 @@ export async function createApiKey(
       scopes: input.scopes,
       policy: input.policy,
       expires_at: input.expiresAt,
+      // Stored on the row, not inferred later: a key that may add notes is minted with a
+      // tighter ceiling than a read key, and raising it is one row rather than a deploy.
+      per_minute: limitsFor(input.scopes).perMinute,
+      per_day: limitsFor(input.scopes).perDay,
     }]),
   });
   if (!res.ok) {
@@ -299,6 +304,8 @@ export interface KeySummary {
   name: string;
   prefix: string;
   scopes: string[];
+  perMinute: number;
+  perDay: number;
   // null means the stored policy could not be read; enforcement refuses such a key, and the
   // page says so rather than claiming it has no limits.
   policy: KeyPolicy | null;
@@ -311,7 +318,7 @@ export interface KeySummary {
 export async function listApiKeys(env: Env): Promise<KeySummary[]> {
   const { base, headers } = db(env);
   const res = await fetch(
-    `${base}/api_keys?select=id,name,prefix,scopes,policy,created_at,last_used_at,expires_at,revoked_at&order=created_at.desc&limit=50`,
+    `${base}/api_keys?select=id,name,prefix,scopes,policy,per_minute,per_day,created_at,last_used_at,expires_at,revoked_at&order=created_at.desc&limit=50`,
     { headers },
   );
   if (!res.ok) {
@@ -327,6 +334,8 @@ export async function listApiKeys(env: Env): Promise<KeySummary[]> {
     name: r.name,
     prefix: r.prefix,
     scopes: r.scopes ?? [],
+    perMinute: r.per_minute ?? 60,
+    perDay: r.per_day ?? 5000,
     policy: (() => {
       const parsed = normalisePolicy(r.policy);
       return 'error' in parsed ? null : parsed.policy;
@@ -352,11 +361,7 @@ export async function revokeApiKey(env: Env, id: string): Promise<boolean> {
 
 /* ---------- Dates ---------- */
 
-export function isDay(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const d = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
-}
+
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -1124,8 +1129,8 @@ export function describe(tz: string) {
       name: 'Digital Diary',
       version: API_VERSION,
       timeZone: tz,
-      readOnly: true,
       baseUrl: '/api/v1',
+      write: `POST /api/v1/notes files up to ${MAX_NOTES} notes at once, with a key that holds notes:write. A write key cannot read the diary back.`,
     },
     auth: {
       header: 'Authorization: Bearer <key>',
@@ -1135,6 +1140,7 @@ export function describe(tz: string) {
     scopes: Object.fromEntries(SCOPES.map((s) => [s, SCOPE_LABEL[s]])),
     endpoints: [
       { method: 'GET', path: '/api/v1', scope: null, about: 'This document.' },
+      { method: 'POST', path: '/api/v1/notes', scope: 'notes:write', about: `File 1–${MAX_NOTES} notes. Per note: text, category, mode, day, at, due. The answer is a receipt for each one, and an Idempotency-Key makes a retry a no-op.` },
       { method: 'GET', path: '/api/v1/me', scope: null, about: 'The key: name, scopes, policy (categories, from, to, text), limits, last use.' },
       { method: 'GET', path: '/api/v1/notes', scope: 'notes:read', about: 'Notes, filtered and paged. Filters: day, month, year, from, to, category, type, source, q, has=deadline, done, fields, limit, cursor, order.' },
       { method: 'GET', path: '/api/v1/notes/{id}', scope: 'notes:read', about: 'One note.' },
@@ -1145,7 +1151,7 @@ export function describe(tz: string) {
       { method: 'GET', path: '/api/v1/categories', scope: 'notes:read', about: 'The categories: id, label, order.' },
       { method: 'GET', path: '/api/v1/export', scope: 'notes:read', about: 'A range as json, csv or md. Same time filters as notes.' },
     ],
-    errors: ['unauthorized', 'forbidden', 'out_of_policy', 'policy', 'bad_filter', 'bad_cursor', 'not_found', 'method', 'rate_limited', 'too_many', 'setup', 'upstream'],
+    errors: ['unauthorized', 'forbidden', 'out_of_policy', 'policy', 'bad_filter', 'bad_cursor', 'bad_note', 'not_found', 'method', 'rate_limited', 'too_many', 'setup', 'upstream'],
     envelope: { ok: true, meta: { version: API_VERSION, timeZone: tz, count: 0, next: null } },
   };
 }
@@ -1170,24 +1176,29 @@ function wholeNumber(raw: string, max: number, message: string): number {
   return Math.min(n, max);
 }
 
-export async function publicApi(request: Request, env: Env): Promise<Response> {
+export async function publicApi(request: Request, env: Env, write?: WriteDeps): Promise<Response> {
   try {
     const url = new URL(request.url);
     const tz = env.DIARY_TZ || 'UTC';
+    const reading = request.method === 'GET' || request.method === 'HEAD';
+    // One write endpoint, and only one. It is matched before authentication so that a POST
+    // anywhere else is a 405 rather than a prompt to authenticate against nothing.
+    const writing = request.method === 'POST' && url.pathname === '/api/v1/notes';
     if (url.pathname === '/api/v1' || url.pathname === '/api/v1/') {
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        throw new Problem(405, 'method', 'The API is read-only.', { Allow: 'GET, HEAD' });
+      if (!reading) {
+        throw new Problem(405, 'method', 'The index is a read. Notes go to POST /api/v1/notes.', { Allow: 'GET, HEAD' });
       }
       return apiJson(describe(tz));
     }
-    if (request.method !== 'GET' && request.method !== 'HEAD') {
-      throw new Problem(405, 'method', 'The API is read-only.', { Allow: 'GET, HEAD' });
+    if (!reading && !writing) {
+      throw new Problem(405, 'method', 'This API reads over GET and adds notes over POST /api/v1/notes.', { Allow: 'GET, HEAD' });
     }
 
     const { key, rate } = await authenticate(request, env);
     const today = localDay(new Date(), tz);
     const ctx: Ctx = { env, key, tz, today, rate };
     const path = url.pathname;
+    if (writing) return await writeRoute(ctx, request, write);
 
     if (path === '/api/v1/me') {
       return apiJson({
@@ -1229,4 +1240,32 @@ export async function publicApi(request: Request, env: Env): Promise<Response> {
     console.error('public api failed', err);
     return apiFail(502, 'upstream', 'The diary could not answer that.');
   }
+}
+
+// POST /api/v1/notes. Authentication already happened, and the rate limit was counted with it.
+// Everything else about a write — what a note may say, what this key may file, and the receipt
+// that comes back — belongs to the write module, so there is one place to read for the answer
+// to "what did that request do?".
+async function writeRoute(ctx: Ctx, request: Request, write?: WriteDeps): Promise<Response> {
+  if (!write) return apiFail(503, 'setup', 'This build cannot file notes from another app.');
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return apiFail(400, 'bad_note', 'Send JSON: { "notes": [ { "text": "..." } ] }');
+  }
+  const parsed = normaliseWrite(body, {
+    timeZone: ctx.tz,
+    now: new Date(),
+    headerKey: request.headers.get('Idempotency-Key'),
+  });
+  if (isProblem(parsed)) return apiFail(400, parsed.problem.code, parsed.problem.message);
+
+  const outcome = await writeNotes(write, ctx.key, parsed);
+  if (!outcome.ok) return apiFail(outcome.status, outcome.code, outcome.message);
+  return apiJson(
+    { ok: true, meta: meta(ctx, { count: outcome.receipt.counts.notes }), receipt: outcome.receipt },
+    200,
+    rateHeaders(ctx.rate),
+  );
 }
