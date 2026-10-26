@@ -441,9 +441,7 @@ export function parseNoteFilters(params: URLSearchParams): NoteFilters {
   let limit = DEFAULT_LIMIT;
   const rawLimit = params.get('limit');
   if (rawLimit !== null) {
-    const n = Number(rawLimit);
-    if (!Number.isInteger(n) || n < 1) throw new Problem(400, 'bad_filter', 'limit is a whole number of notes, 1 or more.');
-    limit = Math.min(n, MAX_LIMIT);
+    limit = wholeNumber(rawLimit, MAX_LIMIT, 'limit is a whole number of notes, 1 or more.');
   }
 
   const orderRaw = params.get('order');
@@ -493,7 +491,7 @@ function decodeCursor(value: string): { at: string; id: string } {
     text = '';
   }
   const [at, id] = text.split('|');
-  if (!at || !id || Number.isNaN(Date.parse(at)) || !/^[A-Za-z0-9-]{8,64}$/.test(id)) {
+  if (!at || !id || Number.isNaN(Date.parse(at)) || !isRowId(id)) {
     throw new Problem(400, 'bad_cursor', 'That page cursor is not one this API issued.');
   }
   return { at, id };
@@ -835,9 +833,7 @@ async function deadlines(ctx: Ctx, url: URL): Promise<Response> {
   let limit = DEFAULT_LIMIT;
   const rawLimit = url.searchParams.get('limit');
   if (rawLimit !== null) {
-    const n = Number(rawLimit);
-    if (!Number.isInteger(n) || n < 1) throw new Problem(400, 'bad_filter', 'limit is a whole number, 1 or more.');
-    limit = Math.min(n, MAX_LIMIT);
+    limit = wholeNumber(rawLimit, MAX_LIMIT, 'limit is a whole number, 1 or more.');
   }
   const dueBefore = url.searchParams.get('due_before');
   const dueAfter = url.searchParams.get('due_after');
@@ -1005,7 +1001,23 @@ export function describe(tz: string) {
 
 /* ---------- Router ---------- */
 
-const ID = /^[A-Za-z0-9-]{8,64}$/;
+// Row ids are uuids, and every id this API takes goes through here first. A malformed one that
+// reached Postgres would come back as a cast error and be reported as a database failure, which
+// is the wrong story — and a cheap way for a caller to fill the error log.
+const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isRowId(value: string): boolean {
+  return ROW_ID.test(value);
+}
+
+// A positive whole number, written in decimal and nothing else: Number() would quietly read
+// `0x10`, `1e3` and `+1` as quantities, and a limit is not the place to be clever.
+function wholeNumber(raw: string, max: number, message: string): number {
+  if (!/^\d+$/.test(raw)) throw new Problem(400, 'bad_filter', message);
+  const n = Number(raw);
+  if (n < 1) throw new Problem(400, 'bad_filter', message);
+  return Math.min(n, max);
+}
 
 export async function publicApi(request: Request, env: Env): Promise<Response> {
   try {
@@ -1050,12 +1062,12 @@ export async function publicApi(request: Request, env: Env): Promise<Response> {
 
     const note = /^\/api\/v1\/notes\/([^/]+)$/.exec(path);
     if (note) {
-      if (!ID.test(note[1])) throw new Problem(400, 'bad_filter', 'That note id is not one this diary issued.');
+      if (!isRowId(note[1])) throw new Problem(400, 'bad_filter', 'That note id is not one this diary issued.');
       return await oneNote(ctx, note[1]);
     }
     const deadline = /^\/api\/v1\/deadlines\/([^/]+)$/.exec(path);
     if (deadline) {
-      if (!ID.test(deadline[1])) throw new Problem(400, 'bad_filter', 'That deadline id is not one this diary issued.');
+      if (!isRowId(deadline[1])) throw new Problem(400, 'bad_filter', 'That deadline id is not one this diary issued.');
       return await oneDeadline(ctx, deadline[1]);
     }
 
