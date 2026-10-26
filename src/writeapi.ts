@@ -13,6 +13,9 @@
 // the first one.
 // A write key cannot read. Nothing here answers with a note the caller did not just write;
 // the read endpoints are refused separately, by scope.
+// A write key cannot silence its own notification either: every request that stores a note is
+// acknowledged on the owner's phone, because that message is the only real-time trace of a
+// write nobody watched arrive.
 // A failed cleanup, reminder or acknowledgement never costs the note. The raw text is stored
 // first and the receipt says out loud which part went wrong.
 
@@ -47,7 +50,6 @@ export interface WriteInput {
   notes: WriteNote[];
   client: string;
   dedupeKey: string | null;
-  ack: boolean;
 }
 
 export type WriteProblem = { code: string; message: string };
@@ -92,8 +94,11 @@ export function normaliseWrite(body: unknown, opts: { timeZone: string; now: Dat
     return bad('bad_note', `An Idempotency-Key is up to ${MAX_DEDUPE} printable characters.`);
   }
 
+  // ack used to be a request field. A stolen key could set it false and file notes silently,
+  // so it is gone: the answer to "may this be quiet?" is the owner's, and the owner's answer
+  // is no. An older caller that still sends it is ignored rather than refused.
   if (raw.ack !== undefined && typeof raw.ack !== 'boolean') {
-    return bad('bad_note', 'ack is true or false: whether the diary should confirm this on Telegram.');
+    return bad('bad_note', 'ack is no longer a field: every write that stores a note is confirmed on Telegram.');
   }
 
   const today = localDay(opts.now, opts.timeZone);
@@ -170,7 +175,7 @@ export function normaliseWrite(body: unknown, opts: { timeZone: string; now: Dat
     });
   }
 
-  return { notes, client, dedupeKey, ack: raw.ack === undefined ? true : raw.ack };
+  return { notes, client, dedupeKey };
 }
 
 // The limits a key carries decide what it may file. A key limited to work cannot write a life
@@ -456,7 +461,7 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
   // The acknowledgement is the owner's half of the receipt. A retry that stored nothing is
   // answered silently: they have seen that message already. A failed send is reported, never
   // fatal — the notes are in the diary either way.
-  if (input.ack && stored > 0 && deps.notify) {
+  if (stored > 0 && deps.notify) {
     const first = read
       .filter((r) => notes.some((n, index) => n.status === 'stored' && captureAt.get(index) === r.captureId))
       .sort((a, b) => a.at.localeCompare(b.at))[0];

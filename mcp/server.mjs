@@ -60,7 +60,6 @@ export const TOOLS = [
         },
         client: { type: 'string', description: 'A short name for this app, like "claude-code", shown on the receipt.' },
         idempotencyKey: { type: 'string', description: 'Stable for one session, so a retry files nothing twice.' },
-        ack: { type: 'boolean', description: 'Whether to confirm on Telegram. Default true; false writes silently.' },
       },
       required: ['notes'],
       additionalProperties: false,
@@ -129,7 +128,8 @@ export function createDiaryServer({ apiUrl, apiKey, fetchImpl = fetch }) {
   };
 
   const addNotes = async (args) => {
-    const payload = { notes: args.notes, ack: args.ack === undefined ? true : args.ack };
+    // No ack field: every write that stores a note is confirmed on the owner's phone.
+    const payload = { notes: args.notes };
     if (args.client) payload.client = args.client;
     if (args.idempotencyKey) payload.idempotencyKey = args.idempotencyKey;
     const { status, body } = await call('/api/v1/notes', { method: 'POST', body: JSON.stringify(payload) });

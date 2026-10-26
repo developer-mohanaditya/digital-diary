@@ -128,15 +128,52 @@ function db(env: Env) {
 const isMissing = (res: Response, text: string) =>
   res.status === 404 || /PGRST20[25]|42P01|42883/.test(text);
 
+// Anyone can send a well-shaped key that matches no row, and each one costs a database round
+// trip before it is refused: with no key at all, the Worker would be a query amplifier. A
+// client gets twenty misses a minute, after which the refusal costs nothing until the window
+// turns. The count lives in the isolate, so this is a speed bump rather than a wall — the
+// durable fix is a rate-limiting rule in front of /api/v1 — but it bounds the bill. Requests
+// with no client address (a local `wrangler dev` run) are not throttled.
+const AUTH_MISSES = new Map<string, { count: number; reset: number }>();
+const MISS_LIMIT = 20;
+const MISS_WINDOW_MS = 60000;
+
+function missesFor(client: string, now: number): number {
+  const row = AUTH_MISSES.get(client);
+  return !row || row.reset <= now ? 0 : row.count;
+}
+
+function noteMiss(client: string, now: number): void {
+  const row = AUTH_MISSES.get(client);
+  if (!row || row.reset <= now) {
+    // Bounded memory: a map of every address that ever failed would grow forever.
+    if (AUTH_MISSES.size > 5000) AUTH_MISSES.clear();
+    AUTH_MISSES.set(client, { count: 1, reset: now + MISS_WINDOW_MS });
+    return;
+  }
+  row.count += 1;
+}
+
 // Resolves a bearer key to a session, or refuses. Everything that can be wrong with a
 // credential answers the same 401, so a caller cannot tell a revoked key from a made-up one,
 // an expired key from a mistyped one.
 export async function authenticate(request: Request, env: Env): Promise<Authed> {
   const header = request.headers.get('Authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  const unauthorised = () => new Problem(401, 'unauthorized', 'Send a valid API key: Authorization: Bearer ddk_live_…', {
-    'WWW-Authenticate': 'Bearer realm="diary"',
-  });
+  const client = request.headers.get('CF-Connecting-IP');
+  const attempted = Date.now();
+  if (client && missesFor(client, attempted) >= MISS_LIMIT) {
+    throw new Problem(429, 'rate_limited', 'Too many keys that did not work from this client. Try again in a minute.', {
+      'Retry-After': '60',
+      'X-RateLimit-Remaining': '0',
+    });
+  }
+  const unauthorised = () => {
+    if (client) noteMiss(client, attempted);
+    return new Problem(401, 'unauthorized', 'Send a valid API key: Authorization: Bearer ddk_live_…', {
+      'WWW-Authenticate': 'Bearer realm="diary"',
+    });
+  };
   if (!match) throw unauthorised();
   const given = match[1].trim();
   if (!keyShaped(given)) throw unauthorised();
@@ -195,26 +232,9 @@ export async function authenticate(request: Request, env: Env): Promise<Authed> 
   return { key, rate };
 }
 
-// Counts the request and enforces both limits in one round trip. A missing function means the
-// migration has not run, which is a setup problem worth naming; any other failure lets the
-// request through uncounted rather than taking a working key offline.
-async function bumpUsage(env: Env, key: KeySession): Promise<Rate | null> {
-  const { base, headers } = db(env);
-  const res = await fetch(`${base}/rpc/bump_api_usage`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ k: key.id }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    if (isMissing(res, text)) {
-      throw new Problem(503, 'setup', 'The API counter is missing: run migrations/0007_api_keys.sql.');
-    }
-    console.error('api usage bump failed', res.status);
-    return null;
-  }
-  const rows = (await res.json()) as { minute_count: number; day_count: number }[];
-  const used = rows[0];
+// Both limits, read from one set of counts. Shared by the request itself and by the notes a
+// write carries, so the two cannot disagree about what over the line means.
+function enforce(key: KeySession, used: { minute_count: number; day_count: number } | undefined): Rate | null {
   if (!used) return null;
   const reset = Math.floor(Date.now() / 60000) * 60 + 60;
   const minute = Number(used.minute_count) || 0;
@@ -233,6 +253,48 @@ async function bumpUsage(env: Env, key: KeySession): Promise<Rate | null> {
     remaining: Math.max(0, key.perMinute - minute),
     reset,
   };
+}
+
+// Counts against the key's buckets through one of the two counter functions. A missing
+// function means the migration has not run, which is a setup problem worth naming. Any other
+// failure is where the two kinds of key part company: a read that loses its counter still
+// reads (it costs nothing), while a key that can spend money and send messages does not get to
+// run uncounted, so its write is refused instead.
+async function bump(
+  env: Env,
+  key: KeySession,
+  rpc: 'bump_api_usage' | 'bump_api_notes',
+  body: Record<string, unknown>,
+): Promise<Rate | null> {
+  const { base, headers } = db(env);
+  const res = await fetch(`${base}/rpc/${rpc}`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    if (isMissing(res, text)) {
+      const migration = rpc === 'bump_api_usage' ? '0007_api_keys.sql' : '0010_write_metering.sql';
+      throw new Problem(503, 'setup', `The API counter is missing: run migrations/${migration}.`);
+    }
+    console.error('api usage bump failed', rpc, res.status);
+    if (hasScope(key.scopes, 'notes:write')) {
+      throw new Problem(503, 'upstream', 'The diary cannot count this write right now, so nothing was filed.');
+    }
+    return null;
+  }
+  const rows = (await res.json()) as { minute_count: number; day_count: number }[];
+  return enforce(key, rows[0]);
+}
+
+const bumpUsage = (env: Env, key: KeySession): Promise<Rate | null> => bump(env, key, 'bump_api_usage', { k: key.id });
+
+// The notes past the first cost the same budget the request did, so a 25-note batch cannot be
+// bought for one unit of a 300-a-day ceiling.
+async function chargeWrite(env: Env, key: KeySession, notes: number): Promise<Rate | null> {
+  if (notes <= 1) return null;
+  return bump(env, key, 'bump_api_notes', { k: key.id, extra: notes - 1 });
 }
 
 function rateHeaders(rate: Rate | null): Record<string, string> {
@@ -932,7 +994,9 @@ function toApiDeadline(r: ReminderRow, ctx: Ctx, note?: ThoughtRow) {
   const openDay = localDay(new Date(r.created_at), ctx.tz);
   return {
     id: r.id,
-    title: r.title,
+    // The title is the note's own sentence, so a key limited to counts gets a shape instead: it
+    // can see that a deadline exists and when, never what it is about.
+    title: ctx.key.policy.text === 'none' ? 'A deadline' : r.title,
     due,
     dueAt: r.due_at,
     status: r.status,
@@ -952,7 +1016,38 @@ function toApiDeadline(r: ReminderRow, ctx: Ctx, note?: ThoughtRow) {
   };
 }
 
-// The notes behind a page of deadlines, so a client can see what the deadline was about.
+// The notes behind a page of deadlines, so a client can see what the deadline was about and
+// so a key's limits have something to check. A reminder the bot made carries thought_id; one
+// filed through the write API carries only the capture it was made from, so that is the
+// second way in — without it every API-created deadline would escape a key's policy.
+async function notesForReminders(env: Env, rows: ReminderRow[]): Promise<Map<string, ThoughtRow>> {
+  const byThought = new Map<string, ThoughtRow>();
+  const byCapture = new Map<string, ThoughtRow>();
+  const thoughtIds = rows.map((r) => r.thought_id).filter((id): id is string => !!id);
+  if (thoughtIds.length) for (const [id, row] of await notesById(env, thoughtIds)) byThought.set(id, row);
+
+  const captures = Array.from(new Set(
+    rows.filter((r) => !r.thought_id && r.capture_id).map((r) => r.capture_id as string),
+  ));
+  for (let i = 0; i < captures.length; i += CHUNK) {
+    const slice = captures.slice(i, i + CHUNK);
+    const found = await getJson<ThoughtRow[]>(
+      env,
+      `thoughts?capture_id=in.(${slice.join(',')})&select=${NOTE_COLUMNS}`,
+    );
+    for (const row of found) if (row.capture_id) byCapture.set(row.capture_id, row);
+  }
+
+  const notes = new Map<string, ThoughtRow>();
+  for (const r of rows) {
+    const note = (r.thought_id ? byThought.get(r.thought_id) : undefined)
+      ?? (r.capture_id ? byCapture.get(r.capture_id) : undefined);
+    if (note) notes.set(r.id, note);
+  }
+  return notes;
+}
+
+// The notes behind a page of deadlines, by note id.
 async function notesById(env: Env, ids: string[]): Promise<Map<string, ThoughtRow>> {
   const byId = new Map<string, ThoughtRow>();
   for (let i = 0; i < ids.length; i += CHUNK) {
@@ -993,14 +1088,15 @@ async function deadlines(ctx: Ctx, url: URL): Promise<Response> {
     `limit=${limit}`,
   ].filter(Boolean).join('&');
   const found = await getJson<ReminderRow[]>(ctx.env, `reminders?${q}`);
-  const ids = found.map((r) => r.thought_id).filter((id): id is string => !!id);
-  const notes = ids.length ? await notesById(ctx.env, ids) : new Map<string, ThoughtRow>();
-  // The limit lives on the note, so the page is narrowed here rather than in the query.
+  const notes = await notesForReminders(ctx.env, found);
+  // The limit lives on the note, so the page is narrowed here rather than in the query. A note
+  // that cannot be found cannot be shown to sit inside a limited key's window, so only an open
+  // key is shown that reminder: a limit that can be dodged by a missing join is not a limit.
   const rows = found.filter((r) => {
-    const note = r.thought_id ? notes.get(r.thought_id) : undefined;
-    return !note || policyAllowsNote(ctx.key, note);
+    const note = notes.get(r.id);
+    return note ? policyAllowsNote(ctx.key, note) : policyOpen(ctx.key.policy);
   });
-  const list = rows.map((r) => toApiDeadline(r, ctx, r.thought_id ? notes.get(r.thought_id) : undefined));
+  const list = rows.map((r) => toApiDeadline(r, ctx, notes.get(r.id)));
   return apiJson({ ok: true, meta: meta(ctx, { status, count: list.length }), deadlines: list }, 200, rateHeaders(ctx.rate));
 }
 
@@ -1012,10 +1108,12 @@ async function oneDeadline(ctx: Ctx, id: string): Promise<Response> {
   );
   const row = rows[0];
   if (!row) throw new Problem(404, 'not_found', 'No deadline with that id.');
-  const notes = row.thought_id ? await notesById(ctx.env, [row.thought_id]) : new Map<string, ThoughtRow>();
-  const note = row.thought_id ? notes.get(row.thought_id) : undefined;
-  // Same rule as a note: outside the key's limits it does not exist.
-  if (note && !policyAllowsNote(ctx.key, note)) throw new Problem(404, 'not_found', 'No deadline with that id.');
+  const note = (await notesForReminders(ctx.env, [row])).get(row.id);
+  // Same rule as a note: outside the key's limits it does not exist, and neither does one
+  // whose note cannot be found to prove it inside them.
+  if (!note ? !policyOpen(ctx.key.policy) : !policyAllowsNote(ctx.key, note)) {
+    throw new Problem(404, 'not_found', 'No deadline with that id.');
+  }
   const deadline = toApiDeadline(row, ctx, note);
   return apiJson({ ok: true, meta: meta(ctx), deadline }, 200, rateHeaders(ctx.rate));
 }
@@ -1130,7 +1228,7 @@ export function describe(tz: string) {
       version: API_VERSION,
       timeZone: tz,
       baseUrl: '/api/v1',
-      write: `POST /api/v1/notes files up to ${MAX_NOTES} notes at once, with a key that holds notes:write. A write key cannot read the diary back.`,
+      write: `POST /api/v1/notes files up to ${MAX_NOTES} notes at once, with a key that holds notes:write. A write key cannot read the diary back, cannot switch off the Telegram confirmation, and spends one of its daily calls per note.`,
     },
     auth: {
       header: 'Authorization: Bearer <key>',
@@ -1146,7 +1244,7 @@ export function describe(tz: string) {
       { method: 'GET', path: '/api/v1/notes/{id}', scope: 'notes:read', about: 'One note.' },
       { method: 'GET', path: '/api/v1/days', scope: 'stats:read', about: 'Per-day counts, words and category tally. Filters: day, month, year, from, to.' },
       { method: 'GET', path: '/api/v1/stats', scope: 'stats:read', about: 'Grouped counts. by=day|week|month|year|category|type|source.' },
-      { method: 'GET', path: '/api/v1/deadlines', scope: 'deadlines:read', about: 'Deadlines with days left, days late and the note behind each. status=open|done|all, due_before, due_after.' },
+      { method: 'GET', path: '/api/v1/deadlines', scope: 'deadlines:read', about: 'Deadlines with days left, days late and the note behind each. status=open|done|all, due_before, due_after. A key limited to counts gets "A deadline" as the title.' },
       { method: 'GET', path: '/api/v1/deadlines/{id}', scope: 'deadlines:read', about: 'One deadline.' },
       { method: 'GET', path: '/api/v1/categories', scope: 'notes:read', about: 'The categories: id, label, order.' },
       { method: 'GET', path: '/api/v1/export', scope: 'notes:read', about: 'A range as json, csv or md. Same time filters as notes.' },
@@ -1176,6 +1274,14 @@ function wholeNumber(raw: string, max: number, message: string): number {
   return Math.min(n, max);
 }
 
+// One line per authenticated call: which key, which route, what came back. Never the query
+// string — a search term is note text — and never a request body. The usage counter only
+// summarises how many calls a key made; this says which pages it asked for, refusals included,
+// and it lands in Workers Logs.
+function audit(key: KeySession, request: Request, url: URL, status: number): void {
+  console.log(`api ${key.prefix} ${request.method} ${url.pathname} ${status}`);
+}
+
 export async function publicApi(request: Request, env: Env, write?: WriteDeps): Promise<Response> {
   try {
     const url = new URL(request.url);
@@ -1197,49 +1303,60 @@ export async function publicApi(request: Request, env: Env, write?: WriteDeps): 
     const { key, rate } = await authenticate(request, env);
     const today = localDay(new Date(), tz);
     const ctx: Ctx = { env, key, tz, today, rate };
-    const path = url.pathname;
-    if (writing) return await writeRoute(ctx, request, write);
-
-    if (path === '/api/v1/me') {
-      return apiJson({
-        ok: true,
-        meta: meta(ctx),
-        key: {
-          name: key.name,
-          prefix: key.prefix,
-          scopes: key.scopes,
-          policy: key.policy,
-          perMinute: key.perMinute,
-          perDay: key.perDay,
-          lastUsedAt: key.lastUsedAt,
-          expiresAt: key.expiresAt,
-        },
-      }, 200, rateHeaders(rate));
-    }
-    if (path === '/api/v1/notes') return await listNotes(ctx, url);
-    if (path === '/api/v1/days') return await days(ctx, url);
-    if (path === '/api/v1/stats') return await stats(ctx, url);
-    if (path === '/api/v1/categories') return await categories(ctx);
-    if (path === '/api/v1/deadlines') return await deadlines(ctx, url);
-    if (path === '/api/v1/export') return await exportNotes(ctx, url);
-
-    const note = /^\/api\/v1\/notes\/([^/]+)$/.exec(path);
-    if (note) {
-      if (!isRowId(note[1])) throw new Problem(400, 'bad_filter', 'That note id is not one this diary issued.');
-      return await oneNote(ctx, note[1]);
-    }
-    const deadline = /^\/api\/v1\/deadlines\/([^/]+)$/.exec(path);
-    if (deadline) {
-      if (!isRowId(deadline[1])) throw new Problem(400, 'bad_filter', 'That deadline id is not one this diary issued.');
-      return await oneDeadline(ctx, deadline[1]);
-    }
-
-    throw new Problem(404, 'not_found', `No endpoint at ${path.slice(0, 80)}. Start at /api/v1.`);
+    const answer = await route(ctx, request, url, write).catch((err: unknown) => {
+      audit(key, request, url, err instanceof Problem ? err.status : 502);
+      throw err;
+    });
+    audit(key, request, url, answer.status);
+    return answer;
   } catch (err) {
     if (err instanceof Problem) return apiFail(err.status, err.code, err.message, err.extra);
     console.error('public api failed', err);
     return apiFail(502, 'upstream', 'The diary could not answer that.');
   }
+}
+
+// Everything an authenticated call can be, in one place, so the caller can record what came
+// back. Authentication and the audit line live on either side of it.
+async function route(ctx: Ctx, request: Request, url: URL, write?: WriteDeps): Promise<Response> {
+  const path = url.pathname;
+  if (request.method === 'POST' && path === '/api/v1/notes') return await writeRoute(ctx, request, write);
+
+  if (path === '/api/v1/me') {
+    return apiJson({
+      ok: true,
+      meta: meta(ctx),
+      key: {
+        name: ctx.key.name,
+        prefix: ctx.key.prefix,
+        scopes: ctx.key.scopes,
+        policy: ctx.key.policy,
+        perMinute: ctx.key.perMinute,
+        perDay: ctx.key.perDay,
+        lastUsedAt: ctx.key.lastUsedAt,
+        expiresAt: ctx.key.expiresAt,
+      },
+    }, 200, rateHeaders(ctx.rate));
+  }
+  if (path === '/api/v1/notes') return await listNotes(ctx, url);
+  if (path === '/api/v1/days') return await days(ctx, url);
+  if (path === '/api/v1/stats') return await stats(ctx, url);
+  if (path === '/api/v1/categories') return await categories(ctx);
+  if (path === '/api/v1/deadlines') return await deadlines(ctx, url);
+  if (path === '/api/v1/export') return await exportNotes(ctx, url);
+
+  const note = /^\/api\/v1\/notes\/([^/]+)$/.exec(path);
+  if (note) {
+    if (!isRowId(note[1])) throw new Problem(400, 'bad_filter', 'That note id is not one this diary issued.');
+    return await oneNote(ctx, note[1]);
+  }
+  const deadline = /^\/api\/v1\/deadlines\/([^/]+)$/.exec(path);
+  if (deadline) {
+    if (!isRowId(deadline[1])) throw new Problem(400, 'bad_filter', 'That deadline id is not one this diary issued.');
+    return await oneDeadline(ctx, deadline[1]);
+  }
+
+  throw new Problem(404, 'not_found', `No endpoint at ${path.slice(0, 80)}. Start at /api/v1.`);
 }
 
 // POST /api/v1/notes. Authentication already happened, and the rate limit was counted with it.
@@ -1260,6 +1377,9 @@ async function writeRoute(ctx: Ctx, request: Request, write?: WriteDeps): Promis
     headerKey: request.headers.get('Idempotency-Key'),
   });
   if (isProblem(parsed)) return apiFail(400, parsed.problem.code, parsed.problem.message);
+  // The request was counted when its key was checked; now that the batch is known, the notes
+  // past the first are counted too, before anything is written.
+  await chargeWrite(ctx.env, ctx.key, parsed.notes.length);
 
   const outcome = await writeNotes(write, ctx.key, parsed);
   if (!outcome.ok) return apiFail(outcome.status, outcome.code, outcome.message);
