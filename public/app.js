@@ -111,7 +111,7 @@ async function loadDiary() {
   return {};
 }
 
-const state = { days:{}, heatmap:'weeks', weekStart:'mon', tz:'', signedIn:false, keys:null, keysLoading:false, keysError:'', newKey:null };
+const state = { days:{}, heatmap:'weeks', weekStart:'mon', tz:'', signedIn:false, keys:null, keysLoading:false, keysError:'', newKey:null, keyKind:'read' };
 try {
   const v = JSON.parse(localStorage.getItem(VIEW) || '{}') || {};
   if (v.heatmap === 'weeks' || v.heatmap === 'grid') state.heatmap = v.heatmap;
@@ -1073,9 +1073,13 @@ function viewSettings() {
   </section>
 
   <section class="card">
-    <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">Read-only · /api/v1</span></div>
-    <h2>API keys</h2>
-    <p class="muted" style="margin:0 0 2px;font-size:.84rem">Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Give every project its own key, and set its limits as you create it: which categories, which dates, and whether it may read the text at all. A key that leaks then exposes only the slice it was given.</p>
+    <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">/api/v1</span></div>
+    <div class="setrow"><div><span class="lab">Which kind of key</span><span class="sub">A read key pulls notes out; a write key files notes in. They are separate keys</span></div>
+      <div class="seg"><button data-action="key-kind" data-v="read" aria-pressed="${state.keyKind === 'read'}">Read keys</button><button data-action="key-kind" data-v="write" aria-pressed="${state.keyKind === 'write'}">Write keys</button></div></div>
+    <h2>${state.keyKind === 'write' ? 'Write keys' : 'Read keys'}</h2>
+    <p class="muted" style="margin:0 0 2px;font-size:.84rem">${state.keyKind === 'write'
+      ? 'An app files notes into this diary with a write key: one note, or a whole session in one request, and the receipt comes back on Telegram. The limits below work in the other direction — which categories it may write into, and which dates — and a write key cannot read a single note back. This is the key to give Claude Code, Codex, or anything else that should write and nothing more.'
+      : 'Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Give every project its own key, and set its limits as you create it: which categories, which dates, and whether it may read the text at all. A key that leaks then exposes only the slice it was given.'}</p>
     ${keysHTML()}
   </section>
 
@@ -1150,7 +1154,10 @@ const SCOPE_UI = [
   ['stats:read', 'Counts'],
   ['raw:read', 'Original text'],
 ];
-const SCOPE_LABEL = Object.fromEntries(SCOPE_UI.map(([id, label]) => [id, label]));
+// notes:write is not in the list above because it is not a read scope: a write key is created
+// in the Write keys half of this card, and the label is here so a row can still name it.
+const SCOPE_LABEL = { ...Object.fromEntries(SCOPE_UI.map(([id, label]) => [id, label])), 'notes:write': 'Add notes' };
+const isWriteKey = k => (k.scopes || []).includes('notes:write');
 const keyWhen = ts => new Date(ts).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
 const keyDay = d => new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
 const keyscopes = () => SCOPE_UI.map(([id, label]) => `<label><input type="checkbox" data-scope="${id}"${id === 'raw:read' ? '' : ' checked'} />${label}</label>`).join('');
@@ -1172,6 +1179,10 @@ function keysHTML() {
   if (state.newKey) {
     const k = state.newKey;
     const expires = k.expiresAt ? `Expires ${keyWhen(k.expiresAt)}.` : 'It does not expire.';
+    // Where the key belongs, which is the question the one-time panel exists to answer.
+    const where = isWriteKey(k)
+      ? 'Put it in the app\u2019s environment as DIARY_API_KEY \u2014 the MCP server and the /diary command both read it from there.'
+      : 'Put it in the other project\u2019s environment secrets, never in a browser bundle.';
     return `<div class="keyonce">
       <span class="lab">Your new key — copy it now</span>
       <div class="keyline">
@@ -1179,18 +1190,23 @@ function keysHTML() {
         <button class="cbtn" data-action="key-copy">Copy</button>
       </div>
       <p class="note" style="margin-top:8px">${esc(k.name)} · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')}. ${esc(policyWords(k.policy))}. ${expires}
+        ${k.perMinute && k.perDay ? `Up to ${k.perMinute} requests a minute, ${k.perDay} a day. ` : ''}
         This is the only time it is shown: the diary keeps a hash, so it cannot be read back.
-        Put it in the other project's environment secrets, never in a browser bundle.</p>
+        ${where}</p>
       <div class="passrow" style="margin-top:10px"><button class="btn" data-action="key-done">Done</button></div>
     </div>`;
   }
 
+  // Only one kind is on screen at a time, because the two are created with different fields
+  // and mean different things; the segment above picks which half of the card is open.
+  const write = state.keyKind === 'write';
+  const shown = Array.isArray(state.keys) ? state.keys.filter(k => isWriteKey(k) === write) : null;
   const rows = state.keys === null
     ? '<p class="muted" style="font-size:.84rem;margin:14px 0 0">Reading the keys…</p>'
     : state.keysError
       ? `<p class="pmsg err" style="margin:14px 0 0">${esc(state.keysError)} <button class="link" data-action="keys-retry">Try again</button></p>`
-      : state.keys.length
-        ? `<div style="margin-top:6px">${state.keys.map(k => {
+      : shown.length
+        ? `<div style="margin-top:6px">${shown.map(k => {
             const expired = k.expiresAt && Date.parse(k.expiresAt) <= Date.now();
             const pill = k.revokedAt || expired ? 'off' : 'live';
             const when = k.revokedAt ? `revoked ${keyWhen(k.revokedAt)}`
@@ -1200,33 +1216,35 @@ function keysHTML() {
             return `<div class="setrow keyrow">
               <div style="min-width:0">
                 <span class="lab">${esc(k.name)} <span class="keypill ${pill}">${k.revokedAt ? 'revoked' : expired ? 'expired' : 'live'}</span></span>
-                <span class="sub"><code>${esc(k.prefix)}…</code> · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')} · ${when}</span>
+                <span class="sub"><code>${esc(k.prefix)}…</code> · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')} · ${when}${k.perMinute && k.perDay ? ` · ${k.perMinute}/min, ${k.perDay}/day` : ''}</span>
                 <span class="keypolicy">${esc(policyWords(k.policy))}</span>
               </div>
               ${k.revokedAt ? '' : `<button class="microbtn danger" data-action="key-revoke" data-v="${esc(k.id)}" data-name="${esc(k.name)}">Revoke</button>`}
             </div>`;
           }).join('')}</div>`
-        : '<p class="muted" style="font-size:.84rem;margin:14px 0 0">No keys yet. One key per project keeps a leak down to one revoke.</p>';
+        : `<p class="muted" style="font-size:.84rem;margin:14px 0 0">${write ? 'No write keys yet. One per app, so revoking it stops that app and nothing else.' : 'No keys yet. One key per project keeps a leak down to one revoke.'}</p>`;
 
   return `${rows}
     <form class="keyform" id="key-form" autocomplete="off">
-      <label class="field"><span>Name</span><input id="key-name" maxlength="60" placeholder="Portfolio site" /></label>
+      <label class="field"><span>Name</span><input id="key-name" maxlength="60" placeholder="${write ? 'Claude Code' : 'Portfolio site'}" /></label>
       <label class="field"><span>Expires</span><select id="key-exp">
         <option value="90">in 90 days</option><option value="365">in a year</option><option value="never">never</option>
       </select></label>
-      <div class="keyscopes">${keyscopes()}</div>
+      ${write ? '' : `<div class="keyscopes">${keyscopes()}</div>`}
       <div class="keylimits">
-        <span class="klab">Categories it may read</span>
+        <span class="klab">Categories it may ${write ? 'write into' : 'read'}</span>
         <div class="keyscopes">${keycats()}</div>
       </div>
-      <label class="field"><span>Written since</span><input type="date" id="key-from" /></label>
-      <label class="field"><span>Written until</span><input type="date" id="key-to" /></label>
-      <label class="field keywide"><span>Note text</span><select id="key-text">
+      <label class="field"><span>Notes ${write ? 'dated from' : 'written since'}</span><input type="date" id="key-from" /></label>
+      <label class="field"><span>Notes ${write ? 'dated until' : 'written until'}</span><input type="date" id="key-to" /></label>
+      ${write ? '' : `<label class="field keywide"><span>Note text</span><select id="key-text">
         <option value="clean">Full text — the notes themselves</option>
         <option value="none">Counts only — days, categories and word counts, no sentences</option>
-      </select></label>
-      <p class="keyhint">Limits are enforced on every read. Leave the dates empty for any day and keep every category ticked for the whole diary.</p>
-      <div class="passrow"><button class="cbtn" type="submit" id="key-create">Create a key</button><span class="pmsg" id="key-msg" role="status" aria-live="polite"></span></div>
+      </select></label>`}
+      <p class="keyhint">${write
+        ? 'This key may add notes and nothing else: reading is refused, whatever the fields above say. Leave every category ticked and the dates empty for one that may file anything, on any day.'
+        : 'Limits are enforced on every read. Leave the dates empty for any day and keep every category ticked for the whole diary.'}</p>
+      <div class="passrow"><button class="cbtn" type="submit" id="key-create">Create ${write ? 'a write key' : 'a key'}</button><span class="pmsg" id="key-msg" role="status" aria-live="polite"></span></div>
     </form>`;
 }
 
@@ -1252,26 +1270,36 @@ function ensureKeys() {
 }
 
 async function createKey() {
+  const write = state.keyKind === 'write';
   const nameEl = $('#key-name'), expEl = $('#key-exp'), msg = $('#key-msg'), btn = $('#key-create');
   const name = nameEl ? nameEl.value.trim() : '';
-  const scopes = Array.from(document.querySelectorAll('.keyform input[data-scope]')).filter(i => i.checked).map(i => i.dataset.scope);
   const fail = text => { if (msg) { msg.textContent = text; msg.className = 'pmsg err'; } };
-  if (!name) { fail('Give the key a name, so you know which project holds it.'); if (nameEl) nameEl.focus(); return; }
-  if (!scopes.length) return fail('Pick at least one scope.');
-  if (scopes.includes('raw:read') && !scopes.includes('notes:read')) {
-    return fail('Original text is read through notes, so tick Notes too.');
+  if (!name) { fail('Give the key a name, so you know which app or project holds it.'); if (nameEl) nameEl.focus(); return; }
+
+  // A write key is created with the one scope that door opens and nothing else: that it cannot
+  // read is the whole point of giving one to an app. The read half keeps its own checks.
+  let scopes = ['notes:write'];
+  let text = 'clean';
+  if (!write) {
+    scopes = Array.from(document.querySelectorAll('.keyform input[data-scope]')).filter(i => i.checked).map(i => i.dataset.scope);
+    if (!scopes.length) return fail('Pick at least one scope.');
+    if (scopes.includes('raw:read') && !scopes.includes('notes:read')) {
+      return fail('Original text is read through notes, so tick Notes too.');
+    }
+    const textEl = $('#key-text');
+    text = textEl ? textEl.value : 'clean';
+    if (text === 'none' && scopes.includes('raw:read')) {
+      return fail('Counts-only keys cannot read original text, so untick Original text.');
+    }
   }
+
   const catBoxes = Array.from(document.querySelectorAll('.keyform input[data-cat]'));
   const cats = catBoxes.filter(i => i.checked).map(i => i.dataset.cat);
   if (catBoxes.length && !cats.length) return fail('Pick at least one category, or tick them all for every one.');
-  const fromEl = $('#key-from'), toEl = $('#key-to'), textEl = $('#key-text');
+  const fromEl = $('#key-from'), toEl = $('#key-to');
   const from = fromEl && fromEl.value ? fromEl.value : null;
   const to = toEl && toEl.value ? toEl.value : null;
   if (from && to && from > to) return fail('The window ends before it starts.');
-  const text = textEl ? textEl.value : 'clean';
-  if (text === 'none' && scopes.includes('raw:read')) {
-    return fail('Counts-only keys cannot read original text, so untick Original text.');
-  }
   const policy = {
     categories: catBoxes.length && cats.length < catBoxes.length ? cats : null,
     from, to, text,
@@ -1602,6 +1630,7 @@ document.addEventListener('click', e => {
   else if (a === 'look-font') { prefs.font = v; applyPrefs(); savePrefs(); render(); }
   else if (a === 'look-accent') { prefs.accent = v; applyPrefs(); savePrefs(); render(); }
   else if (a === 'look-chips') { prefs.chips = v; savePrefs(); render(); }
+  else if (a === 'key-kind') { state.keyKind = v === 'write' ? 'write' : 'read'; render(); }
   else if (a === 'look-reset') {
     prefs.font = ''; prefs.accent = ''; prefs.cats = {}; prefs.chips = 'pills';
     ui.previewTab = 'all'; applyPrefs(); savePrefs(); render();

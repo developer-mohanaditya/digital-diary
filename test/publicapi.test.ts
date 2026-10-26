@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { generateKey, hashKey, lookupPrefix, type Scope } from '../src/apikey';
 
-// The API is read-only and every answer is a JSON envelope, so the tests here are about the
-// things that could quietly go wrong: a key that should be refused, a filter that should not
-// reach the query, a shape that should not leave the building, and the headers that keep a
-// page of notes out of a cache.
+// Every answer is a JSON envelope, and the read endpoints are the ones these tests are about:
+// a key that should be refused, a filter that should not reach the query, a shape that should
+// not leave the building, and the headers that keep a page of notes out of a cache. The write
+// endpoint is POST /api/v1/notes and has its own file.
 
 const KEY = generateKey();
 const OTHER = generateKey();
@@ -161,11 +161,13 @@ describe('GET /api/v1 authentication', () => {
     expect(await res.json()).toMatchObject({ error: { code: 'forbidden' } });
   });
 
-  it('is read-only', async () => {
+  it('refuses a write anywhere but the notes endpoint', async () => {
     stub();
-    const res = await worker.fetch(api('/api/v1/notes', { method: 'POST' }), env());
+    const res = await worker.fetch(api('/api/v1/days', { method: 'POST' }), env());
     expect(res.status).toBe(405);
     expect(res.headers.get('Allow')).toBe('GET, HEAD');
+    // And the index does not describe itself as read-only any more.
+    expect(JSON.stringify(await (await worker.fetch(api('/api/v1'), env())).json())).toContain('notes:write');
   });
 
   it('answers 429 and says when to come back when the minute is spent', async () => {
