@@ -656,12 +656,14 @@ export function toApiNote(
   return picked as unknown as ApiNote;
 }
 
+// The original text is returned only when a note read both holds the scope and asks for the
+// field, so a key granted raw:read does not carry every unfiltered draft into every payload.
 function noteOptions(key: KeySession, f: { fields?: NoteField[] }): { raw: boolean; fields?: NoteField[] } {
-  const raw = hasScope(key.scopes, 'raw:read');
-  if (f.fields?.includes('raw') && !raw) {
+  const asked = Boolean(f.fields?.includes('raw'));
+  if (asked && !hasScope(key.scopes, 'raw:read')) {
     throw new Problem(403, 'forbidden', 'This key cannot read the original text: it needs the raw:read scope.');
   }
-  return { raw, ...(f.fields ? { fields: f.fields } : {}) };
+  return { raw: asked, ...(f.fields ? { fields: f.fields } : {}) };
 }
 
 /* ---------- Endpoints ---------- */
