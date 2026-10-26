@@ -90,7 +90,7 @@ Settings → Access mints one per project. A key looks like `ddk_live_…` (52 c
 | `notes:read` | notes, one note, the category list, exports |
 | `deadlines:read` | deadlines, one deadline |
 | `stats:read` | the per-day rollup and the grouped counts |
-| `raw:read` | the original text, next to `notes:read` |
+| `raw:read` | the original text, next to `notes:read`, and only when a request asks for `raw` |
 
 `notes`, `deadlines` and `stats` are on every new key. `raw:read` is not: the original is the part of a note the cleanup was meant to replace, so it is granted deliberately.
 
@@ -127,7 +127,7 @@ A request without a valid key is `401`, and the answer never says whether the ke
 | `source=tag,auto,manual` | filed by hand or by the classifier |
 | `q=proposal` | a word search over the cleaned text (two characters or more, sixty at most) |
 | `has=deadline`, `done=true\|false` | notes that carry a deadline, or only the closed/open ones |
-| `fields=id,day,text` | cut the shape down (`raw` needs `raw:read`) |
+| `fields=id,day,text` | cut the shape down; naming `raw` returns the original text, and needs `raw:read` |
 | `limit=100&cursor=…` | keyset paging; `meta.next` is the next cursor, or null |
 | `order=asc\|desc` | newest first by default |
 

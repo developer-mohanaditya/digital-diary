@@ -25,7 +25,7 @@ export const SCOPE_LABEL: Record<Scope, string> = {
   'notes:read': 'Notes',
   'deadlines:read': 'Deadlines',
   'stats:read': 'Counts and stats',
-  'raw:read': 'Original text',
+  'raw:read': 'Original text (only when asked)',
 };
 
 function b64url(bytes: Uint8Array): string {

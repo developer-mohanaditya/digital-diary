@@ -227,7 +227,11 @@ describe('GET /api/v1/notes', () => {
     const asked = await worker.fetch(api('/api/v1/notes?fields=raw'), env());
     expect(asked.status).toBe(403);
 
+    // Granted is not the same as wanted: a raw:read key that does not ask still gets no raw.
     stub({ scopes: ['notes:read', 'raw:read'] });
+    const unasked = await worker.fetch(api('/api/v1/notes'), env());
+    expect(JSON.stringify(await unasked.json())).not.toContain('merged rc');
+
     const allowed = (await (await worker.fetch(api('/api/v1/notes?fields=id,raw'), env())).json()) as {
       notes: Record<string, unknown>[];
     };
