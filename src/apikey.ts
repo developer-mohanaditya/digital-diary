@@ -13,7 +13,7 @@ export const LOOKUP_CHARS = 16;
 const SECRET_BYTES = 32;
 const SECRET_CHARS = 43; // 32 bytes in unpadded base64url
 
-export const SCOPES = ['notes:read', 'deadlines:read', 'stats:read', 'raw:read'] as const;
+export const SCOPES = ['notes:read', 'deadlines:read', 'stats:read', 'raw:read', 'notes:write'] as const;
 export type Scope = (typeof SCOPES)[number];
 
 // A key that is not asked for anything else reads notes, deadlines and counts. The original
@@ -26,7 +26,19 @@ export const SCOPE_LABEL: Record<Scope, string> = {
   'deadlines:read': 'Deadlines',
   'stats:read': 'Counts and stats',
   'raw:read': 'Original text (only when asked)',
+  'notes:write': 'Add notes',
 };
+
+// A key that may add notes gets a tighter ceiling than a read key, and it is set on the row
+// like every other limit: an agent stuck in a retry loop writes a note per request, so the
+// read default of 60 a minute is a thousand notes an hour of nonsense. 300 a day is still
+// ten times the busiest day this diary has, and one row can be raised without a code change.
+export const WRITE_LIMITS = { perMinute: 30, perDay: 300 };
+export const READ_LIMITS = { perMinute: 60, perDay: 5000 };
+
+export function limitsFor(scopes: readonly string[]): { perMinute: number; perDay: number } {
+  return scopes.includes('notes:write') ? WRITE_LIMITS : READ_LIMITS;
+}
 
 function b64url(bytes: Uint8Array): string {
   let s = '';

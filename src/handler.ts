@@ -17,6 +17,11 @@ export interface CaptureInput {
   mode: Mode | null;
   category: Category | null;
   status: 'received';
+  // An API write is a capture too, and these say where it came from. Telegram and the page
+  // leave them out, so their rows are unchanged.
+  source?: 'telegram' | 'web' | 'api';
+  client?: string | null;    // the app that sent an API write: "claude-code", "codex"
+  dedupeKey?: string | null; // the caller's Idempotency-Key, kept for the retry lookup
 }
 
 export interface ThoughtInput {
@@ -56,6 +61,27 @@ export interface HealthStats {
   heartbeatOk: boolean;
 }
 
+// What the write API reads back to answer a caller: the captures it already made for a retried
+// request, and the notes those captures hold. Both are optional — a store without them simply
+// cannot file API notes, and nothing else has to know.
+export interface ExistingCapture {
+  id: string;
+  sourceUpdateId: number;
+}
+
+export interface WrittenNote {
+  id: string;
+  captureId: string;
+  day: string;
+  category: string;
+  mode: string;
+  text: string;
+  at: string;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  model: string | null;
+}
+
 export interface Store {
   insertCapture(c: CaptureInput): Promise<{ inserted: boolean; id?: string }>;
   insertThought(t: ThoughtInput): Promise<void>;
@@ -70,6 +96,8 @@ export interface Store {
   openReminders?(limit: number): Promise<SummaryReminder[]>;
   summarySentOn?(): Promise<string | null>;
   markSummarySent?(day: string): Promise<void>;
+  findCaptures?(source: 'api', sourceUpdateIds: number[]): Promise<ExistingCapture[]>;
+  writtenNotes?(captureIds: string[]): Promise<WrittenNote[]>;
   setCaptureStatus(id: string, status: 'done' | 'failed', error?: string): Promise<void>;
   getTimeZone(): Promise<string | null>;
   setTimeZone(zone: string): Promise<void>;
