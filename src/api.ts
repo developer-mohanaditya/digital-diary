@@ -28,6 +28,18 @@ export interface ThoughtRow {
   tokens_in?: number | null;
   tokens_out?: number | null;
   cleanup_model?: string | null;
+  // The capture the note arrived in, embedded by the read. Present from the moment the embed
+  // is asked for; the column set without it is the fallback for a database that predates
+  // captures.client, and then a note simply has no origin to show.
+  captures?: { source: string; client?: string | null } | null;
+}
+
+// Where a note came from: the door it came through, and — for the API door — the app that
+// filed it ("claude-code"). The words on screen are the page's business; this is what the
+// capture recorded.
+export interface NoteOrigin {
+  source: string;        // telegram | web | api
+  client: string | null; // set by a write key, null on the other two doors
 }
 
 // A reminder attached to the note that created it, keyed by capture id.
@@ -48,6 +60,9 @@ export interface UiEntry {
   due?: string | null;
   done?: boolean;
   doneLabel?: string | null; // "24 Oct · 05:36", already in the diary's timezone
+  // Absent when the read could not reach the capture, which is the one case where the page
+  // shows no mark at all rather than guessing a channel.
+  origin?: NoteOrigin;
   // What the cleanup cost, only when there is something to say. A verbatim note was never
   // sent to a model and an old note predates the columns, so the page gets no field at all
   // rather than three zeroes it would draw as a free note.
@@ -83,7 +98,12 @@ function stamp(iso: string, timeZone: string): string {
   }).format(new Date(iso)).replace(',', ' ·');
 }
 
-export function toUiEntry(row: ThoughtRow, timeZone: string, deadline?: DeadlineMark): UiEntry {
+export function toUiEntry(
+  row: ThoughtRow,
+  timeZone: string,
+  deadline?: DeadlineMark,
+  origin?: NoteOrigin,
+): UiEntry {
   const raw = row.raw_text || row.clean_text;
   const entry: UiEntry = {
     id: row.id,
@@ -104,6 +124,7 @@ export function toUiEntry(row: ThoughtRow, timeZone: string, deadline?: Deadline
     // closed deadline stamped in the browser's zone could name the wrong day.
     entry.doneLabel = deadline.doneAt ? stamp(deadline.doneAt, timeZone) : null;
   }
+  if (origin) entry.origin = origin;
   if (row.tokens_in != null || row.tokens_out != null || row.cleanup_model) {
     entry.usage = {
       tokensIn: row.tokens_in ?? null,
@@ -118,11 +139,13 @@ export function groupByDay(
   rows: ThoughtRow[],
   timeZone: string,
   deadlines: Record<string, DeadlineMark> = {},
+  origins: Record<string, NoteOrigin> = {},
 ): Record<string, UiEntry[]> {
   const days: Record<string, UiEntry[]> = {};
   for (const row of rows) {
     const mark = row.capture_id ? deadlines[row.capture_id] : undefined;
-    (days[row.day] ||= []).push(toUiEntry(row, timeZone, mark));
+    const origin = row.capture_id ? origins[row.capture_id] : undefined;
+    (days[row.day] ||= []).push(toUiEntry(row, timeZone, mark, origin));
   }
   for (const list of Object.values(days)) list.sort((a, b) => a.time.localeCompare(b.time));
   return days;
