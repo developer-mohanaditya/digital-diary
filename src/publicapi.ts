@@ -72,6 +72,7 @@ interface KeyRow {
   prefix: string;
   hash: string;
   scopes: string[] | null;
+  policy?: unknown;
   per_minute: number | null;
   per_day: number | null;
   last_used_at: string | null;
@@ -79,11 +80,24 @@ interface KeyRow {
   revoked_at: string | null;
 }
 
+// What a key is allowed to see beyond its scopes: which categories, which days, and whether
+// it may read the sentences at all. An open policy is every category, any day, full text — the
+// behaviour every key had before limits existed.
+export interface KeyPolicy {
+  categories: string[] | null;
+  from: string | null;
+  to: string | null;
+  text: 'clean' | 'none';
+}
+
+export const OPEN_POLICY: KeyPolicy = { categories: null, from: null, to: null, text: 'clean' };
+
 export interface KeySession {
   id: string;
   name: string;
   prefix: string;
   scopes: Scope[];
+  policy: KeyPolicy;
   perMinute: number;
   perDay: number;
   lastUsedAt: string | null;
@@ -129,7 +143,7 @@ export async function authenticate(request: Request, env: Env): Promise<Authed> 
   const { base, headers } = db(env);
   const res = await fetch(
     `${base}/api_keys?prefix=eq.${encodeURIComponent(lookupPrefix(given))}` +
-      '&select=id,name,prefix,hash,scopes,per_minute,per_day,last_used_at,expires_at,revoked_at&limit=1',
+      '&select=id,name,prefix,hash,scopes,policy,per_minute,per_day,last_used_at,expires_at,revoked_at&limit=1',
     { headers },
   );
   if (!res.ok) {
@@ -154,6 +168,9 @@ export async function authenticate(request: Request, env: Env): Promise<Authed> 
     name: row.name,
     prefix: row.prefix,
     scopes: (row.scopes ?? DEFAULT_SCOPES) as Scope[],
+    // A policy that cannot be read is a refusal, not a shrug: a broken limit must not open
+    // the whole diary because the JSON was mistyped.
+    policy: storedPolicy(row.policy),
     perMinute: row.per_minute ?? 60,
     perDay: row.per_day ?? 5000,
     lastUsedAt: row.last_used_at,
@@ -236,13 +253,14 @@ export interface CreatedKey {
   name: string;
   prefix: string;
   scopes: Scope[];
+  policy: KeyPolicy;
   expiresAt: string | null;
   key: string;
 }
 
 export async function createApiKey(
   env: Env,
-  input: { name: string; scopes: Scope[]; expiresAt: string | null },
+  input: { name: string; scopes: Scope[]; policy: KeyPolicy; expiresAt: string | null },
 ): Promise<CreatedKey> {
   const key = generateKey();
   const { base, headers } = db(env);
@@ -254,6 +272,7 @@ export async function createApiKey(
       prefix: lookupPrefix(key),
       hash: await hashKey(key),
       scopes: input.scopes,
+      policy: input.policy,
       expires_at: input.expiresAt,
     }]),
   });
@@ -269,6 +288,7 @@ export async function createApiKey(
     name: row.name,
     prefix: row.prefix,
     scopes: (row.scopes ?? input.scopes) as Scope[],
+    policy: input.policy,
     expiresAt: row.expires_at,
     key,
   };
@@ -279,6 +299,9 @@ export interface KeySummary {
   name: string;
   prefix: string;
   scopes: string[];
+  // null means the stored policy could not be read; enforcement refuses such a key, and the
+  // page says so rather than claiming it has no limits.
+  policy: KeyPolicy | null;
   createdAt: string;
   lastUsedAt: string | null;
   expiresAt: string | null;
@@ -288,7 +311,7 @@ export interface KeySummary {
 export async function listApiKeys(env: Env): Promise<KeySummary[]> {
   const { base, headers } = db(env);
   const res = await fetch(
-    `${base}/api_keys?select=id,name,prefix,scopes,created_at,last_used_at,expires_at,revoked_at&order=created_at.desc&limit=50`,
+    `${base}/api_keys?select=id,name,prefix,scopes,policy,created_at,last_used_at,expires_at,revoked_at&order=created_at.desc&limit=50`,
     { headers },
   );
   if (!res.ok) {
@@ -304,6 +327,10 @@ export async function listApiKeys(env: Env): Promise<KeySummary[]> {
     name: r.name,
     prefix: r.prefix,
     scopes: r.scopes ?? [],
+    policy: (() => {
+      const parsed = normalisePolicy(r.policy);
+      return 'error' in parsed ? null : parsed.policy;
+    })(),
     createdAt: r.created_at,
     lastUsedAt: r.last_used_at,
     expiresAt: r.expires_at,
@@ -370,6 +397,92 @@ export function parsePeriod(params: URLSearchParams): Period {
   }
   if (from && to && from > to) throw new Problem(400, 'bad_filter', 'from is after to.');
   return { ...(from ? { from } : {}), ...(to ? { to } : {}) };
+}
+
+/* ---------- A key's limits ---------- */
+
+// The policy as it arrives — from the page when a key is created, or from the row on the way
+// through authenticate. Both go through here, so the two can never disagree about the shape.
+export function normalisePolicy(input: unknown): { policy: KeyPolicy } | { error: string } {
+  if (input === undefined || input === null) return { policy: OPEN_POLICY };
+  if (typeof input !== 'object' || Array.isArray(input)) return { error: 'Send the limits as an object.' };
+  const raw = input as Record<string, unknown>;
+
+  let categories: string[] | null = null;
+  if (raw.categories !== undefined && raw.categories !== null) {
+    if (!Array.isArray(raw.categories)) return { error: 'categories is a list of category names.' };
+    const picked = raw.categories.filter((c): c is string => typeof c === 'string');
+    if (picked.length !== raw.categories.length) return { error: 'categories is a list of category names.' };
+    const unknown = picked.filter((c) => !(UI_CATEGORIES as readonly string[]).includes(c));
+    if (unknown.length) return { error: `Unknown category: ${unknown.join(', ')}.` };
+    if (!picked.length) return { error: 'Leave categories out to allow every one, or pick at least one.' };
+    categories = Array.from(new Set(picked));
+  }
+
+  const date = (value: unknown, name: string): string | null | { error: string } => {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value !== 'string' || !isDay(value)) return { error: `${name} must be a real date, like 2026-01-01.` };
+    return value;
+  };
+  const from = date(raw.from, 'from');
+  if (from && typeof from === 'object') return from;
+  const to = date(raw.to, 'to');
+  if (to && typeof to === 'object') return to;
+  if (from && to && from > to) return { error: 'from is after to.' };
+
+  const text = raw.text === undefined || raw.text === null ? 'clean' : raw.text;
+  if (text !== 'clean' && text !== 'none') return { error: 'text is clean or none.' };
+
+  return { policy: { categories, from, to, text } };
+}
+
+function storedPolicy(value: unknown): KeyPolicy {
+  const parsed = normalisePolicy(value);
+  if ('error' in parsed) throw new Problem(403, 'policy', 'This key’s limits could not be read. Create a new key.');
+  return parsed.policy;
+}
+
+const policyOpen = (p: KeyPolicy) => !p.categories && !p.from && !p.to && p.text === 'clean';
+
+// The categories this read may use. Asking for one outside the policy is refused rather than
+// answered with an empty list: a consumer reaching past its limit is a bug worth seeing.
+function policyCategories(key: KeySession, asked: string[] | undefined): string[] | null {
+  const allowed = key.policy.categories;
+  if (!allowed) return asked ?? null;
+  if (!asked) return allowed;
+  const outside = asked.filter((c) => !allowed.includes(c));
+  if (outside.length) {
+    throw new Problem(403, 'out_of_policy', `This key cannot read ${outside.join(', ')}: it is limited to ${allowed.join(', ')}.`);
+  }
+  return asked;
+}
+
+// Dates are clamped instead of refused: a month that straddles the start of the window is
+// ordinary use, and the honest answer is the part of it the key may see.
+function clampPeriod(key: KeySession, period: Period): Period {
+  const p = key.policy;
+  const from = p.from && (!period.from || p.from > period.from) ? p.from : period.from;
+  const to = p.to && (!period.to || p.to < period.to) ? p.to : period.to;
+  return { ...(from ? { from } : {}), ...(to ? { to } : {}) };
+}
+
+function policyAllowsNote(key: KeySession, row: { category: string; day: string }): boolean {
+  const p = key.policy;
+  if (p.categories && !p.categories.includes(row.category)) return false;
+  if (p.from && row.day < p.from) return false;
+  if (p.to && row.day > p.to) return false;
+  return true;
+}
+
+// A read that answers for itself, with the policy already applied. The caller's filters are
+// narrowed, never widened.
+function scopedFilters(key: KeySession, f: NoteFilters): NoteFilters {
+  const categories = policyCategories(key, f.categories);
+  return {
+    ...f,
+    period: clampPeriod(key, f.period),
+    ...(categories ? { categories } : {}),
+  };
 }
 
 /* ---------- Filters ---------- */
@@ -607,7 +720,7 @@ export interface ApiNote {
   category: string;
   type: string;
   source: string;
-  text: string;
+  text?: string;
   words: number;
   due?: string | null;
   done?: boolean;
@@ -622,7 +735,7 @@ export function toApiNote(
   row: ThoughtRow,
   timeZone: string,
   deadline?: ReminderRow,
-  opts: { raw: boolean; fields?: NoteField[] } = { raw: false },
+  opts: { raw: boolean; text?: boolean; fields?: NoteField[] } = { raw: false },
 ): ApiNote {
   const full: ApiNote = {
     id: row.id,
@@ -632,7 +745,8 @@ export function toApiNote(
     category: (UI_CATEGORIES as readonly string[]).includes(row.category) ? row.category : 'inbox',
     type: displayMode(row.mode),
     source: row.category_source === 'tag' ? 'tag' : row.category_source === 'manual' ? 'manual' : 'auto',
-    text: row.clean_text,
+    // A key limited to counts still gets ids, days and word counts; it does not get sentences.
+    ...(opts.text === false ? {} : { text: row.clean_text }),
     words: words(row.clean_text),
   };
   if (deadline) {
@@ -656,12 +770,19 @@ export function toApiNote(
 
 // The original text is returned only when a note read both holds the scope and asks for the
 // field, so a key granted raw:read does not carry every unfiltered draft into every payload.
-function noteOptions(key: KeySession, f: { fields?: NoteField[] }): { raw: boolean; fields?: NoteField[] } {
+function noteOptions(
+  key: KeySession,
+  f: { fields?: NoteField[] },
+): { raw: boolean; text: boolean; fields?: NoteField[] } {
   const asked = Boolean(f.fields?.includes('raw'));
   if (asked && !hasScope(key.scopes, 'raw:read')) {
     throw new Problem(403, 'forbidden', 'This key cannot read the original text: it needs the raw:read scope.');
   }
-  return { raw: asked, ...(f.fields ? { fields: f.fields } : {}) };
+  const noText = key.policy.text === 'none';
+  if (noText && f.fields?.includes('text')) {
+    throw new Problem(403, 'forbidden', 'This key cannot read note text: it is limited to counts.');
+  }
+  return { raw: asked, text: !noText, ...(f.fields ? { fields: f.fields } : {}) };
 }
 
 /* ---------- Endpoints ---------- */
@@ -682,8 +803,14 @@ const meta = (ctx: Ctx, extra: Record<string, unknown> = {}) => ({
 
 async function listNotes(ctx: Ctx, url: URL): Promise<Response> {
   requireScope(ctx.key, 'notes:read');
-  const f = parseNoteFilters(url.searchParams);
-  const opts = noteOptions(ctx.key, f);
+  const asked = parseNoteFilters(url.searchParams);
+  // A key that may not read sentences may not confirm whether a word is in them either:
+  // one search at a time is enough to reconstruct a note.
+  if (ctx.key.policy.text === 'none' && asked.q) {
+    throw new Problem(403, 'forbidden', 'This key cannot search note text: it is limited to counts.');
+  }
+  const f = scopedFilters(ctx.key, asked);
+  const opts = noteOptions(ctx.key, asked);
   const captures = f.deadline === 'any' ? null : await deadlineCaptures(ctx.env, f.deadline);
   if (captures && !captures.length) {
     return apiJson({ ok: true, meta: meta(ctx, { count: 0, next: null }), notes: [] }, 200, rateHeaders(ctx.rate));
@@ -700,7 +827,9 @@ async function oneNote(ctx: Ctx, id: string): Promise<Response> {
   requireScope(ctx.key, 'notes:read');
   const rows = await getJson<ThoughtRow[]>(ctx.env, `thoughts?id=eq.${id}&select=${NOTE_COLUMNS}&limit=1`);
   const row = rows[0];
-  if (!row) throw new Problem(404, 'not_found', 'No note with that id.');
+  // Outside the key's limits the note does not exist as far as this key is concerned: 404, not
+  // 403, which would confirm there is something there to want.
+  if (!row || !policyAllowsNote(ctx.key, row)) throw new Problem(404, 'not_found', 'No note with that id.');
   const marks = await deadlineMarks(ctx.env, [row]);
   const note = toApiNote(row, ctx.tz, row.capture_id ? marks.get(row.capture_id) : undefined, noteOptions(ctx.key, {}));
   return apiJson({ ok: true, meta: meta(ctx), note }, 200, rateHeaders(ctx.rate));
@@ -708,10 +837,12 @@ async function oneNote(ctx: Ctx, id: string): Promise<Response> {
 
 async function days(ctx: Ctx, url: URL): Promise<Response> {
   requireScope(ctx.key, 'stats:read');
-  const period = parsePeriod(url.searchParams);
+  const period = clampPeriod(ctx.key, parsePeriod(url.searchParams));
   const from = period.from ?? '2000-01-01';
   const to = period.to ?? ctx.today;
-  const answer = await rpc(ctx.env, 'diary_days', { p_from: from, p_to: to });
+  const answer = await rpc(ctx.env, 'diary_days', {
+    p_from: from, p_to: to, p_categories: policyCategories(ctx.key, undefined),
+  });
   const list = (answer as { day: string; notes: number; words: number; categories: Record<string, number>; first_at: string; last_at: string }[])
     .map((d) => ({
       day: d.day,
@@ -730,7 +861,7 @@ async function days(ctx: Ctx, url: URL): Promise<Response> {
 
 async function stats(ctx: Ctx, url: URL): Promise<Response> {
   requireScope(ctx.key, 'stats:read');
-  const period = parsePeriod(url.searchParams);
+  const period = clampPeriod(ctx.key, parsePeriod(url.searchParams));
   const byRaw = url.searchParams.get('by') ?? 'category';
   if (!(STAT_BY as readonly string[]).includes(byRaw)) {
     throw new Problem(400, 'bad_filter', `by is one of ${STAT_BY.join(', ')}.`);
@@ -738,7 +869,9 @@ async function stats(ctx: Ctx, url: URL): Promise<Response> {
   const by = byRaw as StatBy;
   const from = period.from ?? '2000-01-01';
   const to = period.to ?? ctx.today;
-  const answer = await rpc(ctx.env, 'diary_stats', { p_from: from, p_to: to, p_by: by });
+  const answer = await rpc(ctx.env, 'diary_stats', {
+    p_from: from, p_to: to, p_by: by, p_categories: policyCategories(ctx.key, undefined),
+  });
   const groups = (answer as { bucket: string; notes: number; words: number; days: number }[]).map((g) => ({
     key: byRaw === 'type' ? displayMode(g.bucket) : g.bucket,
     notes: Number(g.notes),
@@ -805,7 +938,11 @@ function toApiDeadline(r: ReminderRow, ctx: Ctx, note?: ThoughtRow) {
     daysLeft: due && !done ? dayDiff(due, ctx.today) : null,
     daysLate: due && doneDay ? dayDiff(doneDay, due) : null,
     openDays: dayDiff(doneDay ?? ctx.today, openDay),
-    ...(note ? { note: { id: note.id, day: note.day, text: note.clean_text } } : {}),
+    // The deadline's note is a note too: a key limited to counts gets the title without the
+    // sentence behind it.
+    ...(note
+      ? { note: { id: note.id, day: note.day, ...(ctx.key.policy.text === 'none' ? {} : { text: note.clean_text }) } }
+      : {}),
     ...(r.thought_id ? { noteId: r.thought_id } : {}),
   };
 }
@@ -850,9 +987,14 @@ async function deadlines(ctx: Ctx, url: URL): Promise<Response> {
     'order=due_at.asc',
     `limit=${limit}`,
   ].filter(Boolean).join('&');
-  const rows = await getJson<ReminderRow[]>(ctx.env, `reminders?${q}`);
-  const ids = rows.map((r) => r.thought_id).filter((id): id is string => !!id);
+  const found = await getJson<ReminderRow[]>(ctx.env, `reminders?${q}`);
+  const ids = found.map((r) => r.thought_id).filter((id): id is string => !!id);
   const notes = ids.length ? await notesById(ctx.env, ids) : new Map<string, ThoughtRow>();
+  // The limit lives on the note, so the page is narrowed here rather than in the query.
+  const rows = found.filter((r) => {
+    const note = r.thought_id ? notes.get(r.thought_id) : undefined;
+    return !note || policyAllowsNote(ctx.key, note);
+  });
   const list = rows.map((r) => toApiDeadline(r, ctx, r.thought_id ? notes.get(r.thought_id) : undefined));
   return apiJson({ ok: true, meta: meta(ctx, { status, count: list.length }), deadlines: list }, 200, rateHeaders(ctx.rate));
 }
@@ -866,7 +1008,10 @@ async function oneDeadline(ctx: Ctx, id: string): Promise<Response> {
   const row = rows[0];
   if (!row) throw new Problem(404, 'not_found', 'No deadline with that id.');
   const notes = row.thought_id ? await notesById(ctx.env, [row.thought_id]) : new Map<string, ThoughtRow>();
-  const deadline = toApiDeadline(row, ctx, row.thought_id ? notes.get(row.thought_id) : undefined);
+  const note = row.thought_id ? notes.get(row.thought_id) : undefined;
+  // Same rule as a note: outside the key's limits it does not exist.
+  if (note && !policyAllowsNote(ctx.key, note)) throw new Problem(404, 'not_found', 'No deadline with that id.');
+  const deadline = toApiDeadline(row, ctx, note);
   return apiJson({ ok: true, meta: meta(ctx), deadline }, 200, rateHeaders(ctx.rate));
 }
 
@@ -902,11 +1047,15 @@ async function readAllNotes(env: Env, base: NoteFilters): Promise<ThoughtRow[]> 
 
 async function exportNotes(ctx: Ctx, url: URL): Promise<Response> {
   requireScope(ctx.key, 'notes:read');
-  const f = parseNoteFilters(url.searchParams);
   const format = url.searchParams.get('format') ?? 'json';
   if (!['json', 'csv', 'md'].includes(format)) {
     throw new Problem(400, 'bad_filter', 'format is json, csv or md.');
   }
+  // An export is the sentences: a key limited to counts cannot take the diary away in a file.
+  if (ctx.key.policy.text === 'none') {
+    throw new Problem(403, 'out_of_policy', 'This key cannot read note text, so it cannot export. Use /notes or /stats.');
+  }
+  const f = scopedFilters(ctx.key, parseNoteFilters(url.searchParams));
   const opts = noteOptions(ctx.key, f);
   const rows = await readAllNotes(ctx.env, f);
   const marks = rows.length ? await deadlineMarks(ctx.env, rows) : new Map<string, ReminderRow>();
@@ -938,10 +1087,12 @@ async function exportNotes(ctx: Ctx, url: URL): Promise<Response> {
       },
     });
   }
-  // Markdown: one heading a day, one bullet a note — the shape a person reads.
+  // Markdown: one heading a day, one bullet a note — the shape a person reads. The refusal
+  // above is what lets this read the text straight; a counts-only key never gets here.
+  const written = notes as (ApiNote & { text: string })[];
   const lines: string[] = [`# Diary · ${label}`, ''];
   let current = '';
-  for (const n of notes) {
+  for (const n of written) {
     if (n.day !== current) {
       current = n.day;
       lines.push(`## ${markdownDay(n.day)}`, '');
@@ -984,7 +1135,7 @@ export function describe(tz: string) {
     scopes: Object.fromEntries(SCOPES.map((s) => [s, SCOPE_LABEL[s]])),
     endpoints: [
       { method: 'GET', path: '/api/v1', scope: null, about: 'This document.' },
-      { method: 'GET', path: '/api/v1/me', scope: null, about: 'The key: name, scopes, limits, last use.' },
+      { method: 'GET', path: '/api/v1/me', scope: null, about: 'The key: name, scopes, policy (categories, from, to, text), limits, last use.' },
       { method: 'GET', path: '/api/v1/notes', scope: 'notes:read', about: 'Notes, filtered and paged. Filters: day, month, year, from, to, category, type, source, q, has=deadline, done, fields, limit, cursor, order.' },
       { method: 'GET', path: '/api/v1/notes/{id}', scope: 'notes:read', about: 'One note.' },
       { method: 'GET', path: '/api/v1/days', scope: 'stats:read', about: 'Per-day counts, words and category tally. Filters: day, month, year, from, to.' },
@@ -994,7 +1145,7 @@ export function describe(tz: string) {
       { method: 'GET', path: '/api/v1/categories', scope: 'notes:read', about: 'The categories: id, label, order.' },
       { method: 'GET', path: '/api/v1/export', scope: 'notes:read', about: 'A range as json, csv or md. Same time filters as notes.' },
     ],
-    errors: ['unauthorized', 'forbidden', 'bad_filter', 'bad_cursor', 'not_found', 'method', 'rate_limited', 'too_many', 'setup', 'upstream'],
+    errors: ['unauthorized', 'forbidden', 'out_of_policy', 'policy', 'bad_filter', 'bad_cursor', 'not_found', 'method', 'rate_limited', 'too_many', 'setup', 'upstream'],
     envelope: { ok: true, meta: { version: API_VERSION, timeZone: tz, count: 0, next: null } },
   };
 }
@@ -1046,6 +1197,7 @@ export async function publicApi(request: Request, env: Env): Promise<Response> {
           name: key.name,
           prefix: key.prefix,
           scopes: key.scopes,
+          policy: key.policy,
           perMinute: key.perMinute,
           perDay: key.perDay,
           lastUsedAt: key.lastUsedAt,

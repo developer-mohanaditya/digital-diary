@@ -83,7 +83,17 @@ Line two is one of `Formatted, <before> -> <after> characters.`, `Cleaned up, no
 
 ### Keys
 
-Settings → Access mints one per project. A key looks like `ddk_live_…` (52 characters) and is shown **once**: the database keeps only its SHA-256 beside a 16-character lookup prefix, so there is nothing to read back. Give each project its own key — a key reads the whole diary, so the only way to withdraw one consumer is to revoke that key, which takes effect on its next request.
+Settings → Access mints one per project. A key looks like `ddk_live_…` (52 characters) and is shown **once**: the database keeps only its SHA-256 beside a 16-character lookup prefix, so there is nothing to read back. Give each project its own key and set its limits as you create it, so a leak exposes only that slice; revoking a key takes effect on its next request.
+
+A key also carries a **policy**, stored beside its scopes and enforced on every read:
+
+| Limit | Effect |
+| --- | --- |
+| `categories` | the only categories it may read; a request that names another is `403 out_of_policy` |
+| `from` / `to` | the earliest and latest day it may read; a wider period is clamped to the window, and a note outside it is `404` |
+| `text` | `clean` reads the sentences; `none` answers counts, days, categories and word counts with no `text` field, refuses `q=` and `fields=text`, and cannot export |
+
+The defaults are every category, any day and full text, which is what every key did before limits existed. A note outside a key's policy does not exist as far as that key is concerned (`404`, never `403`), the day and count rollups are narrowed to the policy's categories and window, and a deadline whose note is outside it is hidden or `404` as well.
 
 | Scope | Reads |
 | --- | --- |
@@ -99,14 +109,14 @@ curl -s "https://<site>/api/v1/notes?month=2026-10&category=work" \
   -H "Authorization: Bearer ddk_live_…"
 ```
 
-A request without a valid key is `401`, and the answer never says whether the key was unknown, revoked or expired. A valid key without the scope an endpoint needs is `403`, naming the scope.
+A request without a valid key is `401`, and the answer never says whether the key was unknown, revoked or expired. A valid key without the scope an endpoint needs is `403`, naming the scope; one reaching past its policy is `403 out_of_policy`, naming the category, because a silently empty list would hide the misconfiguration.
 
 ### Endpoints
 
 | Endpoint | Scope | Answers |
 | --- | --- | --- |
 | `GET /api/v1` | — | the API describing itself (no note content) |
-| `GET /api/v1/me` | — | this key: name, scopes, limits, last use |
+| `GET /api/v1/me` | — | this key: name, scopes, `policy` (categories, from, to, text), rate limits, last use |
 | `GET /api/v1/notes` | `notes:read` | notes, filtered and paged |
 | `GET /api/v1/notes/{id}` | `notes:read` | one note |
 | `GET /api/v1/days` | `stats:read` | per day: notes, words, category tally, first and last hour |
@@ -237,9 +247,11 @@ From then on the page shows a sign-in card: `POST /api/session` with `{"passphra
 
 ## Database setup
 
-Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`. Every one is safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`. Every one is safe to run again.
 
 `0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Access says the same; the rest of the diary is unaffected.
+
+`0008` adds `api_keys.policy` and gives `diary_stats` and `diary_days` a `p_categories` argument, so a limited key cannot count its way around its limit. Until it has been run, a key with limits answers `403 policy` rather than reading more than it should; the defaults keep every existing key open.
 
 ## Contributing
 
