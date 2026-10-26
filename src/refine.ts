@@ -168,6 +168,51 @@ export function sameWords(a: string, b: string): boolean {
   return norm(a) === norm(b);
 }
 
+// What a note's cleanup did, and what it cost. Five outcomes, because "saved as written"
+// means something different each time: a verbatim note was never sent anywhere, a key's
+// note had no model bound, and a failed cleanup is the one worth reporting out loud.
+export type CleanupKind = 'formatted' | 'unchanged' | 'verbatim' | 'unavailable' | 'failed';
+
+export interface CleanedNote {
+  clean: string;
+  cleanup: CleanupKind;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  model: string | null;
+  error: string | null;
+}
+
+// The one place a note is cleaned. The Telegram handler, the page's composer and the write API
+// all go through here, so they cannot disagree about what "formatted" or "failed" means — the
+// failure mode this code has hit before is a cleanup that quietly did nothing and still
+// reported success. A model that fails never costs the note: the raw text is the answer.
+export async function cleanNote(
+  refiner: Refiner | undefined,
+  req: RefineRequest,
+): Promise<CleanedNote> {
+  const bare: CleanedNote = {
+    clean: req.text, cleanup: 'unavailable', tokensIn: null, tokensOut: null, model: null, error: null,
+  };
+  if (req.mode === 'verbatim') return { ...bare, cleanup: 'verbatim' };
+  if (!refiner) return bare;
+  try {
+    const out = await refiner.refine(req);
+    if (out && !sameWords(out.text, req.text)) {
+      return {
+        clean: out.text, cleanup: 'formatted',
+        tokensIn: out.tokensIn, tokensOut: out.tokensOut, model: out.model, error: null,
+      };
+    }
+    return { ...bare, cleanup: 'unchanged' };
+  } catch (err) {
+    return {
+      ...bare,
+      cleanup: 'failed',
+      error: err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error',
+    };
+  }
+}
+
 // Wraps the binding so the handler only ever sees "formatted text or null". Verbatim
 // notes never reach the model: that mode means the words are the point.
 export function workersAiRefiner(ai: AiRunner): Refiner {

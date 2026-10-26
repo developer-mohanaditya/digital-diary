@@ -5,6 +5,15 @@ export const UI_CATEGORIES = [
   'class', 'learning', 'thought', 'quote', 'work', 'project', 'life', 'task', 'deadline', 'inbox',
 ] as const;
 
+// A real calendar day, not just four digits and two dashes: 2026-02-30 and 2026-13-01 both
+// match the shape and neither is a day. Shared by the read API's filters and the write API's
+// notes, so the two doors cannot disagree about what a date is.
+export function isDay(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
 // Only the columns the interface needs.
 export interface ThoughtRow {
   id: string;

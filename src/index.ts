@@ -2,9 +2,10 @@ import {
   handleUpdate, localDay, type TelegramUpdate, type Store, type Notifier, type RepairResult, type ThoughtInput,
 } from './handler';
 import type { Category, Mode } from './parse';
-import { MAX_INPUT_CHARS, sameWords } from './refine';
+import { MAX_INPUT_CHARS, cleanNote, type CleanupKind } from './refine';
 import { UI_CATEGORIES, groupByDay, type DeadlineMark, type ThoughtRow } from './api';
 import { BACKUP_MODEL, BIG_MODEL, SMALL_MODEL, readOutput, workersAiRefiner, type AiRunner } from './refine';
+import { reminderTimes } from './reminders';
 import {
   SESSION_COOKIE, clearedCookie, issueSession, readCookie, sameSecret, sessionCookie, sessionValid,
 } from './session';
@@ -40,14 +41,25 @@ function supabaseStore(env: Env): Store {
   };
   return {
     async insertCapture(c) {
-      const res = await check(await fetch(`${base}/captures?on_conflict=source,source_update_id`, {
+      const write = (body: Record<string, unknown>) => fetch(`${base}/captures?on_conflict=source,source_update_id`, {
         method: 'POST',
         headers: { ...headers, Prefer: 'resolution=ignore-duplicates,return=representation' },
-        body: JSON.stringify([{
-          source: 'telegram', source_update_id: c.update_id, source_chat_id: c.chat_id,
-          kind: 'text', raw_text: c.raw_text, command_mode: c.mode, command_category: c.category, status: c.status,
-        }]),
-      }));
+        body: JSON.stringify([body]),
+      });
+      const row = {
+        source: c.source ?? 'telegram', source_update_id: c.update_id, source_chat_id: c.chat_id,
+        kind: 'text', raw_text: c.raw_text, command_mode: c.mode, command_category: c.category,
+        status: c.status, client: c.client ?? null, dedupe_key: c.dedupeKey ?? null,
+      };
+      let res = await write(row);
+      // client and dedupe_key arrive with 0009, and a deploy can reach production before the
+      // migration does. The note still lands exactly once — idempotency rides source_update_id,
+      // which is older than both — so only the readable key is lost.
+      if (res.status === 400) {
+        const { client: _client, dedupe_key: _key, ...bare } = row;
+        res = await write(bare);
+      }
+      await check(res);
       const rows = (await res.json()) as { id: string }[];
       return rows.length ? { inserted: true, id: rows[0].id } : { inserted: false };
     },
@@ -65,6 +77,42 @@ function supabaseStore(env: Env): Store {
         res = await write(bare);
       }
       await check(res);
+    },
+    // The write API's two reads. findCaptures is how a retried request finds the captures the
+    // first one made: the id is derived from the caller's Idempotency-Key, so the same request
+    // asks the same question. writtenNotes reads back rows that API just wrote, which is what
+    // its receipt and the owner's Telegram message are built from — never anything else.
+    async findCaptures(source, sourceUpdateIds) {
+      if (!sourceUpdateIds.length) return [];
+      const res = await check(await fetch(
+        `${base}/captures?source=eq.${source}&source_update_id=in.(${sourceUpdateIds.join(',')})` +
+          `&select=id,source_update_id&limit=${sourceUpdateIds.length}`,
+        { headers },
+      ));
+      const rows = (await res.json()) as { id: string; source_update_id: number }[];
+      return rows.map((r) => ({ id: r.id, sourceUpdateId: Number(r.source_update_id) }));
+    },
+    async writtenNotes(captureIds) {
+      if (!captureIds.length) return [];
+      const read = (select: string) => fetch(
+        `${base}/thoughts?capture_id=in.(${captureIds.join(',')})&select=${select}&order=created_at.asc`,
+        { headers },
+      );
+      let res = await read('id,capture_id,day,category,mode,clean_text,created_at,tokens_in,tokens_out,cleanup_model');
+      // Same reason as the page's read: the usage columns arrive with 0006, and a receipt is not
+      // worth failing over what a cleanup cost.
+      if (res.status === 400) res = await read('id,capture_id,day,category,mode,clean_text,created_at');
+      await check(res);
+      const rows = (await res.json()) as {
+        id: string; capture_id: string; day: string; category: string; mode: string;
+        clean_text: string; created_at: string;
+        tokens_in?: number | null; tokens_out?: number | null; cleanup_model?: string | null;
+      }[];
+      return rows.map((r) => ({
+        id: r.id, captureId: r.capture_id, day: r.day, category: r.category, mode: r.mode,
+        text: r.clean_text, at: r.created_at,
+        tokensIn: r.tokens_in ?? null, tokensOut: r.tokens_out ?? null, model: r.cleanup_model ?? null,
+      }));
     },
     async getTimeZone() {
       const res = await check(await fetch(`${base}/settings?key=eq.timezone&select=value`, { headers }));
@@ -170,24 +218,32 @@ function supabaseStore(env: Env): Store {
   };
 }
 
-// Telegram Bot API adapter.
-function telegramNotifier(env: Env): Notifier {
-  const send = async (payload: Record<string, unknown>) => {
-    try {
-      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      console.error('telegram reply failed', err);
+// Telegram Bot API adapter. The boolean is what the write API's receipt reports, so a message
+// that never went out is said out loud rather than assumed: the notes are stored either way.
+async function sendTelegram(env: Env, payload: Record<string, unknown>): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error('telegram send failed', res.status, (await res.text()).slice(0, 200));
+      return false;
     }
-  };
+    return true;
+  } catch (err) {
+    console.error('telegram send failed', err);
+    return false;
+  }
+}
+
+function telegramNotifier(env: Env): Notifier {
   return {
     async reply(chatId, text) {
-      await send({ chat_id: chatId, text });
+      await sendTelegram(env, { chat_id: chatId, text });
     },
     async remind(chatId, reminderId, text) {
-      await send({
+      await sendTelegram(env, {
         chat_id: chatId,
         text,
         reply_markup: { inline_keyboard: [[{ text: 'Done', callback_data: `done:${reminderId}` }]] },
@@ -507,7 +563,7 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
 
 // What the page reports after a save, so the message under the box is about the note it
 // just typed rather than a generic "saved".
-type NoteCleanup = 'formatted' | 'unchanged' | 'verbatim' | 'unavailable' | 'failed';
+type NoteCleanup = CleanupKind;
 
 // POST /api/note: a note typed on the page. It takes the same path as a Telegram message
 // — storage, cleanup, then the result — so a note added here is the same kind of row as
@@ -535,30 +591,17 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
   const category = (chosen ?? 'inbox') as Category;
 
   // The model runs before the insert so one request answers what was stored, but a
-  // failure only changes the wording: the raw text is saved either way.
-  let clean = text;
-  let cleanup: NoteCleanup = 'unavailable';
-  let refineError: string | null = null;
-  let usage: { tokensIn: number | null; tokensOut: number | null; model: string | null } =
-    { tokensIn: null, tokensOut: null, model: null };
-  if (mode === 'verbatim') {
-    cleanup = 'verbatim';
-  } else if (env.AI) {
-    try {
-      const out = await workersAiRefiner(env.AI).refine({ text, mode, category });
-      if (out) usage = { tokensIn: out.tokensIn, tokensOut: out.tokensOut, model: out.model };
-      if (out && !sameWords(out.text, text)) {
-        clean = out.text;
-        cleanup = 'formatted';
-      } else {
-        cleanup = 'unchanged';
-      }
-    } catch (err) {
-      cleanup = 'failed';
-      refineError = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
-      console.error('refine failed', err);
-    }
-  }
+  // failure only changes the wording: the raw text is saved either way. The step itself is
+  // the same one the write API takes, so the two doors cannot disagree about what
+  // "formatted" or "failed" means.
+  const cleaned = await cleanNote(env.AI ? workersAiRefiner(env.AI) : undefined, { text, mode, category });
+  if (cleaned.error) console.error('refine failed', cleaned.error);
+  const clean = cleaned.clean;
+  const cleanup: NoteCleanup = cleaned.cleanup;
+  // Reassigned below when a deadline's reminder fails: the note is stored either way, and the
+  // message under the box has to say which part did not happen.
+  let refineError = cleaned.error;
+  const usage = { tokensIn: cleaned.tokensIn, tokensOut: cleaned.tokensOut, model: cleaned.model };
 
   const base = `${env.SUPABASE_URL}/rest/v1`;
   const headers = {
@@ -652,14 +695,8 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
   }
 }
 
-// When a deadline's reminder should first fire: three days before the due date, or now when
-// that day has already passed. Shared by the composer, which sets one at capture time, and
-// by a move to Deadline, which has to add one afterwards.
-function reminderTimes(due: string, now: Date): { dueAt: Date; next: Date } {
-  const dueAt = new Date(`${due}T09:00:00.000Z`);
-  const first = new Date(dueAt.getTime() - 3 * 86400000);
-  return { dueAt, next: first.getTime() < now.getTime() ? now : first };
-}
+// When a deadline's reminder should first fire, and the same rule the write API uses: see
+// reminderTimes in ./reminders.
 
 // POST /api/note/move { id, category, due? } -> files the row under another category. The demo's
 // Move button only rewrote its own array and forgot the move on reload; this is the row. A move
@@ -986,7 +1023,16 @@ export default {
     if (url.pathname === '/api/reclean' && request.method === 'POST') return reclean(request, env);
     // The read API for other projects, and the key management the page drives. Both are matched
     // by prefix before the assets fallback, which would otherwise answer them with a 404 page.
-    if (url.pathname === '/api/v1' || url.pathname.startsWith('/api/v1/')) return publicApi(request, env);
+    // The write half of the API needs the same store and notifier the bot uses, plus the
+    // cleanup the composer runs: an API note is the same kind of row as a typed one.
+    if (url.pathname === '/api/v1' || url.pathname.startsWith('/api/v1/')) {
+      return publicApi(request, env, {
+        store: supabaseStore(env),
+        refiner: env.AI ? workersAiRefiner(env.AI) : undefined,
+        notify: (text: string) => sendTelegram(env, { chat_id: Number(env.ALLOWED_CHAT_ID), text }),
+        timeZone: env.DIARY_TZ || 'UTC',
+      });
+    }
     if (url.pathname === '/api/keys' || url.pathname.startsWith('/api/keys/')) return keysApi(request, env);
     return env.ASSETS.fetch(request);
   },
