@@ -111,7 +111,7 @@ async function loadDiary() {
   return {};
 }
 
-const state = { days:{}, heatmap:'weeks', weekStart:'mon', tz:'', signedIn:false };
+const state = { days:{}, heatmap:'weeks', weekStart:'mon', tz:'', signedIn:false, keys:null, keysLoading:false, keysError:'', newKey:null };
 try {
   const v = JSON.parse(localStorage.getItem(VIEW) || '{}') || {};
   if (v.heatmap === 'weeks' || v.heatmap === 'grid') state.heatmap = v.heatmap;
@@ -1073,6 +1073,13 @@ function viewSettings() {
   </section>
 
   <section class="card">
+    <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">Read-only · /api/v1</span></div>
+    <h2>API keys</h2>
+    <p class="muted" style="margin:0 0 2px;font-size:.84rem">Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Each key sees the whole diary, so give every project its own and revoke the one that leaks.</p>
+    ${keysHTML()}
+  </section>
+
+  <section class="card">
     <div class="lhead"><span class="kicker">Access</span></div>
     <h2>Change the passphrase</h2>
     <form class="passform" id="pass-form" autocomplete="off">
@@ -1131,6 +1138,157 @@ async function changePassphrase() {
   [cur, nw, rp].forEach(i => i.removeAttribute('aria-invalid'));
   if (msg) { msg.textContent = 'Saved. It is the only passphrase that opens this diary now.'; msg.className = 'pmsg ok'; }
   toast('Passphrase changed.');
+}
+
+/* ---------- API keys ---------- */
+// Other projects read the diary with a key minted here. The secret exists on this page once,
+// between the answer that created it and the moment the panel is dismissed: the list keeps
+// only the prefix, and the database keeps only a hash, so there is nothing to read back.
+const SCOPE_UI = [
+  ['notes:read', 'Notes'],
+  ['deadlines:read', 'Deadlines'],
+  ['stats:read', 'Counts'],
+  ['raw:read', 'Original text'],
+];
+const SCOPE_LABEL = Object.fromEntries(SCOPE_UI.map(([id, label]) => [id, label]));
+const keyWhen = ts => new Date(ts).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+const keyscopes = () => SCOPE_UI.map(([id, label]) => `<label><input type="checkbox" data-scope="${id}"${id === 'raw:read' ? '' : ' checked'} />${label}</label>`).join('');
+
+function keysHTML() {
+  if (state.newKey) {
+    const k = state.newKey;
+    const expires = k.expiresAt ? `Expires ${keyWhen(k.expiresAt)}.` : 'It does not expire.';
+    return `<div class="keyonce">
+      <span class="lab">Your new key — copy it now</span>
+      <div class="keyline">
+        <input class="keymono" id="key-value" readonly value="${esc(k.key)}" aria-label="New API key" />
+        <button class="cbtn" data-action="key-copy">Copy</button>
+      </div>
+      <p class="note" style="margin-top:8px">${esc(k.name)} · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')}. ${expires}
+        This is the only time it is shown: the diary keeps a hash, so it cannot be read back.
+        Put it in the other project's environment secrets, never in a browser bundle.</p>
+      <div class="passrow" style="margin-top:10px"><button class="btn" data-action="key-done">Done</button></div>
+    </div>`;
+  }
+
+  const rows = state.keys === null
+    ? '<p class="muted" style="font-size:.84rem;margin:14px 0 0">Reading the keys…</p>'
+    : state.keysError
+      ? `<p class="pmsg err" style="margin:14px 0 0">${esc(state.keysError)} <button class="link" data-action="keys-retry">Try again</button></p>`
+      : state.keys.length
+        ? `<div style="margin-top:6px">${state.keys.map(k => {
+            const expired = k.expiresAt && Date.parse(k.expiresAt) <= Date.now();
+            const pill = k.revokedAt || expired ? 'off' : 'live';
+            const when = k.revokedAt ? `revoked ${keyWhen(k.revokedAt)}`
+              : expired ? `expired ${keyWhen(k.expiresAt)}`
+              : k.lastUsedAt ? `used ${keyWhen(k.lastUsedAt)}`
+              : 'never used';
+            return `<div class="setrow keyrow">
+              <div style="min-width:0">
+                <span class="lab">${esc(k.name)} <span class="keypill ${pill}">${k.revokedAt ? 'revoked' : expired ? 'expired' : 'live'}</span></span>
+                <span class="sub"><code>${esc(k.prefix)}…</code> · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')} · ${when}</span>
+              </div>
+              ${k.revokedAt ? '' : `<button class="microbtn danger" data-action="key-revoke" data-v="${esc(k.id)}" data-name="${esc(k.name)}">Revoke</button>`}
+            </div>`;
+          }).join('')}</div>`
+        : '<p class="muted" style="font-size:.84rem;margin:14px 0 0">No keys yet. One key per project keeps a leak down to one revoke.</p>';
+
+  return `${rows}
+    <form class="keyform" id="key-form" autocomplete="off">
+      <label class="field"><span>Name</span><input id="key-name" maxlength="60" placeholder="Portfolio site" /></label>
+      <label class="field"><span>Expires</span><select id="key-exp">
+        <option value="90">in 90 days</option><option value="365">in a year</option><option value="never">never</option>
+      </select></label>
+      <div class="keyscopes">${keyscopes()}</div>
+      <div class="passrow"><button class="cbtn" type="submit" id="key-create">Create a key</button><span class="pmsg" id="key-msg" role="status" aria-live="polite"></span></div>
+    </form>`;
+}
+
+// The list is read once per visit to Settings, not on every render: render() runs on every
+// click and key rows do not change while a note is being filed.
+function ensureKeys() {
+  if (state.keys !== null || state.keysLoading) return;
+  state.keysLoading = true;
+  (async () => {
+    try {
+      const res = await fetch('/api/keys');
+      const data = await res.json().catch(() => null);
+      if (res.status === 401) { state.keysLoading = false; showSignin('Sign in to manage API keys.'); return; }
+      if (!data || !data.ok) { state.keys = []; state.keysError = (data && data.error) || `The diary answered ${res.status}.`; }
+      else { state.keys = data.keys; state.keysError = ''; }
+    } catch (_) {
+      state.keys = [];
+      state.keysError = 'Could not reach the diary.';
+    }
+    state.keysLoading = false;
+    render();
+  })();
+}
+
+async function createKey() {
+  const nameEl = $('#key-name'), expEl = $('#key-exp'), msg = $('#key-msg'), btn = $('#key-create');
+  const name = nameEl ? nameEl.value.trim() : '';
+  const scopes = Array.from(document.querySelectorAll('.keyform input[data-scope]')).filter(i => i.checked).map(i => i.dataset.scope);
+  const fail = text => { if (msg) { msg.textContent = text; msg.className = 'pmsg err'; } };
+  if (!name) { fail('Give the key a name, so you know which project holds it.'); if (nameEl) nameEl.focus(); return; }
+  if (!scopes.length) return fail('Pick at least one scope.');
+  if (scopes.includes('raw:read') && !scopes.includes('notes:read')) {
+    return fail('Original text is read through notes, so tick Notes too.');
+  }
+  if (btn) btn.disabled = true;
+  let data = null, status = 0;
+  try {
+    const res = await fetch('/api/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, scopes, expiresInDays: expEl ? expEl.value : 'never' }),
+    });
+    status = res.status;
+    data = await res.json().catch(() => null);
+  } catch (_) {
+    if (btn) btn.disabled = false;
+    return fail('Could not reach the diary. Nothing was created.');
+  }
+  if (btn) btn.disabled = false;
+  if (status === 401) { showSignin('Sign in again to create a key.'); return; }
+  if (!data || !data.ok) return fail((data && data.error) || `The diary answered ${status}.`);
+  state.newKey = data;
+  // The new key belongs in the list behind the reveal, so the next visit reads it fresh.
+  state.keys = null;
+  render();
+}
+
+async function copyKey() {
+  const field = $('#key-value');
+  if (!field) return;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    toast('Key copied.');
+  } catch (_) {
+    // Clipboard permission is not guaranteed on a plain origin; selecting the text is the
+    // fallback that still lets the key be copied by hand.
+    field.focus();
+    field.select();
+    toast('Press Ctrl/Cmd + C to copy the key.');
+  }
+}
+
+async function revokeKey(id) {
+  const row = document.querySelector(`[data-action="key-revoke"][data-v="${id}"]`);
+  const name = row && row.dataset.name ? row.dataset.name : 'this key';
+  if (!window.confirm(`Revoke ${name}? Any project using it stops reading the diary at once.`)) return;
+  try {
+    const res = await fetch(`/api/keys/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
+    const data = await res.json().catch(() => null);
+    if (res.status === 401) { showSignin('Sign in again to revoke a key.'); return; }
+    if (!data || !data.ok) { toast((data && data.error) || `The diary answered ${res.status}.`); return; }
+    toast('Key revoked.');
+    state.keys = null;
+    state.keysLoading = false;
+    ensureKeys();
+  } catch (_) {
+    toast('Could not reach the diary. Nothing was revoked.');
+  }
 }
 
 // The one line Settings shows for everything the Look page holds. The font name is the one
@@ -1267,6 +1425,8 @@ function render() {
   }
   if (signinEl) signinEl.hidden = true;
   if (appEl) appEl.hidden = false;
+  // Settings reads the key list the first time it is opened, then remembers it.
+  if (r.view === 'settings') ensureKeys();
   syncNav(r);
   renderCrumbs(r);
   const t = parse(TODAY);
@@ -1423,6 +1583,10 @@ document.addEventListener('click', e => {
   else if (a === 'add') addEntry();
   else if (a === 'refresh' || a === 'retry') boot();
   else if (a === 'signout') signOut();
+  else if (a === 'key-copy') copyKey();
+  else if (a === 'key-done') { state.newKey = null; render(); }
+  else if (a === 'key-revoke') revokeKey(v);
+  else if (a === 'keys-retry') { state.keys = null; state.keysError = ''; ensureKeys(); }
   else if (a === 'due-toggle') { ui.dueOpen = !ui.dueOpen; renderDuePanel(); }
   else if (a === 'due-prev') { shiftDueCal(-1); renderDuePanel(); }
   else if (a === 'due-next') { shiftDueCal(1); renderDuePanel(); }
@@ -1493,8 +1657,10 @@ document.addEventListener('change', e => {
 // The passphrase form answers its own submit, so Enter works from any of its three fields.
 document.addEventListener('submit', e => {
   if (e.target && e.target.id === 'pass-form') { e.preventDefault(); changePassphrase(); }
+  if (e.target && e.target.id === 'key-form') { e.preventDefault(); createKey(); }
 });
-window.addEventListener('hashchange', () => { ui.tab = 'all'; ui.compose = false; ui.dueOpen = false; render(); window.scrollTo(0, 0); });
+// A revealed key does not survive leaving the page: it belongs to the moment it was minted.
+window.addEventListener('hashchange', () => { ui.tab = 'all'; ui.compose = false; ui.dueOpen = false; state.newKey = null; render(); window.scrollTo(0, 0); });
 
 /* ---------- Unlocking, and the first read ---------- */
 function showSignin(message) {
@@ -1532,6 +1698,8 @@ async function boot() {
 async function signOut() {
   try { await fetch('/api/session', { method: 'DELETE' }); } catch (_) {}
   state.days = {};
+  // The key list and any revealed secret belong to the session that just ended.
+  state.keys = null; state.keysError = ''; state.newKey = null; state.keysLoading = false;
   ui.openNote = null; ui.compose = false; ui.dueOpen = false;
   render();
   showSignin('Signed out. The diary is locked.');

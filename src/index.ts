@@ -10,6 +10,8 @@ import {
 } from './session';
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
+import { createApiKey, listApiKeys, publicApi, revokeApiKey } from './publicapi';
+import { expiryFrom, keyNameProblem, normaliseScopes } from './apikey';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -813,6 +815,64 @@ async function reminderDoneApi(request: Request, env: Env): Promise<Response> {
   }
 }
 
+// The host a browser stamped an Origin with, or an empty string when it is not a URL at all —
+// which then fails the comparison and is refused, rather than throwing.
+function originHost(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return '';
+  }
+}
+
+// Key management for Settings. These answer to the page's session, not to a key: a key can
+// only read the diary, never mint or revoke another key. POST also refuses a foreign Origin,
+// because minting a credential is heavier than changing a preference and the cookie is enough
+// to do it.
+async function keysApi(request: Request, env: Env): Promise<Response> {
+  if (!(await signedIn(request, env))) {
+    return json({ ok: false, need: 'login', error: 'Sign in to manage API keys.' }, 401);
+  }
+  const path = new URL(request.url).pathname;
+  try {
+    if (request.method === 'GET' && path === '/api/keys') {
+      return json({ ok: true, keys: await listApiKeys(env) });
+    }
+    const origin = request.headers.get('Origin');
+    if (origin && originHost(origin) !== new URL(request.url).host) {
+      return json({ ok: false, error: 'That request came from another site.' }, 403);
+    }
+    if (request.method === 'POST' && path === '/api/keys') {
+      const body = (await request.json().catch(() => null)) as
+        { name?: unknown; scopes?: unknown; expiresInDays?: unknown } | null;
+      if (!body) return json({ ok: false, error: 'Send JSON: { "name": "...", "scopes": [...] }' }, 400);
+      const nameProblem = keyNameProblem(body.name);
+      if (nameProblem) return json({ ok: false, error: nameProblem }, 400);
+      const scopes = normaliseScopes(body.scopes);
+      if ('error' in scopes) return json({ ok: false, error: scopes.error }, 400);
+      const expiry = expiryFrom(body.expiresInDays, new Date());
+      if ('error' in expiry) return json({ ok: false, error: expiry.error }, 400);
+      const created = await createApiKey(env, {
+        name: (body.name as string).trim(), scopes: scopes.scopes, expiresAt: expiry.at,
+      });
+      // The one response that ever carries the key itself.
+      return json({ ok: true, ...created });
+    }
+    const revoke = /^\/api\/keys\/([A-Za-z0-9-]{8,64})\/revoke$/.exec(path);
+    if (request.method === 'POST' && revoke) {
+      const done = await revokeApiKey(env, revoke[1]);
+      if (!done) return json({ ok: false, error: 'No live key with that id.' }, 404);
+      return json({ ok: true });
+    }
+    return json({ ok: false, error: 'No such key route.' }, 404);
+  } catch (err) {
+    console.error('api keys failed', err);
+    const message = err instanceof Error ? err.message : '';
+    // A missing table is worth saying out loud: it names the migration to run.
+    return json({ ok: false, error: message.includes('0007') ? message : 'Could not reach the database.' }, 502);
+  }
+}
+
 async function webhook(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('unauthorized', { status: 401 });
@@ -914,6 +974,10 @@ export default {
     if (url.pathname === '/api/passphrase' && request.method === 'POST') return passphraseApi(request, env);
     if (url.pathname === '/api/ai-check' && request.method === 'GET') return aiCheck(request, env);
     if (url.pathname === '/api/reclean' && request.method === 'POST') return reclean(request, env);
+    // The read API for other projects, and the key management the page drives. Both are matched
+    // by prefix before the assets fallback, which would otherwise answer them with a 404 page.
+    if (url.pathname === '/api/v1' || url.pathname.startsWith('/api/v1/')) return publicApi(request, env);
+    if (url.pathname === '/api/keys' || url.pathname.startsWith('/api/keys/')) return keysApi(request, env);
     return env.ASSETS.fetch(request);
   },
   async scheduled(_event: unknown, env: Env): Promise<void> {
