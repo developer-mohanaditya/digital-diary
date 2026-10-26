@@ -482,6 +482,26 @@ async function markDue(ref) {
 const hasRawText = it => it.mode !== 'verbatim' && !!it.raw;
 
 /* ---------- Ledger, sheet ---------- */
+// Three doors lead in: the bot, this page, and the API other projects write through. The note
+// sheet says which one this note came in by, and an API note is named after the app that filed
+// it — "Claude" says something "API" does not. The ledger line stays as it was: a mark on every
+// row competes with the note itself, and the note is what the day is for.
+const ORIGIN_LABEL = { telegram: 'Telegram', web: 'Web', api: 'API' };
+const CLIENT_LABEL = {
+  'claude-code': 'Claude', claude: 'Claude', codex: 'Codex', chatgpt: 'ChatGPT',
+  'chat-gpt': 'ChatGPT', freebuff: 'Freebuff', cursor: 'Cursor',
+};
+// A client the diary has not seen before still reads as a name rather than a blank: the capture
+// stores what the app called itself, and a new one must not lose its mark for being new.
+function originLabel(o) {
+  if (!o) return '';
+  const source = String(o.source || '').toLowerCase();
+  if (source !== 'api') return ORIGIN_LABEL[source] || '';
+  const client = String(o.client || '').toLowerCase().trim();
+  if (CLIENT_LABEL[client]) return CLIENT_LABEL[client];
+  const words = client.replace(/[-_]+/g, ' ').trim();
+  return words ? words.replace(/\b\w/g, ch => ch.toUpperCase()) : ORIGIN_LABEL.api;
+}
 function ledgerRowHTML(it, k, withDay = false) {
   return `<div class="lrow clickable" data-action="open" data-v="${k}|${it.id}" tabindex="0" role="button" title="Open note">
       <span class="ltime${withDay ? ' wide' : ''}">${withDay ? `${+k.slice(8)} ${it.time}` : it.time}</span>
@@ -529,7 +549,7 @@ function noteHTML(ref) {
       <div class="shead"><span class="sdot" style="background:${c.color}"></span><strong>${c.label}</strong><span class="mode">${MODE_LABEL[it.mode]}</span><span class="spacer"></span>${hasRaw ? `<button class="hbtn" data-action="raw" data-v="${it.id}" aria-pressed="${rawOpen}" title="${rawOpen ? 'Hide raw' : 'Show raw'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6"/></svg></button>` : ''}<button class="hbtn" data-action="move-menu" aria-expanded="${ui.moveMenu}" title="Move to another category"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14l3 3 3-3"/></svg></button><button class="xbtn" data-action="close-note" aria-label="Close">\u00d7</button></div>
       ${ui.moveMenu ? moveMenuHTML(it) : ''}
       <div class="sbody">
-        <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : it.src === 'manual' ? 'Moved by you' : 'Auto filed'}</div>
+        <div class="smeta">${fmtDay(parse(k))}<i>·</i>${it.time}<i>·</i>${it.src === 'tag' ? 'Tagged by you' : it.src === 'manual' ? 'Moved by you' : 'Auto filed'}${it.origin ? `<i>·</i>via ${esc(originLabel(it.origin))}` : ''}</div>
         ${dueLine(it, k)}
         ${noteTitleBody(it.text)}
         ${rawOpen && hasRaw ? `<div class="sraw"><span class="kicker">Raw</span><p>${esc(it.raw)}</p></div>` : ''}

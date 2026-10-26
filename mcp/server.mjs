@@ -101,7 +101,7 @@ function receiptSummary(receipt) {
 }
 
 export function createDiaryServer({ apiUrl, apiKey, fetchImpl = fetch }) {
-  const base = String(apiUrl || 'https://awedityasdiary.aweditya-sm.workers.dev').replace(/\/+$/, '');
+  const base = String(apiUrl || 'https://ink.aweditya.com').replace(/\/+$/, '');
 
   // One place the key is attached, so no tool can forget it and none of them can log it.
   const call = async (path, init = {}) => {

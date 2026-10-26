@@ -12,7 +12,7 @@
 // Cloud half: `wrangler secret put`, driven by CLOUDFLARE_API_TOKEN — the same token
 // everything else uses. It only works if that token carries "Workers Scripts: Edit";
 // an analytics-only token is refused by Cloudflare, and the value is still safe locally.
-// Paste it once in Workers -> awedityasdiary -> Settings -> Variables and Secrets.
+// Paste it once in Workers -> ink -> Settings -> Variables and Secrets.
 //
 // Verify the whole set afterwards with: npm run env:check
 
@@ -100,5 +100,5 @@ if (r.status === 0) {
 console.log('');
 console.log('Cloudflare refused CLOUDFLARE_API_TOKEN (it needs "Workers Scripts: Edit"). The local copy is written.');
 console.log('Paste the value once here instead:');
-console.log(`  Workers -> awedityasdiary -> Settings -> Variables and Secrets -> Add -> ${name}`);
+console.log(`  Workers -> ink -> Settings -> Variables and Secrets -> Add -> ${name}`);
 process.exit(1);
