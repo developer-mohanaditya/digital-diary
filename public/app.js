@@ -761,17 +761,19 @@ function whenCard(k) {
   </section>`;
 }
 
+// An empty deadlines card is not worth a phone's scroll, so it steps aside there and keeps
+// its place on the web, saying so in one line.
 function dueCard() {
   const open = openDeadlines();
   const overdue = open.filter(it => dueDays(it.due) < 0).length;
-  return `<section class="card railcard">
+  return `<section class="card railcard${open.length ? '' : ' dueempty'}">
     <div class="lhead" style="margin-bottom:4px;align-items:flex-start">
       <div><span class="kicker">Deadlines</span><h2 style="margin:2px 0 0">Due</h2></div>${open.length
       ? `<span class="due ${overdue ? 'over' : 'soon'}">${overdue ? `${overdue} overdue` : `${open.length} open`}</span>` : ''}</div>
     ${open.length ? open.slice(0, 5).map(it => `<div class="lrow clickable" data-action="open" data-v="${it.k}|${it.id}" tabindex="0" role="button" title="Open note">
         <span class="ltxt"><b class="clampb">${esc(plainText(it.text))}</b><span class="muted" style="font-size:.76rem">${fmtShort2y(it.due)} · ${CAT[it.cat].label}</span></span>${duePill(it)}
       </div>`).join('')
-      : '<p class="muted" style="margin:0">Nothing open.</p>'}
+      : '<p class="muted" style="margin:0">Nothing due.</p>'}
     <p class="note"><a class="microbtn" href="#/dashboard">The dashboard →</a></p>
   </section>`;
 }
@@ -1190,7 +1192,9 @@ function keysHTML() {
         <button class="cbtn" data-action="key-copy">Copy</button>
       </div>
       <p class="note" style="margin-top:8px">${esc(k.name)} · ${k.scopes.map(s => esc(SCOPE_LABEL[s] || s)).join(' · ')}. ${esc(policyWords(k.policy))}. ${expires}
-        ${k.perMinute && k.perDay ? `Up to ${k.perMinute} requests a minute, ${k.perDay} a day. ` : ''}
+        ${k.perMinute && k.perDay ? (isWriteKey(k)
+          ? `Up to ${k.perMinute} notes a minute and ${k.perDay} a day: every note spends one, not every request. Each one is confirmed on Telegram, and a caller cannot switch that off. `
+          : `Up to ${k.perMinute} requests a minute, ${k.perDay} a day. `) : ''}
         This is the only time it is shown: the diary keeps a hash, so it cannot be read back.
         ${where}</p>
       <div class="passrow" style="margin-top:10px"><button class="btn" data-action="key-done">Done</button></div>
