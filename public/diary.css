@@ -1,7 +1,6 @@
 /* The diary's one stylesheet: tokens, cards, chips, sheets, every page's rules.
-   Both public/index.html (the served app) and public/demo/v2/ (the demo) link this
-   file, so a change to how it looks has exactly one place to happen. It lives under
-   demo/ because GitHub Pages publishes that folder as a site of its own. */
+   public/index.html is the only page that links it, so a change to how the diary looks
+   has exactly one place to happen. */
   /* Palettes: theme x mode. Card shape (hard shadow) is shared by all themes. */
   [data-theme="minimal"][data-mode="light"] { --bg:#eef1ff; --ink:#0d1020; --muted:#5b6382; --accent:#4338ca; --card:#ffffff; --line:#d9ddf2; --alert:#e11d48; --edge:#0d1020; --shadow:#0d1020; --top:#0d1020; --grain:none; }
   [data-theme="minimal"][data-mode="dark"]  { --bg:#15122b; --ink:#f1eeff; --muted:#a7a1d6; --accent:#a78bfa; --card:#1e1a3d; --line:#342e66; --alert:#fb7185; --edge:#6d5bd0; --shadow:#6d5bd0; --top:#0c0a1f;
@@ -38,10 +37,8 @@
   .top-inner { width:min(1100px,100%); margin:0 auto; padding:0 24px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:14px; }
   .brand { font-weight:800; font-size:1.05rem; display:inline-flex; align-items:center; gap:10px; justify-self:start; white-space:nowrap; }
   .brand img { display:block; width:36px; height:36px; border-radius:10px; }
-  /* The wordmark is the bar's own white. The demo opts into the yellow with
-     data-preview on <html>, so a preview can never be mistaken for the diary itself. */
+  /* The wordmark is the bar's own white. */
   .brand-name { display:inline; color:inherit; }
-  [data-preview] .brand-name { color:#fbbf24; }
   .tools { display:flex; gap:8px; align-items:center; justify-self:end; }
   .search-wrap { position:relative; width:100%; max-width:560px; min-width:0; margin:0; justify-self:center; }
   .search-input { position:relative; z-index:0; width:100%; height:38px; color:#f5f5ff; border-radius:999px; padding:8px 14px 8px 37px; font-size:.88rem; outline:none;
@@ -594,7 +591,7 @@
     .csheet textarea { min-height:120px; }
   }
 
-  /* ---------- demo additions: all in the same tokens and card language ---------- */
+  /* ---------- layout: all in the same tokens and card language ---------- */
   .split { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:18px; align-items:start; }
   /* One column below 980px, with the rail's deadlines moved up to second: on a phone what is
      due is the only card that asks for an action, and it does not wait behind two charts. */
@@ -782,7 +779,7 @@
     .setrow .seg { max-width:100%; }
     .setrow .seg button { min-height:44px; }
   }
-  /* One ring for every control the demo draws: the browser default disappears on the dark
+  /* One ring for every control the app draws: the browser default disappears on the dark
      bar and on the accent fill. */
   a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
     outline:2px solid var(--accent); outline-offset:2px; }

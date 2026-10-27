@@ -1,7 +1,7 @@
 // INK: the served application (the markup lives in index.html).
 // Reads the diary from /api/entries, saves a typed note through /api/note, and unlocks with
-// the passphrase at /api/session. The design is the demo's: same tokens, cards, chips and
-// sheets, all of them from demo/diary.css, so the two pages cannot drift apart.
+// the passphrase at /api/session. The tokens, cards, chips and sheets all come from
+// diary.css beside it, so the markup and the look cannot drift apart.
 const CATS = [
   { id:'class',    label:'Class',    color:'#4f6ef7' },
   { id:'learning', label:'Learning', color:'#14a37f' },
@@ -31,7 +31,7 @@ let TODAY = iso(new Date()); // replaced by the diary's own today once the API a
 
 /* The cleanup writes a small markup: blank-line paragraphs, "- " bullets, "1. " steps,
    **bold**, *italic* and ==highlight==. Escaped first, rebuilt after, so a note can never
-   inject HTML. Copied from the app so the demo renders notes exactly as they are stored. */
+   inject HTML. */
 function inlineHTML(s) {
   return s
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
@@ -572,7 +572,7 @@ function moveMenuHTML(it) {
     `<span class="row"><button class="btn" data-action="move-yes">Yes</button><button class="btn" data-action="move-no">No</button></span></div></div>`;
 }
 
-// The move the demo only pretended to make. The Worker rewrites the row, so the note is in its
+// The move rewrites the row itself. The Worker rewrites it, so the note is in its
 // new category on every device and after every reload; a deadline pick then reloads the diary,
 // which draws the due badge and the rail entry from the same reminder the bot would have made.
 async function moveNote() {
