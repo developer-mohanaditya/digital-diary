@@ -34,12 +34,13 @@ redesign goes through `init`/`shape` first.
 
 ## This project's design truth
 
-The served app (`public/index.html`) is the v2 design: the same shell, day page, month and
-dashboard, sheets and Look page as `public/demo/v2/`, which the Worker still serves at
-`/demo/v2/` with sample data. `src/`, the Telegram handler and the migrations are backend
-and are out of scope for design work.
+The served app is everything the Worker serves: `public/index.html`, `public/app.js` and
+`public/diary.css` — the shell, the day page, the month and dashboard, the sheets and the Look
+page. The sample-data demo that used to answer at `/demo/` is gone, so there is exactly one
+copy of the interface and nothing to keep in step with it. `src/`, the Telegram handler and
+the migrations are backend and are out of scope for design work.
 
 Before changing how anything looks, run it (`npm run dev`) and look at the rendered result
 at the sizes it ships at, narrow phone width included. The tokens live in
-`public/demo/diary.css`, the one stylesheet both pages link: ink, paper, accent, the offset
+`public/diary.css`, the one stylesheet the app links: ink, paper, accent, the offset
 shadow, the heavy 2px edge. Purple is the accent; nothing else may compete with it.
