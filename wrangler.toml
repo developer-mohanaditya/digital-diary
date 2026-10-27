@@ -12,13 +12,17 @@ binding = "ASSETS"
 [ai]
 binding = "AI"
 
-# Daily "life function": writes a heartbeat so the Supabase project stays active.
-# Plus morning + evening sweeps for deadline/review pings.
-# The two evening entries are the 10pm summary: 22:00 in DIARY_TZ is 20:00 UTC under
-# CEST and 21:00 UTC under CET, and the Worker sends on whichever one lands at 22:00
-# local, so the message keeps its hour when the clocks change.
+# The daily "life function": deadline and review pings on every run, the three keep-alive
+# heartbeats (08:45, 12:30 and 17:00 in DIARY_TZ), and the 10pm summary.
+#
+# Each entry carries both the UTC hour it falls on under CEST and the one under CET; the
+# Worker acts on whichever run lands on the local clock, so the beats and the summary keep
+# their hour when the clocks change. The summary's hour plus the settings marker is what
+# stops the pair sending twice.
+#
+# Four entries, because the Free plan allows five Cron Triggers per account in total.
 [triggers]
-crons = ["0 6 * * *", "30 12 * * *", "0 20 * * *", "0 21 * * *"]
+crons = ["45 6,7 * * *", "30 10,11 * * *", "0 15,16 * * *", "0 20,21 * * *"]
 
 # Timezone for day grouping (IANA name). Change when you move; see the timezone setting plan.
 # Non-secret vars only. Secrets (TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET,
