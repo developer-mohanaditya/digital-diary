@@ -1193,7 +1193,7 @@ async function exportNotes(ctx: Ctx, url: URL): Promise<Response> {
   // Markdown: one heading a day, one bullet a note — the shape a person reads. The refusal
   // above is what lets this read the text straight; a counts-only key never gets here.
   const written = notes as (ApiNote & { text: string })[];
-  const lines: string[] = [`# Diary · ${label}`, ''];
+  const lines: string[] = [`# INK · ${label}`, ''];
   let current = '';
   for (const n of written) {
     if (n.day !== current) {
@@ -1224,7 +1224,7 @@ export function describe(tz: string) {
   return {
     ok: true,
     api: {
-      name: 'Digital Diary',
+      name: 'INK',
       version: API_VERSION,
       timeZone: tz,
       baseUrl: '/api/v1',

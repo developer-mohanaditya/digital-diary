@@ -1,4 +1,4 @@
-# Digital Diary: interface demo
+# INK: interface demo
 
 A clickable preview of the diary split into **Home (today)** and a **Dashboard**, built in the same
 design system as the served app: the same tokens, themes, cards, chips, ledgers and sheet as
