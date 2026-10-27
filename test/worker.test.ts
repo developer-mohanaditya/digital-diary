@@ -428,11 +428,40 @@ describe('/api/entries', () => {
     expect(res.status).toBe(401);
   });
 
-  it('still accepts Cloudflare Access if it is enabled later', async () => {
+  it('does not open the diary for a forged Cloudflare Access header', async () => {
     supabaseStub();
     const res = await worker.fetch(request('/api/entries', {
       headers: { 'Cf-Access-Jwt-Assertion': 'token' },
     }), env());
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
+  });
+
+  it('will not mint a key for that header either', async () => {
+    supabaseStub();
+    const res = await worker.fetch(request('/api/keys', {
+      method: 'POST',
+      headers: { 'Cf-Access-Jwt-Assertion': 'token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'stolen', scopes: ['notes:read'] }),
+    }), env());
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('scheduled', () => {
+  it('beats at a keep-alive slot and stays quiet between them', async () => {
+    const calls = supabaseStub();
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-07-15T10:30:00Z')); // 12:30 in Paris
+      await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
+      expect(calls.filter((u) => u.endsWith('/heartbeats'))).toHaveLength(1);
+
+      calls.length = 0;
+      vi.setSystemTime(new Date('2026-07-15T11:30:00Z')); // 13:30: no slot
+      await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
+      expect(calls.filter((u) => u.endsWith('/heartbeats'))).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

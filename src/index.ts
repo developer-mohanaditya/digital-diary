@@ -11,6 +11,7 @@ import {
 } from './session';
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
+import { heartbeatDue } from './heartbeat';
 import { createApiKey, isRowId, listApiKeys, normalisePolicy, publicApi, revokeApiKey } from './publicapi';
 import { expiryFrom, keyNameProblem, normaliseScopes } from './apikey';
 
@@ -39,6 +40,12 @@ function supabaseStore(env: Env): Store {
     if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
     return res;
   };
+  // One row in heartbeats, from either writer: the /heartbeat command, and the three
+  // keep-alive beats a day the cron makes.
+  const postHeartbeat = (note: string) => fetch(`${base}/heartbeats`, {
+    method: 'POST', headers: { ...headers, Prefer: 'return=minimal' },
+    body: JSON.stringify([{ note }]),
+  });
   return {
     async insertCapture(c) {
       const write = (body: Record<string, unknown>) => fetch(`${base}/captures?on_conflict=source,source_update_id`, {
@@ -178,14 +185,14 @@ function supabaseStore(env: Env): Store {
       const lastRows = (await lastRes.json()) as { received_at: string }[];
       // The heartbeat is the write half of the check: a readable database can still
       // reject inserts, and this table exists for exactly that signal.
-      await check(await fetch(`${base}/heartbeats`, {
-        method: 'POST', headers: { ...headers, Prefer: 'return=minimal' },
-        body: JSON.stringify([{ note: 'test' }]),
-      }));
+      await check(await postHeartbeat('test'));
       return {
         captures, thoughts, todayThoughts, pendingReminders,
         lastCaptureAt: lastRows[0]?.received_at ?? null, heartbeatOk: true,
       };
+    },
+    async beat(note) {
+      await check(await postHeartbeat(note));
     },
     async dayNotes(day) {
       const res = await check(await fetch(
@@ -328,9 +335,10 @@ async function signedIn(request: Request, env: Env): Promise<boolean> {
     return false;
   }
   if (!gateOn(env, stored)) return true;
-  // If Cloudflare Access is ever enabled, it authenticates visitors before the Worker
-  // and stamps this header. The cookie covers the case where Access is not set up.
-  if (request.headers.get('Cf-Access-Jwt-Assertion')) return true;
+  // The signed cookie is the only thing that opens the diary. A header that merely has to be
+  // present is not a credential: anyone on the internet can send Cf-Access-Jwt-Assertion, and
+  // while it was trusted here a one-line curl read the whole diary and minted itself a key.
+  // Cloudflare Access, if it is ever switched on, is an extra gate in front of this one.
   const secret = sessionSecret(env, stored);
   if (!secret) return false;
   return cookieOk(request, secret);
@@ -510,9 +518,8 @@ async function reclean(request: Request, env: Env): Promise<Response> {
   }
 }
 
-// Read API for the web interface. Without a signed-in session (or Cloudflare Access,
-// if it is ever enabled) the API would hand the whole diary to anyone who learns the
-// workers.dev URL, so it answers 401 and the page asks for the passphrase.
+// Read API for the web interface. Without a signed-in session the API would hand the whole
+// diary to anyone who learns the URL, so it answers 401 and the page asks for the passphrase.
 async function entriesApi(request: Request, env: Env): Promise<Response> {
   if (!(await signedIn(request, env))) {
     return json({ ok: false, need: 'login', error: 'Sign in to read your diary.' }, 401);
@@ -1019,6 +1026,17 @@ async function dailySummary(env: Env): Promise<void> {
   await store.markSummarySent(day);
 }
 
+// The keep-alive beat: three silent heartbeat rows a day, so the free Supabase project never
+// sees a quiet week and pauses. Nothing is said on Telegram — the 22:00 summary is the message,
+// and three "still here" texts a day are noise — but /heartbeat still answers on demand.
+async function heartbeat(env: Env): Promise<void> {
+  const store = supabaseStore(env);
+  if (!store.beat) return;
+  const tz = (await store.getTimeZone()) ?? (env.DIARY_TZ || 'UTC');
+  if (!heartbeatDue(new Date(), tz)) return;
+  await store.beat('cron');
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -1051,6 +1069,7 @@ export default {
   },
   async scheduled(_event: unknown, env: Env): Promise<void> {
     await runDue(env);
+    await heartbeat(env);
     await dailySummary(env);
   },
 };
