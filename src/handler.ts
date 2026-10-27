@@ -90,6 +90,9 @@ export interface Store {
   markReminderDone?(id: string): Promise<void>;
   snoozeReminder?(id: string, nextIso: string): Promise<void>;
   health?(day: string): Promise<HealthStats>;
+  // The cron's keep-alive write: one heartbeat row, and nothing said. Optional, so a store
+  // without it simply never beats instead of failing the schedule.
+  beat?(note: string): Promise<void>;
   // The 10pm summary. Optional, so a store without them has no summary instead of a
   // failing cron.
   dayNotes?(day: string): Promise<SummaryNote[]>;
