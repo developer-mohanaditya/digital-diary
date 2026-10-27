@@ -731,8 +731,8 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
 // When a deadline's reminder should first fire, and the same rule the write API uses: see
 // reminderTimes in ./reminders.
 
-// POST /api/note/move { id, category, due? } -> files the row under another category. The demo's
-// Move button only rewrote its own array and forgot the move on reload; this is the row. A move
+// POST /api/note/move { id, category, due? } -> files the row under another category. The move
+// is the row itself, not a change that is forgotten on the next load. A move
 // to Deadline schedules the same reminder the composer would, and a move away closes the one
 // that was pinging, so the note and the thing that reminds you cannot disagree.
 async function moveApi(request: Request, env: Env): Promise<Response> {

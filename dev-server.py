@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Dev server for the preview panel.
 
-Serves public/demo/ on :3000 like `python -m http.server`, plus an extensionless
-`.html` fallback so `/setup` works here exactly as it does on hosting.
-Standard library only.
+Serves public/ — the same files the Worker serves — on :3000 like `python -m
+http.server`, plus an extensionless `.html` fallback so a path without the suffix
+works here exactly as it does on hosting. Standard library only.
 """
 import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public", "demo")
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 
 class Handler(SimpleHTTPRequestHandler):
