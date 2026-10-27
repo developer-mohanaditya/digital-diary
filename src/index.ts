@@ -655,6 +655,17 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
     const captureRows = (await captureRes.json()) as { id: string }[];
     if (!captureRows.length) return json({ ok: false, error: 'The note was not stored.' }, 502);
     const captureId = captureRows[0].id;
+    // The capture is the row every door writes first. Telegram and the write API advance it from
+    // received to done once the note exists; this door left it at received for ever, which made
+    // any "unprocessed" question a lie. Best effort: the note is what matters, and a status that
+    // cannot be written must not turn a saved note into a failed request.
+    const advanceCapture = (status: 'done' | 'failed', error?: string) => fetch(
+      `${base}/captures?id=eq.${captureId}`,
+      {
+        method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+        body: JSON.stringify(error ? { status, last_error: error } : { status }),
+      },
+    ).catch(() => null);
 
     const row = {
       capture_id: captureId,
@@ -681,10 +692,12 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
     // does, and a note that was captured must still be stored.
     if (thoughtRes.status === 400) thoughtRes = await writeThought(row);
     if (!thoughtRes.ok) {
+      await advanceCapture('failed', 'the note could not be stored');
       return json({ ok: false, error: `Supabase ${thoughtRes.status}: ${await thoughtRes.text()}` }, 502);
     }
     const thoughtRows = (await thoughtRes.json()) as { id: string }[];
     const thoughtId = thoughtRows[0]?.id ?? null;
+    await advanceCapture('done');
 
     // A deadline picked here gets the same reminder the bot would create: first ping three
     // days before the due date, then daily until it is marked done.
