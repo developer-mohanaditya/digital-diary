@@ -11,7 +11,8 @@ import {
 } from './session';
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
-import { heartbeatDue } from './heartbeat';
+import { beatMessage, beatSlot } from './heartbeat';
+import { keepTyping } from './typing';
 import { createApiKey, isRowId, listApiKeys, normalisePolicy, publicApi, revokeApiKey } from './publicapi';
 import { expiryFrom, keyNameProblem, normaliseScopes } from './apikey';
 
@@ -222,6 +223,21 @@ function supabaseStore(env: Env): Store {
         body: JSON.stringify({ key: 'daily_summary', value: day, updated_at: new Date().toISOString() }),
       }));
     },
+    // Which keep-alive slot has already been beaten. Read on every cron run, written only when a
+    // row is made, so the second run in the same slot — the twin entry an hour out — can see that
+    // its beat is already there.
+    async heartbeatMark() {
+      const res = await check(await fetch(`${base}/settings?key=eq.heartbeat&select=value`, { headers }));
+      const rows = (await res.json()) as { value: string }[];
+      return rows[0]?.value ?? null;
+    },
+    async markHeartbeat(slot) {
+      await check(await fetch(`${base}/settings?on_conflict=key`, {
+        method: 'POST',
+        headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ key: 'heartbeat', value: slot, updated_at: new Date().toISOString() }),
+      }));
+    },
   };
 }
 
@@ -254,6 +270,14 @@ function telegramNotifier(env: Env): Notifier {
         chat_id: chatId,
         text,
         reply_markup: { inline_keyboard: [[{ text: 'Done', callback_data: `done:${reminderId}` }]] },
+      });
+    },
+    // The chat action behind "typing…". Best effort by design: the pacer in src/typing.ts
+    // swallows whatever this throws, because a note must never fail over a chat action.
+    async typing(chatId) {
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
       });
     },
   };
@@ -979,12 +1003,19 @@ async function webhook(request: Request, env: Env): Promise<Response> {
       }
       return new Response('ok');
     }
-    await handleUpdate(update, store, notifier, {
-      allowedChatId: Number(env.ALLOWED_CHAT_ID),
-      timeZone: env.DIARY_TZ || 'UTC',
-    }, new Date(), env.AI ? workersAiRefiner(env.AI) : undefined, {
-      repair: (limit: number) => repairUntouched(env, limit),
-    });
+    // Say the message landed, and keep saying it while the note is cleaned and stored: a few
+    // seconds of silence reads the same as a message that never arrived.
+    const typing = chatId === ownerId ? await keepTyping(notifier, chatId) : null;
+    try {
+      await handleUpdate(update, store, notifier, {
+        allowedChatId: Number(env.ALLOWED_CHAT_ID),
+        timeZone: env.DIARY_TZ || 'UTC',
+      }, new Date(), env.AI ? workersAiRefiner(env.AI) : undefined, {
+        repair: (limit: number) => repairUntouched(env, limit),
+      });
+    } finally {
+      typing?.stop();
+    }
     return new Response('ok');
   } catch (err) {
     // Tell the owner instead of failing silently. Answering 200 stops Telegram from
@@ -1039,15 +1070,25 @@ async function dailySummary(env: Env): Promise<void> {
   await store.markSummarySent(day);
 }
 
-// The keep-alive beat: three silent heartbeat rows a day, so the free Supabase project never
-// sees a quiet week and pauses. Nothing is said on Telegram — the 22:00 summary is the message,
-// and three "still here" texts a day are noise — but /heartbeat still answers on demand.
+// The keep-alive beat: three heartbeat rows a day, so the free Supabase project never sees a
+// quiet week and pauses. Every heartbeat is said out loud as it is written, from whichever
+// source wrote it: this one, and /heartbeat when it is asked for by hand.
+//
+// A beat belongs to a slot, and the first run at or after that slot writes it — once, because the
+// slot it satisfied is recorded in settings. Both of the day's paired cron entries resolve to the
+// same slot from the diary's clock, and a run that comes late still beats rather than being
+// skipped, which is what requiring the exact minute used to do whenever a trigger was missing or
+// the clocks had moved.
 async function heartbeat(env: Env): Promise<void> {
   const store = supabaseStore(env);
-  if (!store.beat) return;
+  if (!store.beat || !store.heartbeatMark || !store.markHeartbeat) return;
   const tz = (await store.getTimeZone()) ?? (env.DIARY_TZ || 'UTC');
-  if (!heartbeatDue(new Date(), tz)) return;
+  const slot = beatSlot(new Date(), tz);
+  if (!slot) return;                                        // before the first slot of the day
+  if ((await store.heartbeatMark()) === slot.key) return;   // this slot already has its row
   await store.beat('cron');
+  await telegramNotifier(env).reply(Number(env.ALLOWED_CHAT_ID), beatMessage(slot, tz));
+  await store.markHeartbeat(slot.key);
 }
 
 export default {
@@ -1081,8 +1122,16 @@ export default {
     return env.ASSETS.fetch(request);
   },
   async scheduled(_event: unknown, env: Env): Promise<void> {
-    await runDue(env);
-    await heartbeat(env);
-    await dailySummary(env);
+    // Each step stands on its own: the reminders must not be able to cancel the beat, and the beat
+    // must not be able to cancel the summary. One failing step used to take the rest of the run
+    // down with it, and a beat that never ran was invisible precisely because the summary it
+    // silenced is the thing that would have shown it.
+    for (const [name, step] of [['reminders', runDue], ['heartbeat', heartbeat], ['summary', dailySummary]] as const) {
+      try {
+        await step(env);
+      } catch (err) {
+        console.error(`scheduled ${name} failed`, err);
+      }
+    }
   },
 };
