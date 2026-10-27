@@ -1,4 +1,4 @@
-// Digital Diary: interface demo.
+// INK: interface demo.
 // Same design system as the served app (public/): same tokens, same cards, same chips.
 // The entries are generated samples and live in this browser only; no request leaves the page.
 const CATS = [

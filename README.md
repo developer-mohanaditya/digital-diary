@@ -1,4 +1,4 @@
-# Digital Diary
+# INK
 
 A personal diary that I write to from Telegram, and read on the web.
 
@@ -254,7 +254,7 @@ Where MCP is not set up, [integrations/diary-session.md](integrations/diary-sess
 - Work happens on a short-lived branch per change (`fix/raw-tag`, `feat/reclean`), merged into `main` by pull request.
 - Cloudflare Workers Builds still tries to build every pushed branch, and those preview builds fail because they have no production secrets. Turn that off in the dashboard: **Workers & Pages → ink → Settings → Build → Branch control → Build production branch only**. Failed preview builds are not a problem with the code.
 - The demo in `public/demo/` is published to GitHub Pages from `main` only, by `.github/workflows/pages-demo.yml`.
-- Titles: the live site's tab reads **Digital Diary**; the demo reads **Preview · Digital Diary**, so a screenshot always says which one it is.
+- Titles: the live site's tab reads **INK**; the demo reads **Preview · INK**, so a screenshot always says which one it is.
 
 ## Stack
 
