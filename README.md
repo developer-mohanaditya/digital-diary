@@ -1,4 +1,4 @@
-# INK
+# INK.
 
 A personal diary that I write to from Telegram, and read on the web.
 
