@@ -1,4 +1,4 @@
-// Digital Diary: the served application (the markup lives in index.html).
+// INK: the served application (the markup lives in index.html).
 // Reads the diary from /api/entries, saves a typed note through /api/note, and unlocks with
 // the passphrase at /api/session. The design is the demo's: same tokens, cards, chips and
 // sheets, all of them from demo/diary.css, so the two pages cannot drift apart.
