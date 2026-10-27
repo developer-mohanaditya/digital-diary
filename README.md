@@ -23,7 +23,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 - Puts untagged text in Inbox for now.  - Sends one summary at 22:00 in the diary's timezone: the day's count and its categories, each note on one line with its hour, and whatever is still open. One cron entry (`0 20,21` UTC) covers CET and CEST, the Worker sends only when the local clock has reached 22:00, and a `daily_summary` row in `settings` keeps it to one message a day, so the hour the clocks go back cannot repeat it. A day with nothing written says so rather than skipping the message.
   - Keeps itself awake without being asked: three silent heartbeat rows a day at 08:45, 12:30 and 17:00 in the diary's timezone, so the free Supabase project never goes a quiet week and pauses. They are written by the same cron that pings reminders, and unlike `/heartbeat` they send nothing to Telegram. Each slot has a cron entry for its hour under CET and one under CEST; `src/heartbeat.ts` picks the run that lands on the local clock, so the beats keep their hour when the clocks change. Four cron entries in all, because the Free plan allows five per account.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
-- Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, save a typed note through `POST /api/note`, unlock with the passphrase at `/api/session`, and change that passphrase from Settings → Access through `POST /api/passphrase`. The page wears the demo's design: the app and the demo link the same stylesheet, `public/demo/diary.css`.
+- Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, save a typed note through `POST /api/note`, unlock with the passphrase at `/api/session`, and change that passphrase from Settings → Access through `POST /api/passphrase`. The page's look is one stylesheet, `public/diary.css`, shared by nothing else.
 - Says in the note sheet which door the note came in by — `via Telegram`, `via Web`, or the app that filed it through the write API (`Claude`, `Codex`, `Freebuff`, or any other client name, title-cased). The ledger line is left alone: a mark on every row competes with the notes. It is the capture's own origin, embedded in the single read the page already makes; on a database that predates `captures.client` the read falls back to the plain column set and the sheet simply omits the line rather than the page going blank.
 - Serves an API at `/api/v1` with keys minted in Settings → Access: other projects of mine read the diary (by day, month, year, category, type, every deadline, and the counts) with a **read key**, and an app files notes with a **write key** — a separate key that can add and cannot read. Keys are hashed at rest and revoked one at a time; the API is uncached, has no CORS headers, and answers `503` naming the migration until `0007_api_keys.sql` has been run.
 
@@ -253,8 +253,7 @@ Where MCP is not set up, [integrations/diary-session.md](integrations/diary-sess
 - `main` is the only branch that deploys. A push to `main` builds the Worker and the web app; nothing else reaches the live diary.
 - Work happens on a short-lived branch per change (`fix/raw-tag`, `feat/reclean`), merged into `main` by pull request.
 - Cloudflare Workers Builds still tries to build every pushed branch, and those preview builds fail because they have no production secrets. Turn that off in the dashboard: **Workers & Pages → ink → Settings → Build → Branch control → Build production branch only**. Failed preview builds are not a problem with the code.
-- The demo in `public/demo/` is published to GitHub Pages from `main` only, by `.github/workflows/pages-demo.yml`.
-- Titles: the live site's tab reads **INK**; the demo reads **Preview · INK**, so a screenshot always says which one it is.
+- The tab reads **INK**, and it is the only build: the sample-data demo that used to answer at `/demo/` (and on GitHub Pages) is gone, so every screenshot is the real diary.
 
 ## Stack
 
@@ -269,8 +268,7 @@ Where MCP is not set up, [integrations/diary-session.md](integrations/diary-sess
 src/            Worker code: webhook entry point, update handler, command parser
 test/           Tests for the parser and the handler
 migrations/     Database schema, applied in order in the Supabase SQL editor
-public/         The web app served by the Worker: index.html, app.js, logo/
-public/demo/    Sample-data preview and diary.css, the stylesheet both pages link
+public/         The web app served by the Worker: index.html, app.js, diary.css, logo/
 mcp/            The MCP server an app uses to file notes: server.mjs and its stdio loop
 integrations/   The /diary command file for Claude Code and Codex
 wrangler.toml   Worker configuration (name, routes, cron, timezone)
