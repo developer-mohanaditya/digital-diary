@@ -147,13 +147,6 @@
   .k { display:inline-flex; align-items:center; gap:7px; }
   .k i { width:8px; height:8px; border-radius:50%; }
   .k em { font-style:normal; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .donut { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .donut svg { width:150px; height:150px; flex-shrink:0; }
-  .donut .comp { flex:1; min-width:200px; }
-  .donut .comp .bar { display:none; }
-  .donut .keys { flex-direction:column; gap:8px; margin-top:0; }
-  .dtot { font-family:var(--head); font-size:22px; font-weight:800; fill:var(--ink); }
-
   .folders { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
   @media (max-width:950px) { .folders { grid-template-columns:repeat(4,1fr); } }
   @media (max-width:680px) { .folders { grid-template-columns:repeat(3,1fr); } }
@@ -211,7 +204,6 @@
   .tab:hover { border-color:var(--accent); }
   .tab[aria-selected="true"] { background:var(--accent); border-color:var(--accent); color:#fff; }
   .tab small { opacity:.75; margin-left:5px; }
-  .tab.zero { opacity:.45; }
   .utabs { display:flex; flex-wrap:wrap; gap:4px 16px; border-bottom:1.5px solid var(--line); padding-bottom:2px; margin:0 0 0 auto; }
   .utabs button { background:none; border:0; border-bottom:2.5px solid transparent; margin-bottom:-1.75px; padding:6px 2px; cursor:pointer; font-size:.86rem; color:var(--muted); font-weight:600; }
   .utabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--accent); }
@@ -228,15 +220,7 @@
   .segbar button[aria-selected="true"] { background:var(--ink); color:var(--card); font-weight:700; }
   .dday select { appearance:none; -webkit-appearance:none; background:var(--bg); color:var(--ink); border:1.5px solid var(--line); border-radius:999px; padding:5px 14px; font-size:.84rem; cursor:pointer; max-width:100%; }
 
-  .entry { background:var(--card); border:2px solid var(--edge); box-shadow:4px 4px 0 var(--shadow); border-left:10px solid var(--c); border-radius:18px; padding:14px 16px; margin-bottom:12px; }
-  .meta { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:.8rem; color:var(--muted); }
-  .time { font-variant-numeric:tabular-nums; font-weight:700; color:var(--ink); }
-  .chip { background:var(--c); color:#fff; border-radius:6px; padding:1px 8px; font-weight:700; font-size:.76rem; }
   .mode { border:1.5px solid var(--line); border-radius:999px; padding:0 8px; font-size:.74rem; }
-  .rawtag { margin-left:auto; background:transparent; border:1.5px dashed var(--line); color:var(--muted); border-radius:999px; padding:0 10px; font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }
-  .rawtag:hover { border-color:var(--accent); color:var(--accent); }
-  .rawtag[aria-pressed="true"] { border-style:solid; border-color:var(--accent); color:var(--accent); }
-  .entry p { margin:8px 0 0; font-size:1rem; white-space:pre-wrap; }
   /* The formatted note: paragraphs and lists from the cleanup, never raw HTML. */
   .rtext { margin-top:8px; font-size:1rem; line-height:1.55; }
   .rtext p { margin:0 0 .6em; }
@@ -275,14 +259,6 @@
   .dbtn.sel { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:800; }
   .dfoot { display:flex; justify-content:space-between; margin-top:8px; }
 
-  .strip { display:grid; grid-template-columns:repeat(24,1fr); gap:3px; align-items:end; height:64px; }
-  .strip div { background:var(--line); border-radius:4px 4px 0 0; min-height:3px; }
-  .strip div.has { background:var(--accent); }
-  .ticks { display:grid; grid-template-columns:repeat(24,1fr); gap:3px; font-size:.65rem; color:var(--muted); text-align:center; margin-top:4px; }
-  .outlier-list { margin:12px 0 0; padding:0; list-style:none; font-size:.88rem; }
-  .outlier-list li { padding:8px 0; border-top:1px solid var(--line); }
-  .outlier-list .tag { color:var(--alert); font-weight:700; }
-
   /* Small screens: keep wide grids readable instead of squashing them. */
   @media (max-width:600px) {
     /* The bar sits under the notch on a full-bleed phone, so the inset is added, not assumed. */
@@ -297,7 +273,6 @@
     .cal { gap:4px; }
     .cell { padding:4px 5px; border-radius:10px; aspect-ratio:auto; min-height:52px; }
     .cell small { font-size:.62rem; }
-    .donut { flex-direction:column; align-items:flex-start; }
     /* `.hero h1` outranks a bare `.daytitle`, so the size has to be stated with more weight
        than the hero rule or the phone keeps the 28px display size and the date collides. */
     .hero .daytitle { flex-direction:column; align-items:center; gap:0; line-height:1.22; font-size:1.3rem; }
@@ -308,8 +283,6 @@
     .daynav .bl-short { display:inline; }
     .daynav { gap:6px; }
     .daynav .btn { padding:5px 8px; font-size:.78rem; min-width:104px; min-height:40px; }
-    .donut svg { width:120px; height:120px; }
-    .strip, .ticks { gap:2px; }
     .add .row { flex-direction:column; align-items:stretch; }
     .actions { flex-direction:column; align-items:flex-start; }
     .top-inner { gap:8px; padding:0 12px; }
@@ -345,7 +318,7 @@
     .dangerbtn { min-height:40px; }
     .microbtn { padding:6px 10px; }
     /* Reading is the phone's main job: 15px body is a desk size. */
-    .entry p, .ltxt, .rtext, .sfull { font-size:1.0625rem; }
+    .ltxt, .rtext, .sfull { font-size:1.0625rem; }
   }
   @media (max-width:480px) {
     .brand-name { display:none; }
@@ -373,20 +346,9 @@
   .ltime.wide { flex-basis:82px; }
   .ltxt { flex:1; min-width:0; }
   .ltxt.clamp { overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-  .ltag { font-size:.66rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; border:1.5px dashed var(--line); color:var(--muted); border-radius:999px; padding:0 8px; cursor:pointer; background:none; margin-left:8px; }
-  .ltag:hover { border-color:var(--accent); color:var(--accent); }
-  .ltag.solid { border-style:solid; }
-  .lmore { font-size:.76rem; font-weight:700; color:var(--accent); background:none; border:0; cursor:pointer; padding:0; margin-left:8px; }
-  .lmove { flex:0 0 auto; font-size:.74rem; font-weight:700; color:var(--muted); background:none; border:0; cursor:pointer; padding:2px 4px; opacity:0; }
-  .lrow:hover .lmove, .lrow:focus-within .lmove { opacity:1; }
-  @media (hover:none) { .lmove { opacity:.55; } }
-  .lmove:hover { color:var(--accent); }
   /* A deadline in the rail: three lines of it, then an ellipsis. The note itself is one
      click away, and a five-line paragraph of bold text is not a due date. */
   .clampb { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; font-weight:700; }
-  .lmove-open { flex:0 0 auto; font-size:.78rem; color:var(--muted); display:flex; gap:6px; align-items:center; }
-  .lraw { margin:0 0 4px 54px; padding:8px 10px; border-radius:10px; background:var(--bg); border:1.5px dashed var(--line); }
-  .lraw p { margin:4px 0 0; font-size:.88rem; }
 
   .lrow.clickable { cursor:pointer; }
   .lrow.clickable:hover { background:color-mix(in srgb, var(--accent) 7%, transparent); }
@@ -437,11 +399,8 @@
   .tick svg { width:11px; height:11px; }
   .tick:hover { border-color:var(--accent); background:var(--accent); color:#fff; }
   .stitle { font-size:1.12rem; line-height:1.35; margin:0 0 6px; letter-spacing:-.01em; }
-  .sfigure { margin:0 0 14px; border-radius:14px; overflow:hidden; border:1.5px solid var(--line); background:#101223; }
-  .sfigure img { display:block; width:100%; height:auto; max-height:46vh; object-fit:contain; }
   .sraw { margin:8px 0 14px; padding:10px 12px; border-radius:12px; background:var(--bg); border:1.5px solid var(--line); }
   .sraw p { margin:4px 0 0; font-size:.94rem; }
-  .smove { display:flex; gap:8px; align-items:center; font-size:.88rem; color:var(--muted); margin-top:12px; }
 
   .gdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; }
   .hbtn { position:relative; background:none; border:1.5px solid var(--line); color:var(--muted); border-radius:10px; width:32px; height:32px; cursor:pointer;
@@ -755,8 +714,6 @@
     .hbtn svg { width:18px; height:18px; }
     .tick { width:28px; height:28px; }
     .tick::after { inset:-8px; }
-    .ltag { padding:3px 9px; }
-    .lmove { padding:8px 6px; }
     .mmenu { top:70px; }
     /* The Look page's controls are the ones a thumb hits: swatches, colour pickers and the
        six shapes, all at the 44px floor. The category grid goes to one column so the label

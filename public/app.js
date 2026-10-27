@@ -413,19 +413,6 @@ function monthWeeks(y, m) {
   }
   return `<table class="weeks"><thead><tr>${labels.map(l => `<th>${l}</th>`).join('')}<th class="tot">Total</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
-function donut(counts) {
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  if (!total) return '<p class="muted">No items yet.</p>';
-  const C = 2 * Math.PI * 40; let cum = 0, arcs = '';
-  CATS.forEach(c => {
-    const n = counts[c.id] || 0; if (!n) return;
-    const f = n / total;
-    arcs += `<circle r="40" cx="60" cy="60" fill="none" stroke="${c.color}" stroke-width="16" stroke-dasharray="${f * C} ${C}" stroke-dashoffset="${-cum * C}" transform="rotate(-90 60 60)"><title>${c.label}: ${n}</title></circle>`;
-    cum += f;
-  });
-  return `<div class="donut"><svg viewBox="0 0 120 120">${arcs}<text class="dtot" x="60" y="66" text-anchor="middle">${total}</text></svg>${compHTML(counts)}</div>`;
-}
-
 /* ---------- Deadlines ---------- */
 function dueDays(due) { return Math.round((parse(due) - parse(TODAY)) / 864e5); }
 function duePill(it) {
