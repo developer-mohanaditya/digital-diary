@@ -90,9 +90,13 @@ export interface Store {
   markReminderDone?(id: string): Promise<void>;
   snoozeReminder?(id: string, nextIso: string): Promise<void>;
   health?(day: string): Promise<HealthStats>;
-  // The cron's keep-alive write: one heartbeat row, and nothing said. Optional, so a store
-  // without it simply never beats instead of failing the schedule.
+  // The cron's keep-alive write: one heartbeat row, confirmed on Telegram as it is made.
+  // Optional, so a store without it simply never beats instead of failing the schedule.
   beat?(note: string): Promise<void>;
+  // The beat's marker: the slot that has already been beaten, e.g. "2026-10-27T12:30". Optional
+  // like the rest — and a store without it never beats, rather than beating twice.
+  heartbeatMark?(): Promise<string | null>;
+  markHeartbeat?(slot: string): Promise<void>;
   // The 10pm summary. Optional, so a store without them has no summary instead of a
   // failing cron.
   dayNotes?(day: string): Promise<SummaryNote[]>;
@@ -108,6 +112,9 @@ export interface Store {
 export interface Notifier {
   reply(chatId: number, text: string): Promise<void>;
   remind?(chatId: number, reminderId: string, text: string): Promise<void>;
+  // "typing…", shown while a note is being cleaned and stored. Optional, so a notifier without
+  // it is simply never told that work is in progress.
+  typing?(chatId: number): Promise<void>;
 }
 
 // The one-time repair: re-run the cleanup over notes an earlier, broken model left with

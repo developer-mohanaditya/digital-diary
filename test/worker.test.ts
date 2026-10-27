@@ -17,9 +17,25 @@ const env = (extra: Record<string, unknown> = {}) => ({
 
 const supabaseStub = () => {
   const calls: string[] = [];
-  const stub = vi.fn(async (input: RequestInfo | URL) => {
+  // The settings table, remembered between calls: the beat's marker is read back after it is
+  // written, and a stub that always answers "nothing saved" would prove nothing about it.
+  const settings = new Map<string, string>();
+  const stub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push(url);
+    if (init?.method === 'POST' && url.includes('/settings')) {
+      const body = JSON.parse(String(init.body ?? '[]')) as { key?: string; value?: string }[] | { key?: string; value?: string };
+      const row = Array.isArray(body) ? body[0] : body;
+      if (row?.key) settings.set(row.key, row.value ?? '');
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    }
+    const setting = /\/settings\?key=eq\.([a-z_]+)/.exec(url);
+    if (setting) {
+      const saved = settings.get(setting[1]);
+      return new Response(JSON.stringify(saved === undefined ? [] : [{ value: saved }]), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     if (url.includes('/thoughts?') && url.includes('captures(source,client)')) {
       return new Response(JSON.stringify([{
         id: 'th-1', day: '2026-10-23', category: 'inbox', category_source: 'auto', mode: 'refine',
@@ -110,12 +126,25 @@ describe('/telegram/webhook cleanup', () => {
     vi.stubGlobal('fetch', stub);
     return bodies;
   };
+  // The reply specifically: a "typing…" chat action goes to the same host, and it goes first.
   const telegram = (bodies: { url: string; body: { [k: string]: unknown } | null }[]) =>
-    bodies.find((b) => b.url.includes('api.telegram.org'))?.body as { text: string } | undefined;
+    bodies.find((b) => b.url.endsWith('/sendMessage'))?.body as { text: string } | undefined;
   const update = (text: string) => request('/telegram/webhook', {
     method: 'POST',
     headers: { 'X-Telegram-Bot-Api-Secret-Token': 'hook', 'Content-Type': 'application/json' },
     body: JSON.stringify({ update_id: 77, message: { message_id: 1, date: 1791895200, text, chat: { id: 1 } } }),
+  });
+
+  it('shows the phone that the message arrived, and types while the note is being stored', async () => {
+    const bodies = wire();
+    const ai = { run: vi.fn(async () => ({ response: 'Had coffee with Ram.' })) };
+    await worker.fetch(update('um so I had a coffee with ram'), env({ AI: ai }));
+
+    const action = bodies.find((b) => b.url.endsWith('/sendChatAction'))?.body;
+    expect(action).toEqual({ chat_id: 1, action: 'typing' });
+    // Before the reply, not after it: a chat action sent afterwards says nothing about the wait.
+    const order = bodies.map((b) => b.url.split('/').pop());
+    expect(order.indexOf('sendChatAction')).toBeLessThan(order.indexOf('sendMessage'));
   });
 
   it('writes the cleaned text and the original through the real route', async () => {
@@ -448,18 +477,67 @@ describe('/api/entries', () => {
 });
 
 describe('scheduled', () => {
-  it('beats at a keep-alive slot and stays quiet between them', async () => {
+  it('beats once for a keep-alive slot, says so on Telegram, and stays quiet for the rest of it', async () => {
     const calls = supabaseStub();
+    const beats = () => calls.filter((u) => u.endsWith('/heartbeats'));
+    const said = () => calls.filter((u) => u.includes('api.telegram.org'));
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-07-15T10:30:00Z')); // 12:30 in Paris
       await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
-      expect(calls.filter((u) => u.endsWith('/heartbeats'))).toHaveLength(1);
+      expect(beats()).toHaveLength(1);
+      expect(said()).toHaveLength(1);
+
+      // The twin entry an hour out, and any other run before the next slot: spent.
+      calls.length = 0;
+      vi.setSystemTime(new Date('2026-07-15T11:30:00Z')); // 13:30
+      await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
+      expect(beats()).toHaveLength(0);
+      expect(said()).toHaveLength(0);
+
+      // The evening slot, and then the noon slot of the next day.
+      vi.setSystemTime(new Date('2026-07-15T15:00:00Z')); // 17:00
+      await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
+      expect(beats()).toHaveLength(1);
 
       calls.length = 0;
-      vi.setSystemTime(new Date('2026-07-15T11:30:00Z')); // 13:30: no slot
+      vi.setSystemTime(new Date('2026-07-16T10:30:00Z')); // 12:30 the next day
       await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
-      expect(calls.filter((u) => u.endsWith('/heartbeats'))).toHaveLength(0);
+      expect(beats()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('catches a slot up when the run that should have taken it never came', async () => {
+    const calls = supabaseStub();
+    vi.useFakeTimers();
+    try {
+      // 13:30 in Paris, with nothing beaten for 12:30: the beat used to be skipped here, for ever.
+      vi.setSystemTime(new Date('2026-07-15T11:30:00Z'));
+      await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
+      expect(calls.filter((u) => u.endsWith('/heartbeats'))).toHaveLength(1);
+      expect(calls.filter((u) => u.includes('api.telegram.org'))).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets a failing step of the schedule not take the others down with it', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes('/reminders?')) throw new Error('the database is not answering');
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    }));
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-07-15T10:30:00Z')); // 12:30 in Paris
+      await worker.scheduled({}, env({ DIARY_TZ: 'Europe/Paris' }));
+      // The reminder read threw; the beat was still made and still said so.
+      expect(calls.filter((u) => u.endsWith('/heartbeats'))).toHaveLength(1);
+      expect(calls.filter((u) => u.includes('api.telegram.org'))).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
