@@ -17,6 +17,7 @@
 // text if the markup is ever refused, so a formatting bug costs the bold, never the message.
 
 import type { HealthStats } from './handler';
+import type { BackupCounts } from './backup';
 
 /* ---------- Text that is safe to send ---------- */
 
@@ -222,6 +223,16 @@ export function recleanedMessage(r: { scanned: number; cleaned: number; failed: 
   const lines = [heading('✓', `Re-cleaned ${r.cleaned} of ${r.scanned} note${r.scanned === 1 ? '' : 's'}`)];
   if (r.failed.length) lines.push('', `Failed: ${escapeHtml(r.failed.slice(0, 3).join('; '))}`);
   return lines.join('\n');
+}
+
+// The weekly copy on its way to Telegram. A document with no words around it would be a mystery
+// three months later, so it arrives with the same first line as everything else.
+export function backupCaption(at: string, counts: BackupCounts, timeZone: string): string {
+  return [
+    `🧷 <b>Backup</b> · ${monthDay(at, timeZone)}`,
+    `${counts.thoughts} note${counts.thoughts === 1 ? '' : 's'} · ${counts.archived_notes} archived`,
+    'The copy that leaves the database.',
+  ].join('\n');
 }
 
 /* ---------- The clock ---------- */

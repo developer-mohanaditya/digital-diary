@@ -12,7 +12,8 @@ import {
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
 import { beatMessage, beatSlot } from './heartbeat';
-import { failedMessage, reminderMessage, stripHtml } from './receipts';
+import { backupCaption, failedMessage, reminderMessage, stripHtml } from './receipts';
+import { backupFileName, exportDue, staleSnapshot, weekKey, type Backup } from './backup';
 import { keepTyping } from './typing';
 import { createApiKey, isRowId, listApiKeys, normalisePolicy, publicApi, revokeApiKey } from './publicapi';
 import { expiryFrom, keyNameProblem, normaliseScopes } from './apikey';
@@ -239,6 +240,39 @@ function supabaseStore(env: Env): Store {
         body: JSON.stringify({ key: 'heartbeat', value: slot, updated_at: new Date().toISOString() }),
       }));
     },
+    // The snapshots 0013 takes. A database without that migration answers 404 for the table,
+    // which is a fact for Settings to show ("not set up yet"), not an error to throw.
+    async latestBackup() {
+      const res = await fetch(
+        `${base}/diary_backups?select=id,taken_at,reason,counts,payload&order=taken_at.desc,id.desc&limit=1`,
+        { headers },
+      );
+      if (res.status === 404) return { available: false, backup: null };
+      await check(res);
+      const rows = (await res.json()) as Backup[];
+      return { available: true, backup: rows[0] ?? null };
+    },
+    async takeBackup(reason) {
+      await check(await fetch(`${base}/rpc/diary_backup`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_reason: reason }),
+      }));
+    },
+    // Which week's copy already left. Same marker rule as the summary: written only after the
+    // document is sent, so a failure is retried by the next run rather than lost.
+    async backupExportedOn() {
+      const res = await check(await fetch(`${base}/settings?key=eq.backup_export&select=value`, { headers }));
+      const rows = (await res.json()) as { value: string }[];
+      return rows[0]?.value ?? null;
+    },
+    async markBackupExported(week) {
+      await check(await fetch(`${base}/settings?on_conflict=key`, {
+        method: 'POST',
+        headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ key: 'backup_export', value: week, updated_at: new Date().toISOString() }),
+      }));
+    },
   };
 }
 
@@ -265,6 +299,30 @@ async function sendTelegram(env: Env, payload: Record<string, unknown>): Promise
     return true;
   } catch (err) {
     console.error('telegram send failed', err);
+    return false;
+  }
+}
+
+// The weekly snapshot leaving the database. Telegram is the carrier because it is the one place
+// the owner already reads and the one place a copy can live outside the project it protects; the
+// boolean is what keeps the marker unwritten when the upload fails, so the next run tries again.
+async function sendDocument(env: Env, chatId: number, name: string, body: string, caption: string): Promise<boolean> {
+  try {
+    const form = new FormData();
+    form.set('chat_id', String(chatId));
+    form.set('caption', caption);
+    form.set('parse_mode', 'HTML');
+    form.set('document', new Blob([body], { type: 'application/json' }), name);
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, {
+      method: 'POST', body: form,
+    });
+    if (!res.ok) {
+      console.error('telegram document failed', res.status, (await res.text()).slice(0, 200));
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('telegram document failed', err);
     return false;
   }
 }
@@ -992,6 +1050,32 @@ async function keysApi(request: Request, env: Env): Promise<Response> {
   }
 }
 
+// The Settings card's two questions: when the diary was last copied, and take one now. This is a
+// session route like the others and never a key route — a snapshot is the whole diary in one
+// document, which is the last thing a leaked read key should be able to reach.
+async function backupApi(request: Request, env: Env): Promise<Response> {
+  if (!(await signedIn(request, env))) {
+    return json({ ok: false, need: 'login', error: 'Sign in to see the backups.' }, 401);
+  }
+  const store = supabaseStore(env);
+  if (!store.latestBackup) return json({ ok: false, error: 'This build cannot take backups.' }, 503);
+  try {
+    if (request.method === 'POST') {
+      if (!store.takeBackup) return json({ ok: false, error: 'This build cannot take backups.' }, 503);
+      await store.takeBackup('manual');
+    }
+    const { available, backup } = await store.latestBackup();
+    return json({
+      ok: true,
+      available,
+      backup: backup ? { id: backup.id, at: backup.taken_at, reason: backup.reason, counts: backup.counts } : null,
+    });
+  } catch (err) {
+    console.error('backup api failed', err);
+    return json({ ok: false, error: 'The database did not answer. Nothing was taken.' }, 502);
+  }
+}
+
 async function webhook(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('unauthorized', { status: 401 });
@@ -1124,6 +1208,38 @@ async function heartbeat(env: Env): Promise<void> {
   await store.markHeartbeat(slot.key);
 }
 
+// The copy that leaves. Once a week, on the Monday run: the snapshot pg_cron made at 03:00 is
+// already in the table by the first tick of the day, so the usual case is a read and an upload.
+// If that snapshot is missing or old the Worker takes a fresh one first — a stale document sent
+// as if it were this week's would be worse than no message at all.
+async function exportBackup(env: Env): Promise<void> {
+  const store = supabaseStore(env);
+  if (!store.latestBackup || !store.backupExportedOn || !store.markBackupExported) return;
+  const tz = (await store.getTimeZone()) ?? (env.DIARY_TZ || 'UTC');
+  const now = new Date();
+  if (!exportDue(now, tz, await store.backupExportedOn())) return;
+
+  let latest = await store.latestBackup();
+  if (!latest.available) return;                       // 0013 has not been run: nothing to send
+  if (!latest.backup || staleSnapshot(latest.backup.taken_at, now)) {
+    if (!store.takeBackup) return;
+    await store.takeBackup('weekly export');
+    latest = await store.latestBackup();
+  }
+  const snapshot = latest.backup;
+  if (!snapshot?.payload) return;
+
+  const day = localDay(now, tz);
+  const sent = await sendDocument(
+    env, Number(env.ALLOWED_CHAT_ID),
+    backupFileName(day),
+    typeof snapshot.payload === 'string' ? snapshot.payload : JSON.stringify(snapshot.payload),
+    backupCaption(snapshot.taken_at, snapshot.counts, tz),
+  );
+  if (!sent) return;                                   // a later run this week tries again
+  await store.markBackupExported(weekKey(day));
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -1151,6 +1267,7 @@ export default {
         timeZone: env.DIARY_TZ || 'UTC',
       });
     }
+    if (url.pathname === '/api/backup') return backupApi(request, env);
     if (url.pathname === '/api/keys' || url.pathname.startsWith('/api/keys/')) return keysApi(request, env);
     return env.ASSETS.fetch(request);
   },
@@ -1159,7 +1276,7 @@ export default {
     // must not be able to cancel the summary. One failing step used to take the rest of the run
     // down with it, and a beat that never ran was invisible precisely because the summary it
     // silenced is the thing that would have shown it.
-    for (const [name, step] of [['reminders', runDue], ['heartbeat', heartbeat], ['summary', dailySummary]] as const) {
+    for (const [name, step] of [['reminders', runDue], ['heartbeat', heartbeat], ['summary', dailySummary], ['backup', exportBackup]] as const) {
       try {
         await step(env);
       } catch (err) {

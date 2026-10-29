@@ -335,7 +335,7 @@ From then on the page shows a sign-in card: `POST /api/session` with `{"passphra
 
 ## Database setup
 
-Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`, `0011_archive_notes.sql`, `0012_cleanup_ms.sql`. Every one is safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`, `0011_archive_notes.sql`, `0012_cleanup_ms.sql`, `0013_backups.sql`. Every one is safe to run again.
 
 `0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Access says the same; the rest of the diary is unaffected.
 
@@ -350,6 +350,32 @@ behaviour: until it has been run, a note still saves and still shows its tokens 
 simply absent, which the note sheet says by leaving the figure out. The column is what the note
 sheet's footer leads with, so a slow cleanup is visible as a slow note rather than only as a long
 spinner and a quiet `typing…`.
+
+`0013` is the backup: a weekly JSONB snapshot of the notes, their captures, the reminders and the
+archive, kept twelve deep in `diary_backups`. It schedules itself with `pg_cron` — Monday 03:00
+UTC, job name `diary-weekly-backup` — and is the one migration whose optional half is the
+schedule: where `pg_cron` cannot be installed the functions still exist and still work when
+called by hand, and the file says so with a notice instead of failing. Nothing in the app reads
+the table. To take one now, and to put back what has gone missing:
+
+```sql
+select public.diary_backup('before the risky thing');   -- returns the snapshot id
+select id, taken_at, reason, counts from diary_backups order by taken_at desc;
+select public.diary_restore(3);                          -- writes only rows that are absent
+```
+
+`diary_restore` is additive by design: it never deletes and never overwrites, so running it twice
+is harmless and running it after a partial deletion restores only the gap. What it cannot do is
+survive the loss of the project, because the snapshots live in the same database they protect;
+it is there for the failure this diary has actually had — a delete or a migration that took rows
+it should not have. `api_keys` and `settings` are deliberately not copied.
+
+The copy also leaves the database. On the first cron run after a snapshot is taken — Monday, in
+practice — the Worker uploads it to Telegram as `ink-backup-<day>.json`, with a caption saying
+what it holds, so losing the Supabase project does not take the backups with it. The
+`backup_export` settings row holds the ISO week that last left: a failed upload leaves it
+unwritten, and any later run that week tries again. Settings → Backups shows when the last
+snapshot was taken and can take one on demand (`GET`/`POST /api/backup`, behind the session).
 
 `0011` is a one-off housekeeping run, not a behaviour the code depends on. It shelves the notes
 written while building the diary — 22 sent to the bot and one filed through the write API — into

@@ -3,6 +3,7 @@ import { parseTimeZoneCommand } from './timezone';
 import { detectReminder, type DetectedReminder } from './reminders';
 import type { Refiner } from './refine';
 import type { SummaryNote, SummaryReminder } from './summary';
+import type { Backup } from './backup';
 import {
   failedMessage, healthMessage, notSavedCategory, notSavedCommand, notSavedEmpty, notSavedMode,
   notSavedVoice, recleanedMessage, savedMessage, startMessage, timezoneRefusedMessage,
@@ -113,6 +114,12 @@ export interface Store {
   openReminders?(limit: number): Promise<SummaryReminder[]>;
   summarySentOn?(): Promise<string | null>;
   markSummarySent?(day: string): Promise<void>;
+  // The weekly copy out (0013). Optional like the rest: a store without them takes no snapshot,
+  // sends none, and fails nothing — the diary simply has no copy outside the database.
+  latestBackup?(): Promise<{ available: boolean; backup: Backup | null }>;
+  takeBackup?(reason: string): Promise<void>;
+  backupExportedOn?(): Promise<string | null>;
+  markBackupExported?(day: string): Promise<void>;
   findCaptures?(source: 'api', sourceUpdateIds: number[]): Promise<ExistingCapture[]>;
   writtenNotes?(captureIds: string[]): Promise<WrittenNote[]>;
   setCaptureStatus(id: string, status: 'done' | 'failed', error?: string): Promise<void>;
