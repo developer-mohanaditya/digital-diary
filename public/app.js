@@ -114,7 +114,7 @@ async function loadDiary() {
   return {};
 }
 
-const state = { days:{}, heatmap:'weeks', weekStart:'mon', tz:'', signedIn:false, keys:null, keysLoading:false, keysError:'', newKey:null, keyKind:'read' };
+const state = { days:{}, heatmap:'weeks', weekStart:'mon', tz:'', signedIn:false, keys:null, keysLoading:false, keysError:'', newKey:null, keyKind:'read', backup:null, backupLoaded:false, backupBusy:false, backupError:'', backupAvailable:true };
 try {
   const v = JSON.parse(localStorage.getItem(VIEW) || '{}') || {};
   if (v.heatmap === 'weeks' || v.heatmap === 'grid') state.heatmap = v.heatmap;
@@ -1088,6 +1088,13 @@ function viewSettings() {
   </section>
 
   <section class="card">
+    <div class="lhead"><span class="kicker">Backups</span><span class="muted" style="font-size:.76rem">weekly</span></div>
+    <h2>${backupHeading()}</h2>
+    <p class="muted" style="margin:0;font-size:.84rem">A snapshot of every note, its capture, the reminders and the archive, taken inside the database every Monday at 03:00 UTC and kept twelve weeks. On the same Monday one copy is sent to you on Telegram, so the diary survives losing this project too.</p>
+    <div class="crow"><button class="btn" data-action="backup-now"${state.backupBusy ? ' disabled' : ''}>${state.backupBusy ? 'Taking a backup…' : 'Back up now'}</button></div>
+  </section>
+
+  <section class="card">
     <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">/api/v1</span></div>
     <div class="setrow"><div><span class="lab">Which kind of key</span><span class="sub">A read key pulls notes out; a write key files notes in. They are separate keys</span></div>
       <div class="seg"><button data-action="key-kind" data-v="read" aria-pressed="${state.keyKind === 'read'}">Read keys</button><button data-action="key-kind" data-v="write" aria-pressed="${state.keyKind === 'write'}">Write keys</button></div></div>
@@ -1284,6 +1291,64 @@ function ensureKeys() {
     state.keysLoading = false;
     render();
   })();
+}
+
+/* ---------- Backups ---------- */
+// "Last backup" is the whole question this card answers: a date that keeps moving is the diary
+// being protected, and a date that stops is the thing worth noticing. Read once per visit, like
+// the key list, so a re-render never asks the database the same question again.
+function backupHeading() {
+  if (state.backupError) return 'Could not check the backups';
+  if (!state.backupLoaded) return 'Checking the backups…';
+  if (!state.backupAvailable) return 'Not set up on this database yet';
+  if (!state.backup) return 'No backup yet';
+  const when = new Date(state.backup.at);
+  const stamp = new Intl.DateTimeFormat('en-GB', {
+    timeZone: state.tz || undefined, weekday: 'short', day: 'numeric', month: 'short',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(when);
+  const c = state.backup.counts || {};
+  const notes = c.thoughts == null ? '' : `${c.thoughts} note${c.thoughts === 1 ? '' : 's'} · ${c.archived_notes ?? 0} archived`;
+  return `Last backup · ${stamp}${notes ? `<span class="sub" style="display:block;font-weight:400;margin-top:6px">${notes}</span>` : ''}`;
+}
+
+function ensureBackup() {
+  if (state.backupLoaded || state.backupBusy) return;
+  (async () => {
+    try {
+      const res = await fetch('/api/backup');
+      const data = await res.json().catch(() => null);
+      if (res.status === 401) { showSignin('Sign in to see the backups.'); return; }
+      if (!data || !data.ok) state.backupError = (data && data.error) || `The diary answered ${res.status}.`;
+      else { state.backup = data.backup; state.backupAvailable = data.available !== false; state.backupError = ''; state.backupLoaded = true; }
+    } catch (_) {
+      state.backupError = 'Could not reach the diary.';
+    }
+    render();
+  })();
+}
+
+async function takeBackup() {
+  if (state.backupBusy) return;
+  state.backupBusy = true;
+  state.backupError = '';
+  render();
+  try {
+    const res = await fetch('/api/backup', { method: 'POST' });
+    const data = await res.json().catch(() => null);
+    if (res.status === 401) { state.backupBusy = false; showSignin('Sign in to take a backup.'); return; }
+    if (!data || !data.ok) state.backupError = (data && data.error) || `The diary answered ${res.status}.`;
+    else {
+      state.backup = data.backup;
+      state.backupAvailable = data.available !== false;
+      state.backupLoaded = true;
+      toast(data.backup ? 'Backup taken.' : 'The database answered, but no backup was stored.');
+    }
+  } catch (_) {
+    state.backupError = 'Could not reach the diary. Nothing was taken.';
+  }
+  state.backupBusy = false;
+  render();
 }
 
 async function createKey() {
@@ -1512,7 +1577,7 @@ function render() {
   if (signinEl) signinEl.hidden = true;
   if (appEl) appEl.hidden = false;
   // Settings reads the key list the first time it is opened, then remembers it.
-  if (r.view === 'settings') ensureKeys();
+  if (r.view === 'settings') { ensureKeys(); ensureBackup(); }
   syncNav(r);
   renderCrumbs(r);
   const t = parse(TODAY);
@@ -1674,6 +1739,7 @@ document.addEventListener('click', e => {
   else if (a === 'key-done') { state.newKey = null; render(); }
   else if (a === 'key-revoke') revokeKey(v);
   else if (a === 'keys-retry') { state.keys = null; state.keysError = ''; ensureKeys(); }
+  else if (a === 'backup-now') takeBackup();
   else if (a === 'due-toggle') { ui.dueOpen = !ui.dueOpen; renderDuePanel(); }
   else if (a === 'due-prev') { shiftDueCal(-1); renderDuePanel(); }
   else if (a === 'due-next') { shiftDueCal(1); renderDuePanel(); }
