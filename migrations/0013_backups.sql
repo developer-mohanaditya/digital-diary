@@ -34,6 +34,12 @@ comment on table diary_backups is
 alter table diary_backups enable row level security;
 revoke all on diary_backups from anon, authenticated;
 
+-- The table is created by postgres, and Supabase's default privileges do not reliably reach the
+-- service role: without these grants the Worker's key answers 403 "permission denied for table",
+-- and both the Settings card and the weekly upload would read as an empty database.
+grant select on diary_backups to service_role;
+grant usage, select on sequence diary_backups_id_seq to service_role;
+
 -- The content, as one JSONB document. Ordering is by the time the row was made, so a restored
 -- set reads back in the same order a day page draws it.
 create or replace function diary_snapshot() returns jsonb
@@ -151,3 +157,6 @@ end $$;
 revoke execute on function diary_snapshot() from public, anon, authenticated;
 revoke execute on function diary_backup(text, integer) from public, anon, authenticated;
 revoke execute on function diary_restore(bigint) from public, anon, authenticated;
+grant execute on function diary_snapshot() to service_role;
+grant execute on function diary_backup(text, integer) to service_role;
+grant execute on function diary_restore(bigint) to service_role;
