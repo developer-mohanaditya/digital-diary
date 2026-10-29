@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  PREVIEW_CHARS, cleanupLine, handleUpdate, localDay, storedPreview,
-  type Store, type Notifier, type TelegramUpdate,
-} from '../src/handler';
+import { handleUpdate, localDay, type Store, type Notifier, type TelegramUpdate } from '../src/handler';
+import { PREVIEW_CHARS, savedMessage, storedPreview } from '../src/receipts';
 import type { Refiner } from '../src/refine';
 
 const SETTINGS = { allowedChatId: 42, timeZone: 'UTC' };
@@ -30,7 +28,7 @@ describe('handleUpdate', () => {
     expect(await handleUpdate(update('/start'), store, n, SETTINGS, NOW)).toBe('ignored');
     expect(store.insertCapture).not.toHaveBeenCalled();
     expect(store.insertThought).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toContain('Send any note');
+    expect(n.reply.mock.calls[0][1]).toContain('Send any text');
   });
 
   it('/heartbeat replies with database stats and stores nothing', async () => {
@@ -44,10 +42,12 @@ describe('handleUpdate', () => {
     expect(await handleUpdate(update('/heartbeat'), store, n, SETTINGS, NOW)).toBe('ignored');
     expect(store.insertCapture).not.toHaveBeenCalled();
     const text = n.reply.mock.calls[0][1] as string;
-    expect(text).toContain('Database ok.');
-    expect(text).toContain('Entries 4 (2 today)');
-    expect(text).toContain('Reminders pending 1');
-    expect(text).toContain('Heartbeat written.');
+    // The heart and the time on the diary clock, then what the database holds.
+    expect(text.split('\n')).toEqual([
+      '❤️ 10:00',
+      '4 notes · 2 today · 1 reminder open',
+      'Last note 13 Oct, 09:12',
+    ]);
   });
 
   it('/heartbeat reports the real error instead of staying silent', async () => {
@@ -100,7 +100,7 @@ describe('handleUpdate', () => {
     }));
     expect(n.reply).toHaveBeenCalledWith(
       42,
-      'Saved to Thought.\nSaved as written, no cleanup.\nStay hungry, stay foolish',
+      '✓ <b>Saved to Thought</b>\n\n<i>"Stay hungry, stay foolish"</i>\n\nas written',
     );
   });
 
@@ -115,8 +115,8 @@ describe('handleUpdate', () => {
     expect(await handleUpdate(update('/push /think hi'), store, n, SETTINGS, NOW)).toBe('rejected');
     expect(store.insertCapture).not.toHaveBeenCalled();
     expect(store.insertThought).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toContain('Pick one mode');
-    expect(n.reply.mock.calls[0][1]).toContain('Nothing saved');
+    expect(n.reply.mock.calls[0][1]).toContain('pick one mode');
+    expect(n.reply.mock.calls[0][1]).toContain('Not saved');
   });
 
   it('/reclean repairs untouched notes and stores nothing itself', async () => {
@@ -125,7 +125,7 @@ describe('handleUpdate', () => {
     expect(await handleUpdate(update('/reclean 3'), store, n, SETTINGS, NOW, undefined, { repair })).toBe('ignored');
     expect(repair).toHaveBeenCalledWith(3);
     expect(store.insertCapture).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toBe('Re-cleaned 2 of 3 untouched notes.');
+    expect(n.reply.mock.calls[0][1]).toBe('✓ <b>Re-cleaned 2 of 3 notes</b>');
   });
 
   it('/reclean defaults to five notes and caps a big number at 25', async () => {
@@ -155,7 +155,7 @@ describe('handleUpdate', () => {
       const store = fakeStore(); const n = fakeNotifier();
       expect(await handleUpdate(update(text), store, n, SETTINGS, NOW)).toBe('rejected');
       expect(store.insertCapture).not.toHaveBeenCalled();
-      expect(n.reply.mock.calls[0][1]).toContain('Nothing saved');
+      expect(n.reply.mock.calls[0][1]).toContain('Not saved');
     }
   });
 
@@ -163,7 +163,7 @@ describe('handleUpdate', () => {
     const store = fakeStore(); const n = fakeNotifier();
     expect(await handleUpdate(update('   '), store, n, SETTINGS, NOW)).toBe('rejected');
     expect(store.insertCapture).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toContain('Nothing saved');
+    expect(n.reply.mock.calls[0][1]).toContain('Not saved');
   });
 
   it('a duplicate Telegram update is ignored: no thought, no reply', async () => {
@@ -207,13 +207,14 @@ describe('cleanup', () => {
       tokens_in: 31,
       tokens_out: 12,
       cleanup_model: 'test-model',
+      // The cleanup is timed by the handler itself, so the note records how long it waited.
+      cleanup_ms: expect.any(Number),
     }));
-    // Three lines: filed under, what cleanup did, what was stored.
-    expect(n.reply.mock.calls[0][1].split('\n')).toEqual([
-      'Saved to Inbox.',
-      'Formatted, 35 -> 20 characters.',
-      'Had coffee with Ram.',
-    ]);
+    // Verdict, the note as stored, then what the wait cost.
+    const lines = n.reply.mock.calls[0][1].split('\n');
+    expect(lines[0]).toBe('✓ <b>Saved to Inbox</b>');
+    expect(lines[2]).toBe('<i>"Had coffee with Ram."</i>');
+    expect(lines[4]).toMatch(/^\d+ ms · 31 in \/ 12 out · test-model$/);
   });
 
   it('sends the tagged category and the mode it was sent with', async () => {
@@ -241,7 +242,7 @@ describe('cleanup', () => {
       clean_text: 'a quick note', raw_text: 'a quick note',
     }));
     expect(store.setCaptureStatus).toHaveBeenCalledWith('cap-1', 'done', 'AI quota exhausted');
-    expect(n.reply.mock.calls[0][1]).toContain('Cleanup failed');
+    expect(n.reply.mock.calls[0][1]).toContain('cleanup failed');
     // The reason travels with the reply: "failed" alone cannot be diagnosed from a phone.
     expect(n.reply.mock.calls[0][1]).toContain('AI quota exhausted');
   });
@@ -280,20 +281,34 @@ describe('reply format', () => {
     expect(storedPreview('first line\n\nsecond   line')).toBe('first line second line');
   });
 
-  it('reports the cleanup result, and never claims success after a failure', () => {
-    expect(cleanupLine({ raw: 'um so I had a coffee with ram', clean: 'Had coffee with Ram.', mode: 'refine', error: null, ran: true }))
-      .toBe('Formatted, 29 -> 20 characters.');
-    expect(cleanupLine({ raw: 'same', clean: 'same', mode: 'refine', error: null, ran: true }))
-      .toBe('Cleaned up, no change needed.');
-    expect(cleanupLine({ raw: 'exact words', clean: 'exact words', mode: 'verbatim', error: null, ran: false }))
-      .toBe('Saved as written, no cleanup.');
-    expect(cleanupLine({ raw: 'a note', clean: 'a note', mode: 'refine', error: 'Model not found: @cf/old', ran: true }))
-      .toBe('Cleanup failed (Model not found: @cf/old), saved as written.');
+  it('says what a save cost, in the order the receipt shows it', () => {
+    expect(savedMessage({
+      category: 'inbox', note: 'Had coffee with Ram.', state: 'formatted',
+      ms: 2140, tokensIn: 210, tokensOut: 48, model: 'glm-4.7-flash',
+    })).toBe([
+      '✓ <b>Saved to Inbox</b>', '',
+      '<i>"Had coffee with Ram."</i>', '',
+      '2.1 s · 210 in / 48 out · glm-4.7-flash',
+    ].join('\n'));
   });
 
-  it('says cleanup was unavailable rather than pretending nothing needed changing', () => {
-    expect(cleanupLine({ raw: 'a note', clean: 'a note', mode: 'refine', error: null, ran: false }))
-      .toBe('Cleanup unavailable, saved as written.');
+  it('never claims a cleanup after one failed, and keeps the note', () => {
+    const text = savedMessage({
+      category: 'inbox', note: 'a note', state: 'failed', error: 'AI quota exhausted', ms: 3200,
+    });
+    expect(text).toContain('cleanup failed — AI quota exhausted');
+    expect(text).toContain('<i>"a note"</i>');
+  });
+
+  it('says a verbatim note was kept as written rather than timing nothing', () => {
+    const text = savedMessage({ category: 'thought', note: 'exact words', state: 'verbatim' });
+    expect(text).toContain('as written');
+    expect(text).not.toContain(' ms');
+  });
+
+  it('escapes the note, so a "<" in it cannot break the message', () => {
+    expect(savedMessage({ category: 'inbox', note: 'a <b>tag</b>', state: 'verbatim' }))
+      .toContain('a &lt;b&gt;tag&lt;/b&gt;');
   });
 });
 
@@ -316,21 +331,22 @@ describe('timezone handling', () => {
     expect(store.setTimeZone).toHaveBeenCalledWith('Asia/Kolkata');
     expect(store.insertCapture).not.toHaveBeenCalled();
     expect(store.insertThought).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toContain('Timezone set to Asia/Kolkata');
+    expect(n.reply.mock.calls[0][1]).toContain('Timezone set');
+    expect(n.reply.mock.calls[0][1]).toContain('Asia/Kolkata');
   });
 
   it('/timezone alone shows the current zone', async () => {
     const store = tzStore('Europe/Paris'); const n = fakeNotifier();
     await handleUpdate(update('/timezone'), store, n, SETTINGS, NOW);
     expect(store.setTimeZone).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toBe('Your timezone is Europe/Paris.');
+    expect(n.reply.mock.calls[0][1]).toBe('Your timezone · <b>Europe/Paris</b>');
   });
 
   it('an unknown zone is refused and nothing is stored', async () => {
     const store = tzStore('Europe/Paris'); const n = fakeNotifier();
     await handleUpdate(update('/timezone Mars/Olympus'), store, n, SETTINGS, NOW);
     expect(store.setTimeZone).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toContain('is not a timezone I know');
+    expect(n.reply.mock.calls[0][1]).toContain('not a timezone I know');
   });
 
   it('new entries use the stored zone, not the default', async () => {

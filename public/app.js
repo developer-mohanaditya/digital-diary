@@ -81,8 +81,11 @@ const neuronsOf = (tin, tout) => +(((tin * 1.1) + (tout * 3.3)) / 220).toFixed(2
 const usageOf = (it) => {
   const u = it.usage || null;
   const tin = (u && u.tokensIn) || 0, tout = (u && u.tokensOut) || 0;
-  return { model: (u && u.model) || '', tin, tout, neurons: neuronsOf(tin, tout), known: !!u };
+  return { model: (u && u.model) || '', tin, tout, neurons: neuronsOf(tin, tout), known: !!u, ms: (u && typeof u.ms === 'number') ? u.ms : null };
 };
+// How long the cleanup took, as the note sheet says it. Null is not zero: a verbatim note, an
+// old note and a cleanup that never ran were not measured, and the label is empty for them.
+const tookLabel = (ms) => ms == null ? '' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 
 // One request fills every page: a year back from today, grouped by day by the Worker.
 async function loadDiary() {
@@ -527,9 +530,12 @@ function noteHTML(ref) {
   const u = it.usage;
   // A verbatim note never went to a model, and a note saved before the usage columns existed
   // was never measured. Both say so, which is true of either, instead of claiming a cost of
-  // zero for one and a model that never ran for the other.
+  // zero for one and a model that never ran for the other. The wait leads the line, because it
+  // is the number the owner felt and a slow note is the one worth spotting; a note with no
+  // duration recorded leaves that segment out rather than showing a zero.
+  const took = tookLabel(u.ms);
   const cost = u.known
-    ? `${u.neurons} neurons · ${u.tin.toLocaleString()} in / ${u.tout.toLocaleString()} out tokens${u.model ? ` · <span class="mid">${esc(u.model.replace('@cf/', ''))}</span>` : ''}`
+    ? `${took ? `${took} · ` : ''}${u.neurons} neurons · ${u.tin.toLocaleString()} in / ${u.tout.toLocaleString()} out tokens${u.model ? ` · <span class="mid">${esc(u.model.replace('@cf/', ''))}</span>` : ''}`
     : 'No cleanup cost was recorded for this note.';
   return `<div class="overlay"><div class="backdrop" data-action="close-note"></div>
     <div class="sheet nsheet" role="dialog" aria-modal="true" aria-label="Note">

@@ -158,11 +158,11 @@ describe('/telegram/webhook cleanup', () => {
       raw_text: 'um so I had a coffee with ram',
       mode: 'refine',
     });
-    expect((telegram(bodies)?.text ?? '').split('\n')).toEqual([
-      'Saved to Inbox.',
-      'Formatted, 29 -> 20 characters.',
-      'Had coffee with Ram.',
-    ]);
+    const lines = (telegram(bodies)?.text ?? '').split('\n');
+    expect(lines[0]).toBe('✓ <b>Saved to Inbox</b>');
+    expect(lines[2]).toBe('<i>"Had coffee with Ram."</i>');
+    // The wait and what the model reported, on the one fact line.
+    expect(lines[4]).toContain('·');
   });
 
   it('saves the note as written when the model is unavailable, and says so', async () => {
@@ -173,7 +173,7 @@ describe('/telegram/webhook cleanup', () => {
     expect(bodies.find((b) => b.url.endsWith('/thoughts'))?.body).toMatchObject({
       clean_text: 'a quick note', raw_text: 'a quick note',
     });
-    expect(telegram(bodies)?.text).toContain('Cleanup failed');
+    expect(telegram(bodies)?.text).toContain('cleanup failed');
   });
 
   it('with no AI binding on the Worker, stores the words as sent', async () => {
@@ -279,10 +279,12 @@ describe('/api/reclean', () => {
     expect(patches[0].url).toContain('id=eq.th-old');
     expect(patches[0].body).toEqual({
       clean_text: 'The deploy went out.\n\nStill missing: **Raw**.',
-      // The repair spends neurons too, so what it cost is recorded on the row it rewrote.
+      // The repair spends neurons too, and keeps the owner waiting, so both are recorded on
+      // the row it rewrote.
       tokens_in: null,
       tokens_out: null,
       cleanup_model: expect.stringMatching(/^@cf\//),
+      cleanup_ms: expect.any(Number),
     });
   });
 });

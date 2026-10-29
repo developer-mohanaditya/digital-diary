@@ -1,7 +1,9 @@
 // The 10pm summary: one message about the day just lived, arriving when the day is over.
-// Kept pure so the wording can be tested without a Worker, a database or a phone.
+// Kept pure so the wording can be tested without a Worker, a database or a phone. It follows
+// the same shape as every other message: a title, then facts, then the notes themselves.
 
 import { clock } from './api';
+import { escapeHtml } from './receipts';
 import type { Category } from './parse';
 
 export interface SummaryNote {
@@ -52,12 +54,13 @@ export function summaryMessage(input: {
   reminders: SummaryReminder[];
 }): string {
   const { day, timeZone, notes, reminders } = input;
-  const lines: string[] = [dayLine(day)];
+  const lines: string[] = [`☾ <b>${escapeHtml(dayLine(day))}</b>`];
 
   if (notes.length === 0) {
-    lines[0] += ' — no notes today.';
+    lines.push('No notes today.');
   } else {
-    lines[0] += ` — ${notes.length} ${notes.length === 1 ? 'note' : 'notes'}`;
+    const words = notes.reduce((sum, n) => sum + n.text.trim().split(/\s+/).filter(Boolean).length, 0);
+    lines.push(`${notes.length} ${notes.length === 1 ? 'note' : 'notes'} · ${words} words`);
     const counts = new Map<string, number>();
     for (const note of notes) counts.set(note.category, (counts.get(note.category) ?? 0) + 1);
     lines.push(
@@ -65,16 +68,16 @@ export function summaryMessage(input: {
     );
     lines.push('');
     for (const note of notes.slice(0, SHOWN_NOTES)) {
-      lines.push(`${clock(note.at, timeZone)} · ${label(note.category)} · ${oneLine(note.text)}`);
+      lines.push(`${clock(note.at, timeZone)} · ${label(note.category)} · ${escapeHtml(oneLine(note.text))}`);
     }
     if (notes.length > SHOWN_NOTES) lines.push(`…and ${notes.length - SHOWN_NOTES} more.`);
   }
 
   if (reminders.length > 0) {
-    lines.push('', `Still open (${reminders.length}):`);
+    lines.push('', `⏳ <b>Still open</b> · ${reminders.length}`);
     for (const reminder of reminders) {
       const due = reminder.dueAt ? ` — ${dueLine(reminder.dueAt)}` : '';
-      lines.push(`• ${reminder.title}${due}`);
+      lines.push(`• ${escapeHtml(reminder.title)}${due}`);
     }
   }
   return lines.join('\n');

@@ -41,6 +41,19 @@ describe('toUiEntry', () => {
       .toEqual({ source: 'api', client: 'claude-code' });
   });
 
+  // What the cleanup cost, and how long it kept the owner waiting. The duration is the newest
+  // figure of the three, so it is the one a database older than 0012 has no column for: a row
+  // that carries only that column still has to produce a usage block, and a row that carries
+  // none of them must produce none.
+  it('carries what the cleanup cost, the duration included', () => {
+    expect(toUiEntry(row({ tokens_in: 210, tokens_out: 48, cleanup_model: '@cf/m', cleanup_ms: 37100 }), 'UTC').usage)
+      .toEqual({ tokensIn: 210, tokensOut: 48, model: '@cf/m', ms: 37100 });
+    expect(toUiEntry(row({ cleanup_ms: 900 }), 'UTC').usage).toEqual({
+      tokensIn: null, tokensOut: null, model: null, ms: 900,
+    });
+    expect(toUiEntry(row(), 'UTC').usage).toBeUndefined();
+  });
+
   it('keeps the raw text, falling back to the clean text when absent', () => {
     expect(toUiEntry(row(), 'UTC').raw).toBe('a thought, and yeah');
     expect(toUiEntry(row({ raw_text: null }), 'UTC').raw).toBe('A thought');

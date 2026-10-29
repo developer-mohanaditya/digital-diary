@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   BACKUP_MODEL, BIG_MODEL, BIG_TEXT_CHARS, MAX_INPUT_CHARS, SMALL_MODEL,
-  buildMessages, hasCommentary, isPlausible, pickModel, readOutput, sameWords, workersAiRefiner,
+  buildMessages, cleanNote, hasCommentary, isPlausible, pickModel, readOutput, sameWords, workersAiRefiner,
 } from '../src/refine';
 
 const run = (answer: unknown) => vi.fn(async () => answer);
@@ -106,6 +106,43 @@ describe('sameWords', () => {
   it('ignores whitespace, so a reflowed answer that changes nothing counts as unchanged', () => {
     expect(sameWords('a note', '  a   note\n')).toBe(true);
     expect(sameWords('a note', '**A** note')).toBe(false);
+  });
+});
+
+describe('cleanNote', () => {
+  const refiner = (answer: string | Error | null) => ({
+    refine: vi.fn(async () => {
+      if (answer instanceof Error) throw answer;
+      if (answer === null) return null;
+      return { text: answer, model: SMALL_MODEL, tokensIn: 141, tokensOut: 22 };
+    }),
+  });
+
+  // The duration is recorded beside what the cleanup cost: the note is not stored until the
+  // model answers, so that wait is the owner's, and only the row can remember it.
+  it('records how long the cleanup took', async () => {
+    const out = await cleanNote(refiner('Had coffee with Ram.'), { text: 'um so coffee with ram', mode: 'refine', category: 'life' });
+    expect(out.cleanup).toBe('formatted');
+    expect(out.ms).toEqual(expect.any(Number));
+    expect(out.ms).toBeGreaterThanOrEqual(0);
+    expect(out.tokensIn).toBe(141);
+  });
+
+  // Neither of these reached a model, so there is no duration — and null is not zero, which
+  // would draw as an instant cleanup that never happened.
+  it('reports no duration when no model ran', async () => {
+    const verbatim = await cleanNote(refiner('x'), { text: 'exact words', mode: 'verbatim', category: 'work' });
+    expect(verbatim.cleanup).toBe('verbatim');
+    expect(verbatim.ms).toBeNull();
+    const noRefiner = await cleanNote(undefined, { text: 'a note', mode: 'refine', category: 'inbox' });
+    expect(noRefiner.cleanup).toBe('unavailable');
+    expect(noRefiner.ms).toBeNull();
+  });
+
+  it('times a cleanup that failed, because the wait happened all the same', async () => {
+    const out = await cleanNote(refiner(new Error('model retired')), { text: 'um coffee', mode: 'refine', category: 'life' });
+    expect(out.cleanup).toBe('failed');
+    expect(out.ms).toEqual(expect.any(Number));
   });
 });
 
