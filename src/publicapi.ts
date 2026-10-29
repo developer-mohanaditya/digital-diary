@@ -680,13 +680,16 @@ function decodeCursor(value: string): { at: string; id: string } {
 /* ---------- Queries ---------- */
 
 const NOTE_COLUMNS =
+  'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id,tokens_in,tokens_out,cleanup_model,cleanup_ms';
+// The cleanup's duration arrives with 0012, which is newer than the usage columns themselves.
+const NOTE_COLUMNS_NO_MS =
   'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id,tokens_in,tokens_out,cleanup_model';
 const NOTE_COLUMNS_NO_USAGE = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id';
 
 // The whole filter language as one PostgREST query string. `captureIds` narrows to the notes a
 // deadline filter already selected; null means every note.
-export function notesQuery(f: NoteFilters, captureIds: string[] | null, withUsage = true): string {
-  const q: string[] = [`select=${withUsage ? NOTE_COLUMNS : NOTE_COLUMNS_NO_USAGE}`];
+export function notesQuery(f: NoteFilters, captureIds: string[] | null, columns = NOTE_COLUMNS): string {
+  const q: string[] = [`select=${columns}`];
   if (f.period.from) q.push(`day=gte.${f.period.from}`);
   if (f.period.to) q.push(`day=lte.${f.period.to}`);
   if (f.categories?.length) q.push(`category=in.(${f.categories.join(',')})`);
@@ -725,10 +728,16 @@ async function getJson<T>(env: Env, path: string): Promise<T> {
 async function readNotes(env: Env, f: NoteFilters, captureIds: string[] | null): Promise<ThoughtRow[]> {
   const first = await get(env, `thoughts?${notesQuery(f, captureIds)}`);
   if (first.ok) return (await first.json()) as ThoughtRow[];
-  // The usage columns arrive with 0006; a read that asks for them before they exist is a 400.
+  // What PostgREST answers for a column that does not exist yet: 400. The usage columns arrive
+  // with 0006 and the cleanup's duration with 0012, so each step drops the newest figure rather
+  // than the list, and a key still reads its notes on a database older than the deploy.
   if (first.status === 400) {
-    const retry = await get(env, `thoughts?${notesQuery(f, captureIds, false)}`);
-    if (retry.ok) return (await retry.json()) as ThoughtRow[];
+    const noMs = await get(env, `thoughts?${notesQuery(f, captureIds, NOTE_COLUMNS_NO_MS)}`);
+    if (noMs.ok) return (await noMs.json()) as ThoughtRow[];
+    if (noMs.status === 400) {
+      const retry = await get(env, `thoughts?${notesQuery(f, captureIds, NOTE_COLUMNS_NO_USAGE)}`);
+      if (retry.ok) return (await retry.json()) as ThoughtRow[];
+    }
   }
   console.error('api notes read failed', first.status);
   throw new Problem(502, 'upstream', 'The diary database did not answer.');
@@ -792,7 +801,7 @@ export interface ApiNote {
   due?: string | null;
   done?: boolean;
   doneAt?: string | null;
-  usage?: { tokensIn: number | null; tokensOut: number | null; model: string | null };
+  usage?: { tokensIn: number | null; tokensOut: number | null; model: string | null; ms: number | null };
   raw?: string;
 }
 
@@ -821,11 +830,13 @@ export function toApiNote(
     full.done = deadline.status === 'done';
     full.doneAt = deadline.done_at;
   }
-  if (row.tokens_in != null || row.tokens_out != null || row.cleanup_model) {
+  if (row.tokens_in != null || row.tokens_out != null || row.cleanup_model || row.cleanup_ms != null) {
     full.usage = {
       tokensIn: row.tokens_in ?? null,
       tokensOut: row.tokens_out ?? null,
       model: row.cleanup_model ?? null,
+      // How long the cleanup took. Null when nothing measured it, on the same rule as the tokens.
+      ms: row.cleanup_ms ?? null,
     };
   }
   if (opts.raw) full.raw = row.raw_text || row.clean_text;

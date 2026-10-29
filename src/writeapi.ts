@@ -22,7 +22,8 @@
 import { UI_CATEGORIES, isDay } from './api';
 import { MODES, type Category, type Mode } from './parse';
 import { MAX_INPUT_CHARS, cleanNote, type CleanupKind, type Refiner } from './refine';
-import { localDay, storedPreview, type ExistingCapture, type Store, type WrittenNote } from './handler';
+import { localDay, type ExistingCapture, type Store, type WrittenNote } from './handler';
+import { categoryLabel, escapeHtml, storedPreview } from './receipts';
 import { hasScope } from './apikey';
 import { reminderTimes } from './reminders';
 import type { KeyPolicy, KeySession } from './publicapi';
@@ -259,19 +260,29 @@ function dayLabel(days: string[], timeZone: string): string {
   return first === last ? format(first) : `${format(first)}–${format(last)}`;
 }
 
-// What the phone shows. Three or four short lines: who wrote, how much and where, the first
-// note in the words the diary stored, and the receipt code that ties it to the API's answer.
+// What the phone shows, in the shape of every other message: who wrote and where, the first
+// note in the words the diary stored, what was filed, and what it cost. The receipt code ties
+// this message to the API's answer, so the two can be matched after the fact.
 export function ackMessage(receipt: Receipt, client: string, timeZone: string): string {
   const stored = receipt.notes.filter((n) => n.status === 'stored');
   const who = client === 'api' ? 'An app' : titleCase(client);
-  const lines = [`${who} filed ${stored.length} note${stored.length === 1 ? '' : 's'} · ${dayLabel(stored.map((n) => n.day), timeZone)}`];
-  const tally = Object.entries(receipt.counts.byCategory).map(([c, n]) => `${c} ${n}`).join(' · ');
-  const deadline = receipt.reminders.length
-    ? ` · ${receipt.reminders.length} deadline${receipt.reminders.length === 1 ? '' : 's'} (first ping ${dayLabel(receipt.reminders.map((r) => r.due), timeZone)})`
-    : '';
-  lines.push(`${tally}${deadline}`);
-  if (receipt.preview) lines.push(`· ${receipt.preview}`);
-  lines.push(`Receipt ${receipt.code}`);
+  const filed = `${who} filed ${stored.length} note${stored.length === 1 ? '' : 's'}`;
+  const lines = [`✓ <b>${escapeHtml(filed)}</b> · ${dayLabel(stored.map((n) => n.day), timeZone)}`];
+  if (receipt.preview) lines.push('', `<i>"${escapeHtml(storedPreview(receipt.preview))}"</i>`);
+
+  const tally = Object.entries(receipt.counts.byCategory).map(([c, n]) => `${categoryLabel(c)} ${n}`);
+  if (receipt.reminders.length) {
+    tally.push(`first ping ${dayLabel(receipt.reminders.map((r) => r.due), timeZone)}`);
+  }
+  if (tally.length) lines.push('', tally.join(' · '));
+
+  const cost: string[] = [];
+  if (receipt.usage.tokensIn != null || receipt.usage.tokensOut != null) {
+    cost.push(`${receipt.usage.tokensIn ?? '–'} in / ${receipt.usage.tokensOut ?? '–'} out`);
+  }
+  if (receipt.usage.models.length) cost.push(escapeHtml(receipt.usage.models.join(', ')));
+  cost.push(`receipt ${escapeHtml(receipt.code)}`);
+  lines.push('', cost.join(' · '));
   return lines.join('\n');
 }
 
@@ -370,6 +381,7 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
         tokens_in: cleaned.tokensIn,
         tokens_out: cleaned.tokensOut,
         cleanup_model: cleaned.model,
+        cleanup_ms: cleaned.ms,
       });
 
       // A deadline gets the ping the composer would set: three days before the due date, or now

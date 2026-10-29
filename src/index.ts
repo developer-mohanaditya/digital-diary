@@ -1,5 +1,5 @@
 import {
-  handleUpdate, localDay, type TelegramUpdate, type Store, type Notifier, type RepairResult, type ThoughtInput,
+  handleUpdate, localDay, type HealthStats, type TelegramUpdate, type Store, type Notifier, type RepairResult, type ThoughtInput,
 } from './handler';
 import type { Category, Mode } from './parse';
 import { MAX_INPUT_CHARS, cleanNote, type CleanupKind } from './refine';
@@ -12,6 +12,7 @@ import {
 import { PASSPHRASE_KEY, hashPassphrase, passphraseProblem, verifyPassphrase } from './auth';
 import { hourIn, summaryDue, summaryMessage, type SummaryNote } from './summary';
 import { beatMessage, beatSlot } from './heartbeat';
+import { failedMessage, reminderMessage, stripHtml } from './receipts';
 import { keepTyping } from './typing';
 import { createApiKey, isRowId, listApiKeys, normalisePolicy, publicApi, revokeApiKey } from './publicapi';
 import { expiryFrom, keyNameProblem, normaliseScopes } from './apikey';
@@ -77,11 +78,11 @@ function supabaseStore(env: Env): Store {
         body: JSON.stringify(body),
       });
       let res = await write(t);
-      // The usage columns arrive with 0006, and a deploy can reach production before the
-      // migration does. The note matters more than what it cost, so a 400 retries without
-      // them — the fallback the web paths already take.
+      // The usage columns arrive with 0006 and the cleanup's duration with 0012; a deploy can
+      // reach production before either migration does. The note matters more than what it cost,
+      // so a 400 retries without them — the fallback the web paths already take.
       if (res.status === 400) {
-        const { tokens_in: _in, tokens_out: _out, cleanup_model: _model, ...bare } = t;
+        const { tokens_in: _in, tokens_out: _out, cleanup_model: _model, cleanup_ms: _ms, ...bare } = t;
         res = await write(bare);
       }
       await check(res);
@@ -169,7 +170,7 @@ function supabaseStore(env: Env): Store {
         body: JSON.stringify({ next_remind_at: nextIso, snooze_count: 1 }),
       }));
     },
-    async health(day) {
+    async health(day, note = 'test') {
       // Exact counts come back in the content-range header, so one row is enough.
       const countOf = async (query: string) => {
         const res = await check(await fetch(`${base}/${query}`, {
@@ -186,7 +187,7 @@ function supabaseStore(env: Env): Store {
       const lastRows = (await lastRes.json()) as { received_at: string }[];
       // The heartbeat is the write half of the check: a readable database can still
       // reject inserts, and this table exists for exactly that signal.
-      await check(await postHeartbeat('test'));
+      await check(await postHeartbeat(note));
       return {
         captures, thoughts, todayThoughts, pendingReminders,
         lastCaptureAt: lastRows[0]?.received_at ?? null, heartbeatOk: true,
@@ -244,11 +245,19 @@ function supabaseStore(env: Env): Store {
 // Telegram Bot API adapter. The boolean is what the write API's receipt reports, so a message
 // that never went out is said out loud rather than assumed: the notes are stored either way.
 async function sendTelegram(env: Env, payload: Record<string, unknown>): Promise<boolean> {
+  const post = (body: Record<string, unknown>) => fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
   try {
-    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    let res = await post(payload);
+    // Telegram refuses the whole message when the markup is wrong, and a receipt that never
+    // arrives is worse than one without its bold: send it again with the tags taken off.
+    if (res.status === 400 && payload.parse_mode) {
+      const { parse_mode: _mode, ...rest } = payload;
+      console.error('telegram rejected the markup, retrying as plain text');
+      res = await post({ ...rest, text: stripHtml(String(payload.text ?? '')) });
+    }
     if (!res.ok) {
       console.error('telegram send failed', res.status, (await res.text()).slice(0, 200));
       return false;
@@ -263,12 +272,13 @@ async function sendTelegram(env: Env, payload: Record<string, unknown>): Promise
 function telegramNotifier(env: Env): Notifier {
   return {
     async reply(chatId, text) {
-      await sendTelegram(env, { chat_id: chatId, text });
+      await sendTelegram(env, { chat_id: chatId, text, parse_mode: 'HTML' });
     },
     async remind(chatId, reminderId, text) {
       await sendTelegram(env, {
         chat_id: chatId,
         text,
+        parse_mode: 'HTML',
         reply_markup: { inline_keyboard: [[{ text: 'Done', callback_data: `done:${reminderId}` }]] },
       });
     },
@@ -498,9 +508,11 @@ async function repairUntouched(env: Env, limit: number): Promise<RepairResult> {
   const failed: string[] = [];
   for (const r of untouched) {
     try {
+      const started = Date.now();
       const out = await refiner.refine({ text: r.raw_text!, mode: r.mode as 'refine' | 'reason' | 'think', category: r.category });
       if (!out || out.text === r.clean_text) continue;
-      // The repair spends neurons too, so it records what it cost on the row it rewrote.
+      // The repair spends neurons too, and keeps the owner waiting, so it records both on the
+      // row it rewrote.
       const send = (body: Record<string, unknown>) => fetch(`${base}/thoughts?id=eq.${r.id}`, {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
@@ -511,8 +523,10 @@ async function repairUntouched(env: Env, limit: number): Promise<RepairResult> {
         tokens_in: out.tokensIn,
         tokens_out: out.tokensOut,
         cleanup_model: out.model,
+        cleanup_ms: Date.now() - started,
       });
-      // The rewrite matters more than its cost, so a missing 0006 costs the counters, not the repair.
+      // The rewrite matters more than its cost, so a missing 0006 or 0012 costs the counters, not
+      // the repair.
       if (patch.status === 400) patch = await send({ clean_text: out.text });
       if (!patch.ok) throw new Error(`Supabase ${patch.status}: ${await patch.text()}`);
       cleaned++;
@@ -568,7 +582,7 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
   // row already carries the id it joins on. It needs captures.client (0009): on an older
   // database the whole read answers 400, so the plain column set is the fallback, and then a
   // note simply has no origin to show.
-  const withUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id,tokens_in,tokens_out,cleanup_model,captures(source,client)';
+  const withUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id,tokens_in,tokens_out,cleanup_model,cleanup_ms,captures(source,client)';
   const withoutUsage = 'id,day,category,category_source,mode,clean_text,raw_text,created_at,capture_id';
   try {
     const [thoughtsRes, remindersRes] = await Promise.all([
@@ -645,7 +659,7 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
   // Reassigned below when a deadline's reminder fails: the note is stored either way, and the
   // message under the box has to say which part did not happen.
   let refineError = cleaned.error;
-  const usage = { tokensIn: cleaned.tokensIn, tokensOut: cleaned.tokensOut, model: cleaned.model };
+  const usage = { tokensIn: cleaned.tokensIn, tokensOut: cleaned.tokensOut, model: cleaned.model, ms: cleaned.ms };
 
   const base = `${env.SUPABASE_URL}/rest/v1`;
   const headers = {
@@ -711,6 +725,7 @@ async function noteApi(request: Request, env: Env): Promise<Response> {
       tokens_in: usage.tokensIn,
       tokens_out: usage.tokensOut,
       cleanup_model: usage.model,
+      cleanup_ms: usage.ms,
     });
     // Same reason as the read above: a deploy can reach production before the migration
     // does, and a note that was captured must still be stored.
@@ -997,9 +1012,10 @@ async function webhook(request: Request, env: Env): Promise<Response> {
       if (q.data?.startsWith('done:')) {
         const rid = q.data.slice(5);
         if (store.markReminderDone) await store.markReminderDone(rid);
-        await answerCallback(env, q.id, 'Marked done. No more pings.');
+        // The toast above the button follows the same grammar as the messages: a verdict first.
+        await answerCallback(env, q.id, '✓ Marked done — no more pings');
       } else {
-        await answerCallback(env, q.id, 'OK');
+        await answerCallback(env, q.id, '✓ Nothing to do');
       }
       return new Response('ok');
     }
@@ -1024,7 +1040,7 @@ async function webhook(request: Request, env: Env): Promise<Response> {
     console.error('update failed', err);
     const reason = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
     if (chatId !== ownerId) return new Response('retry', { status: 500 });
-    await notifier.reply(ownerId, `Something failed. ${reason}`);
+    await notifier.reply(ownerId, failedMessage('Something failed', reason, 'Send /heartbeat to check whether the diary is reachable.'));
     return new Response('ok');
   }
 }
@@ -1035,11 +1051,13 @@ async function runDue(env: Env): Promise<void> {
   const chatId = Number(env.ALLOWED_CHAT_ID);
   if (!store.listDueReminders) return;
   const due = await store.listDueReminders(new Date().toISOString());
+  // The due date is read on the diary's clock, so a deadline set for 09:00 UTC cannot show as
+  // the day before. A failed read falls back to the Worker's own zone rather than to no message.
+  const tz = (await store.getTimeZone().catch(() => null)) ?? (env.DIARY_TZ || 'UTC');
   for (const r of due) {
-    const label = r.kind === 'deadline' ? 'Deadline' : 'Review';
-    const dueTxt = r.due_at ? ` (due ${r.due_at.slice(0, 10)})` : '';
-    if (notifier.remind) await notifier.remind(chatId, r.id, `${label}${dueTxt}: ${r.title}`);
-    else await notifier.reply(chatId, `${label}${dueTxt}: ${r.title}`);
+    const text = reminderMessage(r.kind, r.title, r.due_at, tz);
+    if (notifier.remind) await notifier.remind(chatId, r.id, text);
+    else await notifier.reply(chatId, text);
     // Reschedule: deadlines daily until due+1d, reviews max 2 pings then done.
     if (r.kind === 'deadline' && r.due_at && new Date(r.due_at).getTime() > Date.now() && store.snoozeReminder) {
       const next = new Date(Date.now() + 86400000).toISOString();
@@ -1081,13 +1099,28 @@ async function dailySummary(env: Env): Promise<void> {
 // the clocks had moved.
 async function heartbeat(env: Env): Promise<void> {
   const store = supabaseStore(env);
-  if (!store.beat || !store.heartbeatMark || !store.markHeartbeat) return;
+  if (!store.heartbeatMark || !store.markHeartbeat) return;
   const tz = (await store.getTimeZone()) ?? (env.DIARY_TZ || 'UTC');
-  const slot = beatSlot(new Date(), tz);
+  const now = new Date();
+  const slot = beatSlot(now, tz);
   if (!slot) return;                                        // before the first slot of the day
   if ((await store.heartbeatMark()) === slot.key) return;   // this slot already has its row
-  await store.beat('cron');
-  await telegramNotifier(env).reply(Number(env.ALLOWED_CHAT_ID), beatMessage(slot, tz));
+  // The beat is the write; the counts are what make the message worth opening. A failed count
+  // read must not cost the beat, so the row still goes in and the message falls back to the line
+  // that says only what happened.
+  let stats: HealthStats | null = null;
+  if (store.health) {
+    try {
+      stats = await store.health(localDay(now, tz), 'cron');
+    } catch (err) {
+      console.error('beat counts failed', err);
+    }
+  }
+  if (!stats) {
+    if (!store.beat) return;
+    await store.beat('cron');
+  }
+  await telegramNotifier(env).reply(Number(env.ALLOWED_CHAT_ID), beatMessage(slot, tz, stats));
   await store.markHeartbeat(slot.key);
 }
 
@@ -1114,7 +1147,7 @@ export default {
       return publicApi(request, env, {
         store: supabaseStore(env),
         refiner: env.AI ? workersAiRefiner(env.AI) : undefined,
-        notify: (text: string) => sendTelegram(env, { chat_id: Number(env.ALLOWED_CHAT_ID), text }),
+        notify: (text: string) => sendTelegram(env, { chat_id: Number(env.ALLOWED_CHAT_ID), text, parse_mode: 'HTML' }),
         timeZone: env.DIARY_TZ || 'UTC',
       });
     }

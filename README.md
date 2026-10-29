@@ -147,7 +147,7 @@ A request without a valid key is `401`, and the answer never says whether the ke
 
 `/days`, `/stats` and `/export` take the same time selectors. `/deadlines` takes `status=open|done|all`, `due_before`, `due_after` and `limit`.
 
-A note comes back as `{ id, day, time, at, category, type, source, text, words, due?, done?, doneAt?, usage?, raw? }`. `day` and `time` are the diary's local day and clock (`DIARY_TZ`), `at` is the stored timestamp, and `words` is counted from the cleaned text. The envelope is `{ ok, meta: { version, timeZone, count, next }, … }`.
+A note comes back as `{ id, day, time, at, category, type, source, text, words, due?, done?, doneAt?, usage?, raw? }`. `day` and `time` are the diary's local day and clock (`DIARY_TZ`), `at` is the stored timestamp, and `words` is counted from the cleaned text. `usage` carries what the cleanup cost — `tokensIn`, `tokensOut`, the `model` and `ms`, how long it took — and each is null when nothing measured it. The envelope is `{ ok, meta: { version, timeZone, count, next }, … }`.
 
 ### What the transport guarantees
 
@@ -335,7 +335,7 @@ From then on the page shows a sign-in card: `POST /api/session` with `{"passphra
 
 ## Database setup
 
-Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`, `0011_archive_notes.sql`. Every one is safe to run again.
+Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`, `0011_archive_notes.sql`, `0012_cleanup_ms.sql`. Every one is safe to run again.
 
 `0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Access says the same; the rest of the diary is unaffected.
 
@@ -344,6 +344,12 @@ Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_
 `0009` adds `captures.client` and `captures.dedupe_key`: which app filed an API note, and the caller's `Idempotency-Key` kept verbatim. Until it has been run an API capture stores both as null — idempotency still holds, because it rides the older `source_update_id` — so only the readable key is lost.
 
 `0010` adds `bump_api_notes`, which spends a write key's allowance once per note instead of once per request. **Run it before deploying the Worker that calls it**: a write of two or more notes answers `503` naming the file until the function exists, because a key that can spend money is refused rather than filed uncounted. A single-note write does not call it, so the old behaviour survives in the meantime.
+
+`0012` adds `thoughts.cleanup_ms`, how long each note's cleanup took. It is a recording, not a
+behaviour: until it has been run, a note still saves and still shows its tokens — the duration is
+simply absent, which the note sheet says by leaving the figure out. The column is what the note
+sheet's footer leads with, so a slow cleanup is visible as a slow note rather than only as a long
+spinner and a quiet `typing…`.
 
 `0011` is a one-off housekeeping run, not a behaviour the code depends on. It shelves the notes
 written while building the diary — 22 sent to the bot and one filed through the write API — into

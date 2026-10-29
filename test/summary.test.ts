@@ -16,11 +16,13 @@ describe('summaryMessage', () => {
       reminders: [],
     });
     const lines = text.split('\n');
-    expect(lines[0]).toBe('Sunday 25 October — 3 notes');
-    expect(lines[1]).toBe('Work 2 · Life 1');
+    // The title, then what the day held, then the tally, then the notes themselves.
+    expect(lines[0]).toBe('☾ <b>Sunday 25 October</b>');
+    expect(lines[1]).toBe('3 notes · 15 words');
+    expect(lines[2]).toBe('Work 2 · Life 1');
     // A CEST note and a CET one: both hours come from the diary's timezone, not UTC.
-    expect(lines[3]).toBe('02:48 · Life · Woke at 2:30, body and brain at odds.');
-    expect(lines[5]).toBe('22:05 · Work · Wrote the summary.');
+    expect(lines[4]).toBe('02:48 · Life · Woke at 2:30, body and brain at odds.');
+    expect(lines[6]).toBe('22:05 · Work · Wrote the summary.');
     expect(text).not.toContain('Still open');
   });
 
@@ -31,8 +33,8 @@ describe('summaryMessage', () => {
       notes: [],
       reminders: [{ kind: 'deadline', title: 'Submit the tax form', dueAt: '2026-10-27T09:00:00Z' }],
     });
-    expect(text.split('\n')[0]).toBe('Sunday 25 October — no notes today.');
-    expect(text).toContain('Still open (1):');
+    expect(text.split('\n').slice(0, 2)).toEqual(['☾ <b>Sunday 25 October</b>', 'No notes today.']);
+    expect(text).toContain('⏳ <b>Still open</b> · 1');
     expect(text).toContain('• Submit the tax form — Tue 27 Oct');
   });
 
@@ -69,7 +71,7 @@ describe('summaryMessage', () => {
       at: `2026-10-25T${String(8 + i).padStart(2, '0')}:00:00Z`,
     }));
     const text = summaryMessage({ day: '2026-10-25', timeZone: PARIS, notes, reminders: [] });
-    expect(text).toContain('— 11 notes');
+    expect(text).toContain('11 notes · 22 words');
     expect(text).toContain('…and 3 more.');
     expect(text.split('\n').filter((l) => l.includes('· Inbox ·'))).toHaveLength(8);
   });
@@ -81,7 +83,7 @@ describe('summaryMessage', () => {
       notes: [{ category: 'life', text: 'One thing.', at: '2026-10-25T12:00:00Z' }],
       reminders: [],
     });
-    expect(text.split('\n')[0]).toBe('Sunday 25 October — 1 note');
+    expect(text.split('\n').slice(0, 2)).toEqual(['☾ <b>Sunday 25 October</b>', '1 note · 2 words']);
   });
 });
 

@@ -126,7 +126,7 @@ if (flag('--probe') && w.url) {
 // 4. Optional: can the bot message you?
 const chatId = valueOf('--send');
 if (chatId) {
-  const sent = await api('sendMessage', { chat_id: Number(chatId), text: 'Telegram doctor: outbound path works.' });
+  const sent = await api('sendMessage', { chat_id: Number(chatId), text: '✓ Telegram doctor: outbound path works' });
   line('sendMessage', sent.json?.ok ? 'delivered' : `${sent.status} ${sent.json?.description ?? ''}`);
 }
 

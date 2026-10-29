@@ -44,14 +44,22 @@ describe('beatSlot', () => {
 
 describe('beatMessage', () => {
   it('names the slot on the diary clock', () => {
-    expect(beatMessage(beatSlot(cest(12, 30), PARIS)!, PARIS)).toBe(
-      'Heartbeat 12:30 (Europe/Paris) · keep-alive written.',
-    );
+    expect(beatMessage(beatSlot(cest(12, 30), PARIS)!, PARIS)).toBe('❤️ 12:30\nkeep-alive written');
   });
 
   it('says how late it was when it had to catch a slot up', () => {
-    expect(beatMessage(beatSlot(cest(13, 30), PARIS)!, PARIS)).toBe(
-      'Heartbeat 12:30 (60m late) (Europe/Paris) · keep-alive written.',
-    );
+    expect(beatMessage(beatSlot(cest(13, 30), PARIS)!, PARIS)).toBe('❤️ 12:30 · 60m late\nkeep-alive written');
+  });
+
+  it('carries the same counts /heartbeat shows', () => {
+    const stats = {
+      captures: 6, thoughts: 6, todayThoughts: 2, pendingReminders: 1,
+      lastCaptureAt: '2026-07-15T10:07:00Z', heartbeatOk: true,
+    };
+    expect(beatMessage(beatSlot(cest(12, 30), PARIS)!, PARIS, stats).split('\n')).toEqual([
+      '❤️ 12:30',
+      '6 notes · 2 today · 1 reminder open',
+      'Last note 15 Jul, 12:07',
+    ]);
   });
 });

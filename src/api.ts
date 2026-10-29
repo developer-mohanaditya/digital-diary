@@ -28,6 +28,7 @@ export interface ThoughtRow {
   tokens_in?: number | null;
   tokens_out?: number | null;
   cleanup_model?: string | null;
+  cleanup_ms?: number | null;
   // The capture the note arrived in, embedded by the read. Present from the moment the embed
   // is asked for; the column set without it is the fallback for a database that predates
   // captures.client, and then a note simply has no origin to show.
@@ -65,8 +66,9 @@ export interface UiEntry {
   origin?: NoteOrigin;
   // What the cleanup cost, only when there is something to say. A verbatim note was never
   // sent to a model and an old note predates the columns, so the page gets no field at all
-  // rather than three zeroes it would draw as a free note.
-  usage?: { tokensIn: number | null; tokensOut: number | null; model: string | null };
+  // rather than three zeroes it would draw as a free note. `ms` is the same rule: how long the
+  // cleanup took, null when nothing measured it.
+  usage?: { tokensIn: number | null; tokensOut: number | null; model: string | null; ms: number | null };
 }
 
 // Stored modes are the command names; the interface shows the friendlier label.
@@ -125,11 +127,12 @@ export function toUiEntry(
     entry.doneLabel = deadline.doneAt ? stamp(deadline.doneAt, timeZone) : null;
   }
   if (origin) entry.origin = origin;
-  if (row.tokens_in != null || row.tokens_out != null || row.cleanup_model) {
+  if (row.tokens_in != null || row.tokens_out != null || row.cleanup_model || row.cleanup_ms != null) {
     entry.usage = {
       tokensIn: row.tokens_in ?? null,
       tokensOut: row.tokens_out ?? null,
       model: row.cleanup_model ?? null,
+      ms: row.cleanup_ms ?? null,
     };
   }
   return entry;

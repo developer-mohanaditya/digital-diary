@@ -179,6 +179,9 @@ export interface CleanedNote {
   tokensIn: number | null;
   tokensOut: number | null;
   model: string | null;
+  // How long the model took, which is the wait the owner felt. Null when nothing was measured:
+  // a verbatim note and a build with no refiner have no duration, and that is not zero.
+  ms: number | null;
   error: string | null;
 }
 
@@ -191,23 +194,29 @@ export async function cleanNote(
   req: RefineRequest,
 ): Promise<CleanedNote> {
   const bare: CleanedNote = {
-    clean: req.text, cleanup: 'unavailable', tokensIn: null, tokensOut: null, model: null, error: null,
+    clean: req.text, cleanup: 'unavailable', tokensIn: null, tokensOut: null, model: null, ms: null, error: null,
   };
   if (req.mode === 'verbatim') return { ...bare, cleanup: 'verbatim' };
   if (!refiner) return bare;
+  const started = Date.now();
   try {
     const out = await refiner.refine(req);
+    const ms = Date.now() - started;
     if (out && !sameWords(out.text, req.text)) {
       return {
         clean: out.text, cleanup: 'formatted',
-        tokensIn: out.tokensIn, tokensOut: out.tokensOut, model: out.model, error: null,
+        tokensIn: out.tokensIn, tokensOut: out.tokensOut, model: out.model, ms, error: null,
       };
     }
-    return { ...bare, cleanup: 'unchanged' };
+    // A cleanup that ran and changed nothing still kept the owner waiting, so its duration is
+    // recorded too: the wait happened whether or not the words came back different.
+    return { ...bare, cleanup: 'unchanged', ms };
   } catch (err) {
     return {
       ...bare,
       cleanup: 'failed',
+      // The failed cleanup is the slowest one — every model is tried — and the one worth timing.
+      ms: Date.now() - started,
       error: err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error',
     };
   }
