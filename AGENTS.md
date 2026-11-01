@@ -1,5 +1,16 @@
 # Agent notes
 
+## Commits — no agent attribution
+
+Every commit in this repository is authored by the repository owner, and nothing else. Do not
+add `Co-Authored-By:` trailers for an agent, a tool or a service, and do not add
+`Generated with …` footers, emoji or otherwise. Commit messages describe the change and stop
+there.
+
+A `commit-msg` hook enforces this in `.githooks/commit-msg`; enable it in a fresh clone with
+`git config core.hooksPath .githooks`. The hook strips attribution lines rather than blocking
+the commit, so a message that still carries one will silently lose that line.
+
 ## `/impeccable` — design skill
 
 The Impeccable design skill (v4.7.0) lives at `.agents/skills/impeccable`. When the user

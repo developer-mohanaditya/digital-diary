@@ -19,12 +19,20 @@ jobs:
 
       - name: Open or update the PR into main
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A pull request opened with GITHUB_TOKEN is authored by github-actions[bot], and a
+          # squash merge then credits the bot as the commit author. PR_TOKEN is a personal
+          # access token, so the PR and the squash commit belong to the repository owner.
+          GH_TOKEN: ${{ secrets.PR_TOKEN }}
         run: |
           git fetch origin main
           if git diff --quiet origin/main...HEAD; then
             echo "No changes compared with main. Nothing to open."
             exit 0
+          fi
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The PR_TOKEN secret is not set. Add a personal access token with contents:read and pull-requests:write under Settings > Secrets and variables > Actions."
+            exit 1
           fi
 
           existing=$(gh pr list --head developer-fb --base main --state open --json number --jq '.[0].number')

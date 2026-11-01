@@ -1,0 +1,28 @@
+#!/bin/sh
+# Keep agent attribution out of commit messages.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+#
+# This runs after the message is written and before the commit object exists, so it fixes the
+# message at write time instead of rejecting the commit afterwards. It never fails a commit:
+# attribution lines are removed and the author is told what was removed.
+
+set -eu
+
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+
+# Co-author lines naming an agent or service account, and "generated with <tool>" footers.
+pattern='^(co-authored-by:[[:space:]]*"?(codebuff|freebuff))|^[[:space:]]*(🤖[[:space:]]*)?generated with[[:space:]]+codebuff'
+
+tmp="$msg_file.attribution.$$"
+grep -viE "$pattern" "$msg_file" >"$tmp" || true
+
+if cmp -s "$msg_file" "$tmp"; then
+  rm -f "$tmp"
+  exit 0
+fi
+
+mv "$tmp" "$msg_file"
+printf 'commit-msg: removed agent attribution lines from the message.\n' >&2
+exit 0
