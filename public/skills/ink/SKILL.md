@@ -9,7 +9,9 @@ argument-hint: [brief|note|detail|guide|one|threads|split|update] [what to write
 The diary is where he keeps what he thought, decided and did, in his own voice, so he can remember
 the day in a year. Not a changelog, not a status report, not a list of the tools you used.
 
-Setup (the key, the MCP server, the curl fallback) is at <https://ink.aweditya.com/connect.md>.
+Setup (the key, the MCP server, the curl fallback) is at
+<https://github.com/developer-mohanaditya/digital-diary/blob/main/public/connect.md>, in the
+repository, so the instructions come from the same place as the server they install.
 Do that first, once, then this file is what to come back to.
 
 Before the first write, call `diary_whoami`: it says which categories and dates this key may file
