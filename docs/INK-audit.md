@@ -142,7 +142,8 @@ No framework, no bundler, no build. `document.querySelector` on demand, one hash
 | `#/y/Y/m/M` | month | one month, as a stats page |
 | `#/y/Y/m/M/d/D` | day | that day |
 | `#/dashboard[/Y]` | year | the whole year, same blocks as the month page |
-| `#/settings` | settings | facts, Look link, Access (keys), passphrase form |
+| `#/settings` | settings | facts, Look link, Connect link, passphrase form |
+| `#/settings/connect` | connect | the agent prompt, the served files, read and write keys |
 | `#/settings/look` | look | every visual choice |
 
 The month page and the dashboard are deliberately *the same page at two zooms*: same blocks, same
@@ -443,7 +444,7 @@ Receipt rc_9f1a20
 
 ## 12. Key management (`src/apikey.ts`, `keysApi`)
 
-Minted in **Settings → Access**, which switches between **Read keys** and **Write keys** because the
+Minted in **Settings → Connect**, which switches between **Read keys** and **Write keys** because the
 two are created with different fields and mean different things. A key looks like `ddk_live_…`
 (52 characters, 256 random bits) and is shown **once**: the row keeps a 16-character lookup prefix
 and a SHA-256, so nothing can be read back. Creation validates the name, the scopes, the expiry
