@@ -647,6 +647,15 @@
     background:var(--bg); color:var(--ink); }
   .keyonce { border:2px solid var(--accent); border-radius:14px; padding:12px 14px;
     background:color-mix(in srgb, var(--accent) 6%, var(--card)); }
+  /* Connect: the prompt and the install lines are copied whole, so they keep the line breaks
+     they were written with and the long ones scroll sideways rather than wrap a command in
+     the middle of a flag. */
+  .pasteline { margin:10px 0 0; padding:12px 14px; background:var(--bg); border:1.5px solid var(--line);
+    border-radius:12px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.78rem;
+    line-height:1.6; color:var(--ink); white-space:pre; overflow-x:auto; tab-size:2; }
+  .pasteline.wrap { white-space:pre-wrap; overflow-wrap:anywhere; }
+  .card .pasteline + .crow { margin-top:12px; }
+  @media (max-width:600px) { .pasteline { font-size:.74rem; padding:10px 12px; } }
   .keypill { font-size:.62rem; text-transform:uppercase; letter-spacing:.08em; font-weight:800; padding:2px 7px;
     border-radius:99px; border:1.5px solid var(--line); color:var(--muted); vertical-align:middle; }
   .keypill.live { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 45%, transparent);
