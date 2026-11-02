@@ -4,7 +4,7 @@ INK is a private diary at `https://ink.aweditya.com`. This page is the whole set
 where your tool reads it, check it, install the commands, file one note, and report what the diary
 answered.
 
-Version v1, 2 November 2026. If something here fails in a way this page does not explain, say so
+Version v2, 2 November 2026. If something here fails in a way this page does not explain, say so
 plainly rather than working around it.
 
 ## The key you were given
@@ -134,6 +134,22 @@ The menu is built when a session starts, so a new session is what makes `/ink-` 
 this. The skill's own presets still work without the wrappers, as in `/ink note project the grid is
 generated`, so a tool with no commands folder is not locked out, only unsuggested.
 
+### Updating later
+
+The files on this machine are snapshots, so an edit to the skill or to a wrapper reaches a tool only
+when it is fetched again. `/ink update` does that: it refetches both, in every tool that has a
+commands folder, and removes any wrapper the list no longer names. Without the skill, the same loop
+by hand, with `~/.codex/prompts` in place of `~/.claude/commands` for Codex:
+
+```sh
+base=https://ink.aweditya.com/commands
+curl -fsS "$base/names.txt" | while read -r name; do
+  curl -fsS "$base/$name.md" -o "$HOME/.claude/commands/$name.md"
+done
+```
+
+A new session is what rebuilds the menu, so `/ink-` starts completing after one.
+
 ## Step 5: tell the owner what happened
 
 Report the receipt: how many notes, under which categories, the receipt code, and whether Telegram
@@ -156,6 +172,9 @@ Setup happens once, and afterwards there is one command per shape:
 
 Each takes the subject after it, as in `/ink-brief the deploy broke`. The longer form works too,
 `/ink threads brief`, because the skill reads presets from the words after the command.
+
+`/ink update` is the one command that is not a shape: it refetches this skill and the wrappers,
+as Step 4 describes.
 
 `/ink` on its own is the quick door: one note, a line or two, for a phrase worth keeping. Every
 category and depth pair has a name too, `/ink-work`, `/ink-note-project`, `/ink-guide-learning`,

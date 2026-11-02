@@ -1,7 +1,7 @@
 ---
 name: ink
 description: File this session into Aweditya's private diary (INK). Use at the end of a session, or when he says "write to the diary", "note this down" or "remember this". A command per shape (ink-brief, ink-note, ink-detail, ink-guide and their category forms, ink-threads, ink-split), a two phase pair (ink-draft, ink-push), and a preset after the skill name.
-argument-hint: [brief|note|detail|guide|one|threads|split] [what to write]
+argument-hint: [brief|note|detail|guide|one|threads|split|update] [what to write]
 ---
 
 # INK: writing to the diary
@@ -82,6 +82,44 @@ A word that is not on the list is the subject, not a preset, so `/ink the deploy
 note about the deploy. A preset always wins over your own judgement: if he asked for `brief`, do not
 deliver `detail`. With no preset at all: `brief` for a bare `/ink`, and `note` once there is a
 subject to write about.
+
+### `/ink update`
+
+`/ink update` is not a shape and writes no note. It replaces the local copy of this file and the
+command wrappers with what the site serves now, so a change to either lands in the tool you are
+running in without another handover. Use it when he says the skill is out of date or asks for an
+update, and only then.
+
+- Claude Code reads `~/.claude/commands`, flat, so `ink-brief.md` is `/ink-brief`.
+- Codex reads `~/.codex/prompts`, flat, with the same file names.
+
+Refresh every folder on this machine that exists, because he switches between tools:
+
+```sh
+base=https://ink.aweditya.com/commands
+names=$(curl -fsS "$base/names.txt") || exit 1
+for dir in "$HOME/.claude/commands" "$HOME/.codex/prompts"; do
+  [ -d "$(dirname "$dir")" ] || continue
+  mkdir -p "$dir"
+  printf '%s\n' "$names" | while read -r name; do
+    curl -fsS "$base/$name.md" -o "$dir/$name.md" || exit 1
+  done
+  for f in "$dir"/ink-*.md; do
+    [ -e "$f" ] || continue
+    printf '%s\n' "$names" | grep -qxF "$(basename "$f" .md)" || rm -f "$f"
+  done
+  echo "$dir: $(ls "$dir"/ink-*.md | wc -l) commands"
+done
+```
+
+Then fetch <https://ink.aweditya.com/skills/ink/SKILL.md> and write it over the file you are
+reading this from, the same path, not a new one. If these words reached you in a message rather
+than from a file, there is no path to overwrite: say so, and tell him the wrappers are current
+while this text needs fetching again.
+
+The menu is built when a session starts, so `/ink-` will not complete in the session that ran the
+update. Report the folders, the counts it printed and that the skill file was rewritten, then stop.
+An update is not a session worth remembering, so never file a note about it.
 
 ## Category and mode
 
