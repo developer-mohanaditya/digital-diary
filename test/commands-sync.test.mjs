@@ -27,4 +27,27 @@ describe('served commands', () => {
   it('counts the catalogue the skill advertises', () => {
     expect(names.length).toBe(59);
   });
+
+  // Codex reads skills now, not prompt files, so every wrapper also ships as one: a folder's worth
+  // of SKILL.md with its own name in front, and no placeholder a skill cannot fill in.
+  it('ships a Codex skill for every wrapper, named for it', () => {
+    for (const name of names) {
+      const file = 'public/skills/commands/' + name + '.md';
+      expect(existsSync(file), name).toBe(true);
+      const text = readFileSync(file, 'utf8');
+      expect(text.startsWith('---\nname: ' + name + '\n'), name).toBe(true);
+      expect(text, name).toMatch(/Use the `ink` skill/);
+      expect(text, name).not.toContain('$ARGUMENTS');
+      expect(text.match(/^name: /gm), name).toHaveLength(1);
+    }
+  });
+
+  it('sends nobody to the prompt folder Codex stopped reading', () => {
+    for (const file of ['public/connect.md', 'public/skills/ink/SKILL.md']) {
+      const text = readFileSync(file, 'utf8');
+      expect(text, file).not.toContain('/prompts:ink');
+      expect(text, file).not.toContain('.codex/prompts/$name');
+    }
+    expect(readFileSync('public/connect.md', 'utf8')).toContain('.codex/skills/$name/SKILL.md');
+  });
 });

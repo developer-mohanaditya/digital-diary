@@ -4,7 +4,7 @@ INK is a private diary at `https://ink.aweditya.com`. This page is the whole set
 where your tool reads it, check it, install the commands, file one note, and report what the diary
 answered.
 
-Version v2, 2 November 2026. If something here fails in a way this page does not explain, say so
+Version v3, 2 November 2026. If something here fails in a way this page does not explain, say so
 plainly rather than working around it.
 
 ## The key you were given
@@ -126,24 +126,38 @@ done
 ls "$HOME"/.claude/commands/ink-*.md | wc -l
 ```
 
-The last line answers 59. Codex reads `~/.codex/prompts/` instead, with the same loop and that
-directory in place of `~/.claude/commands`. Codex writes its own namespace in front of every file it
-finds there, so in Codex the same commands are `/prompts:ink-brief` and `/prompts:ink-update`. The
-prefix belongs to the app, not to the file, and the command behind it is identical. Copy only the
-`ink-` files: `names.txt` is the list the loop reads, not a command, and a stray file in that folder
-shows up in the menu as one.
+The last line answers 59.
 
-The menu is built when a session starts, so a new session is what makes `/ink-` complete after
+**Codex works differently.** It removed custom prompt files in 0.117, so `~/.codex/prompts/` no
+longer answers anything, whatever sits in it. There each command is a skill: one folder per name,
+holding `SKILL.md`, and the site serves those files under `/skills/commands/`.
+
+```sh
+mkdir -p "$HOME/.codex/skills"
+base=https://ink.aweditya.com
+curl -fsS "$base/commands/names.txt" | while read -r name; do
+  mkdir -p "$HOME/.codex/skills/$name"
+  curl -fsS "$base/skills/commands/$name.md" -o "$HOME/.codex/skills/$name/SKILL.md"
+done
+ls -d "$HOME"/.codex/skills/ink-* | wc -l
+```
+
+The last line answers 59. A build that reads `~/.agents/skills` instead takes the same loop with
+that folder in place of `~/.codex/skills`. In Codex the commands are skills, so each is invoked by
+mentioning it: `$ink-brief`, `$ink-update`, `$ink-brief-work`, and a bare `$` or `/skills` lists
+them all. The words after the mention are the subject, as in `$ink-brief the deploy broke`. Install
+only the `ink-` names: `names.txt` is the list the loop reads, not a command.
+
+The menu is built when a session starts, so a new session is what makes the commands appear after
 this. The skill's own presets still work without the wrappers, as in `/ink note project the grid is
 generated`, so a tool with no commands folder is not locked out, only unsuggested.
 
 ### Updating later
 
 The files on this machine are snapshots, so an edit to the skill or to a wrapper reaches a tool
-only when it is fetched again. `/ink-update`, which is `/prompts:ink-update` in Codex, does that: it
-refetches both, in each of the two
-folders it knows, and removes any wrapper the list no longer names. Without the skill, the same
-loop by hand, with `~/.codex/prompts` in place of `~/.claude/commands` for Codex:
+only when it is fetched again. `/ink-update`, which is `$ink-update` in Codex, does that: it
+refetches the skill and every command into each folder it finds, skills and flat wrappers alike,
+and removes any name the list no longer carries. Without the skill, the Claude Code loop by hand:
 
 ```sh
 base=https://ink.aweditya.com/commands
@@ -177,7 +191,7 @@ Setup happens once, and afterwards there is one command per shape:
 
 Each takes the subject after it, as in `/ink-brief the deploy broke`. The longer form works too,
 `/ink threads brief`, because the skill reads presets from the words after the command. In Codex
-every one of these carries the app's namespace, `/prompts:ink-brief the deploy broke`, for the reason
+every one of these is a skill, so the same command is `$ink-brief the deploy broke`, for the reason
 in step 4.
 
 `/ink-update` is the one command that is not a shape: it refetches this skill and the wrappers, as

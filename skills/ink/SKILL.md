@@ -22,7 +22,8 @@ into. A policy narrower than the work is a refusal waiting to happen.
 Two ways in, and both end at the same rules.
 
 **One command per shape.** Each is a thin wrapper that names the preset, so the shape is settled
-before the session is read:
+before the session is read. The names are the same in every tool; the sigil is not, so Claude Code
+writes `/ink-brief` where Codex mentions the same command as `$ink-brief`:
 
 | Command | Unit | Depth |
 | --- | --- | --- |
@@ -96,26 +97,40 @@ update, and only then. `/ink update`, with only that word, means the same thing,
 preset cannot file a note about updating.
 
 - Claude Code reads `~/.claude/commands`, flat, so `ink-brief.md` is `/ink-brief`.
-- Codex reads `~/.codex/prompts`, flat, and puts its own namespace in front of every file there, so
-  the same file is `/prompts:ink-brief` and the refresh is `/prompts:ink-update`.
+- Codex reads skills, one folder each, at `~/.codex/skills/<name>/SKILL.md`, so the same command is
+  the skill `ink-brief`, mentioned as `$ink-brief`, and the refresh as `$ink-update`. Its prompts
+  folder is dead: 0.117 removed custom prompts, and files left there answer nothing.
 
 Refresh every folder on this machine that exists, because he switches between tools:
 
 ```sh
-base=https://ink.aweditya.com/commands
-names=$(curl -fsS "$base/names.txt") || exit 1
-for dir in "$HOME/.claude/commands" "$HOME/.codex/prompts"; do
-  [ -d "$(dirname "$dir")" ] || continue
+site=https://ink.aweditya.com
+names=$(curl -fsS "$site/commands/names.txt") || exit 1
+if [ -d "$HOME/.claude" ]; then
+  dir="$HOME/.claude/commands"
   mkdir -p "$dir"
   printf '%s\n' "$names" | while read -r name; do
-    curl -fsS "$base/$name.md" -o "$dir/$name.md" || exit 1
+    curl -fsS "$site/commands/$name.md" -o "$dir/$name.md" || exit 1
   done
   for f in "$dir"/ink-*.md; do
     [ -e "$f" ] || continue
     printf '%s\n' "$names" | grep -qxF "$(basename "$f" .md)" || rm -f "$f"
   done
   echo "$dir: $(ls "$dir"/ink-*.md | wc -l) commands"
-done
+fi
+if [ -d "$HOME/.codex" ]; then
+  dir="$HOME/.codex/skills"
+  mkdir -p "$dir"
+  printf '%s\n' "$names" | while read -r name; do
+    mkdir -p "$dir/$name"
+    curl -fsS "$site/skills/commands/$name.md" -o "$dir/$name/SKILL.md" || exit 1
+  done
+  for d in "$dir"/ink-*; do
+    [ -d "$d" ] || continue
+    printf '%s\n' "$names" | grep -qxF "$(basename "$d")" || rm -rf "$d"
+  done
+  echo "$dir: $(ls -d "$dir"/ink-* | wc -l) skills"
+fi
 ```
 
 Then fetch <https://ink.aweditya.com/skills/ink/SKILL.md> and write it over the file you are
@@ -124,8 +139,8 @@ than from a file, there is no path to overwrite: say so, and tell him the wrappe
 while this text needs fetching again.
 
 The menu is built when a session starts, so the commands will not complete in the session that ran
-the update, and Codex keeps writing its `prompts:` namespace when the new session opens. Report the
-folders, the counts it printed and that the skill file was rewritten, then stop.
+the update. Report the folders, the counts it printed and that the skill file was rewritten, then
+stop.
 An update is not a session worth remembering, so never file a note about it.
 
 ## Category and mode

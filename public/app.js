@@ -1546,7 +1546,7 @@ function setupPrompt(key) {
     'Connect to my ink diary at ink.aweditya.com and set up filing.',
     `Read ${CONNECT_PAGE} first. It is the whole setup; follow it step by step.`,
     `Then fetch the skill file at ${SKILL_PAGE} and save it where you load skills from.`,
-    'Install the command files the page lists, flat, so /ink- completes in this tool.',
+    'Install the commands the page lists the way this tool reads them: flat files in Claude Code, one skill folder per name in Codex, so ink- completes here.',
     `My write key is ${key || '<your write key>'}. Keep it in DIARY_API_KEY in .env, never print it, never commit it.`,
     'File one test note, report the receipt to me, and stop there.',
   ].join('\n');
@@ -1565,7 +1565,7 @@ function viewConnect() {
   <section class="card">
     <div class="lhead"><span class="kicker">The prompt</span>${key ? '<span class="muted" style="font-size:.76rem">with your new key</span>' : ''}</div>
     <h2>Paste this into the agent</h2>
-    <p class="muted" style="margin:0;font-size:.84rem">Paste it once and let the agent work: it reads the setup page, saves the skill where it loads skills from, installs the 59 commands so /ink- completes, and files one note to prove the pipe. ${key ? 'Your new key is already in it.' : 'Without a key it says where one goes; mint one below and copy the prompt again.'}</p>
+    <p class="muted" style="margin:0;font-size:.84rem">Paste it once and let the agent work: it reads the setup page, saves the skill where it loads skills from, installs the 59 commands where this tool reads them, and files one note to prove the pipe. ${key ? 'Your new key is already in it.' : 'Without a key it says where one goes; mint one below and copy the prompt again.'}</p>
     <pre class="pasteline wrap" id="setup-prompt">${esc(setupPrompt(key))}</pre>
     <div class="crow"><button class="cbtn" data-action="copy-prompt">Copy the prompt</button>${key ? '' : '<button class="microbtn" data-action="keys-jump">Get a write key under this ↓</button>'}</div>
   </section>
@@ -1587,7 +1587,7 @@ function viewConnect() {
       <a class="microbtn" href="${CONNECT_PAGE}" target="_blank" rel="noreferrer">connect.md →</a></div>
     <div class="setrow"><div><span class="lab">The skill file</span><span class="sub">How many notes a session becomes, how long each runs, where each one goes</span></div>
       <a class="microbtn" href="${SKILL_PAGE}" target="_blank" rel="noreferrer">SKILL.md →</a></div>
-    <div class="setrow"><div><span class="lab">The commands</span><span class="sub">Fifty-nine, installed by the setup so /ink- completes: ink-brief-work, ink-note-project, ink-guide. /ink-update refetches them. Codex shows the same files as /prompts:ink-</span></div>
+    <div class="setrow"><div><span class="lab">The commands</span><span class="sub">Fifty-nine, installed by the setup so ink- completes: ink-brief-work, ink-note-project, ink-guide. /ink-update refetches them. Claude Code calls each /ink-brief; Codex reads the same names as skills, mentioned $ink-brief.</span></div>
       <a class="microbtn" href="${COMMANDS_PAGE}" target="_blank" rel="noreferrer">commands/ →</a></div>
   </section>
 

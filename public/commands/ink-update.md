@@ -4,7 +4,8 @@ argument-hint: (no arguments)
 ---
 
 Use the `ink` skill. Task `update`, from its `/ink-update` section: refetch the skill file and
-every command wrapper into the commands folders this machine has, rewrite the skill over the copy
+every command into the folders this machine reads, flat wrappers for Claude Code and one skill
+folder per name for Codex, rewrite the skill over the copy
 it was loaded from, and report the folders and counts it printed. Write no note.
 
 The skill is at <https://ink.aweditya.com/skills/ink/SKILL.md>, the wrappers at
