@@ -1,4 +1,4 @@
-// The 58 wrappers are written in commands/, and public/ is the asset directory the Worker serves,
+// The 59 wrappers are written in commands/, and public/ is the asset directory the Worker serves,
 // so a file there is a URL an agent can download. This copies them across, beside a bare list of
 // names, because an install loop needs the list before it can fetch anything.
 //

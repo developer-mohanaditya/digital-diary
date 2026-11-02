@@ -9,8 +9,8 @@
 //
 // Every command it writes is a thin wrapper: it names the preset and hands the writing to
 // skills/ink/SKILL.md, which stays the only place the rules live. Rerunning it is safe, and it
-// leaves ink-threads.md, ink-split.md, ink-draft.md and ink-push.md alone, because those are a unit
-// or a phase rather than a depth plus a shelf.
+// leaves ink-threads.md, ink-split.md, ink-draft.md, ink-push.md and ink-update.md alone, because
+// those are a unit, a phase or a task rather than a depth plus a shelf.
 
 import { writeFileSync } from 'node:fs';
 
@@ -81,6 +81,8 @@ const manual = [
     does: 'one note per distinct decision or topic' },
   { command: '/ink-threads', unit: 'threads', depth: 'note', category: null, mode: 'refine',
     does: 'one note per separate line of work' },
+  { command: '/ink-update', unit: 'update', depth: null, category: null, mode: null,
+    does: 'refetches the skill and the wrappers, writes nothing' },
 ];
 for (const row of manual) rows.push(row);
 

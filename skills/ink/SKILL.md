@@ -36,9 +36,9 @@ before the session is read:
 
 ### The full catalogue
 
-There are 58 commands. `commands/COMMANDS.md` lists every one with what it does, and
+There are 59 commands. `commands/COMMANDS.md` lists every one with what it does, and
 `commands/manifest.json` carries the same rows for anything that wants to read them. They are built
-from ten categories, four depths, two units and two phases:
+from ten categories, four depths, two units, two phases and one task:
 
 ```
 categories  work  project  learning  thought  quote  task  deadline  life  class  inbox
@@ -54,8 +54,10 @@ phases      draft  push
 | `/ink-<category>` | 10 | one `brief` note in that category, as in `/ink-work` |
 | `/ink-threads`, `/ink-split` | 2 | a unit, both at `note` |
 | `/ink-draft`, `/ink-push` | 2 | the two phases of one readable file |
+| `/ink-update` | 1 | the refresh, which writes nothing |
 
-`/ink` itself is the skill with no preset, which is why the files number 58 and not 59.
+`/ink` itself is the skill with no preset, which is why 59 files answer `/ink-` while `/ink` alone
+is the skill.
 
 Examples: `/ink-work shipped the key naming`, `/ink-note-project the grid is generated`,
 `/ink-guide-learning how a note learns where it came from`, `/ink-threads` after two unrelated jobs.
@@ -83,12 +85,13 @@ note about the deploy. A preset always wins over your own judgement: if he asked
 deliver `detail`. With no preset at all: `brief` for a bare `/ink`, and `note` once there is a
 subject to write about.
 
-### `/ink update`
+### `/ink-update`
 
-`/ink update` is not a shape and writes no note. It replaces the local copy of this file and the
+`/ink-update` is not a shape and writes no note. It replaces the local copy of this file and the
 command wrappers with what the site serves now, so a change to either lands in the tool you are
 running in without another handover. Use it when he says the skill is out of date or asks for an
-update, and only then.
+update, and only then. `/ink update`, with only that word, means the same thing, so a misremembered
+preset cannot file a note about updating.
 
 - Claude Code reads `~/.claude/commands`, flat, so `ink-brief.md` is `/ink-brief`.
 - Codex reads `~/.codex/prompts`, flat, with the same file names.

@@ -456,6 +456,14 @@
     "does": "one note per separate line of work"
   },
   {
+    "command": "/ink-update",
+    "unit": "update",
+    "depth": null,
+    "category": null,
+    "mode": null,
+    "does": "refetches the skill and the wrappers, writes nothing"
+  },
+  {
     "command": "/ink-work",
     "unit": "one",
     "depth": "brief",

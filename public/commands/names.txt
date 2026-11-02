@@ -55,4 +55,5 @@ ink-split
 ink-task
 ink-thought
 ink-threads
+ink-update
 ink-work

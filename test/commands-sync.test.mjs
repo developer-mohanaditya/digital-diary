@@ -25,6 +25,6 @@ describe('served commands', () => {
   });
 
   it('counts the catalogue the skill advertises', () => {
-    expect(names.length).toBe(58);
+    expect(names.length).toBe(59);
   });
 });

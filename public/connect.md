@@ -114,7 +114,7 @@ the owner was told on their phone at the same moment.
 
 `/ink` is the skill, and the menu carries it as one entry. The named commands are files, so the menu
 only lists the ones that exist on this machine: without them, `/ink-` finds nothing even though
-`/ink` works. Install all 58, flat. `~/.claude/commands/ink-brief.md` becomes `/ink-brief`, while
+`/ink` works. Install all 59, flat. `~/.claude/commands/ink-brief.md` becomes `/ink-brief`, while
 the same file under `~/.claude/commands/ink/` would be namespaced and would never answer to the
 name you type.
 
@@ -126,7 +126,7 @@ done
 ls "$HOME"/.claude/commands/ink-*.md | wc -l
 ```
 
-The last line answers 58. Codex reads `~/.codex/prompts/` instead, with the same loop and that
+The last line answers 59. Codex reads `~/.codex/prompts/` instead, with the same loop and that
 directory in place of `~/.claude/commands`. Copy only the `ink-` files: `names.txt` is the list the
 loop reads, not a command, and a stray file in that folder shows up in the menu as one.
 
@@ -137,7 +137,7 @@ generated`, so a tool with no commands folder is not locked out, only unsuggeste
 ### Updating later
 
 The files on this machine are snapshots, so an edit to the skill or to a wrapper reaches a tool
-only when it is fetched again. `/ink update` does that: it refetches both, in each of the two
+only when it is fetched again. `/ink-update` does that: it refetches both, in each of the two
 folders it knows, and removes any wrapper the list no longer names. Without the skill, the same
 loop by hand, with `~/.codex/prompts` in place of `~/.claude/commands` for Codex:
 
@@ -168,13 +168,14 @@ Setup happens once, and afterwards there is one command per shape:
 /ink-guide    a written-up method, stored verbatim
 /ink-threads  one note per separate line of work
 /ink-split    one note per distinct decision or topic
+/ink-update   refetches the skill and the wrappers, writes nothing
 ```
 
 Each takes the subject after it, as in `/ink-brief the deploy broke`. The longer form works too,
 `/ink threads brief`, because the skill reads presets from the words after the command.
 
-`/ink update` is the one command that is not a shape: it refetches this skill and the wrappers,
-as Step 4 describes.
+`/ink-update` is the one command that is not a shape: it refetches this skill and the wrappers, as
+Step 4 describes.
 
 `/ink` on its own is the quick door: one note, a line or two, for a phrase worth keeping. Every
 category and depth pair has a name too, `/ink-work`, `/ink-note-project`, `/ink-guide-learning`,
