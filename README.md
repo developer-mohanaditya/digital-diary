@@ -26,7 +26,7 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
 - Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, save a typed note through `POST /api/note`, unlock with the passphrase at `/api/session`, and change that passphrase from Settings → Access through `POST /api/passphrase`. The page's look is one stylesheet, `public/diary.css`, shared by nothing else.
 - Says in the note sheet which door the note came in by, `via Telegram`, `via Web`, or the app that filed it through the write API (`Claude`, `Codex`, `Freebuff`, or any other client name, title-cased). The ledger line is left alone: a mark on every row competes with the notes. It is the capture's own origin, embedded in the single read the page already makes; on a database that predates `captures.client` the read falls back to the plain column set and the sheet simply omits the line rather than the page going blank.
-- Serves an API at `/api/v1` with keys minted in Settings → Access: other projects of mine read the diary (by day, month, year, category, type, every deadline, and the counts) with a **read key**, and an app files notes with a **write key**, a separate key that can add and cannot read. Keys are hashed at rest and revoked one at a time; the API is uncached, has no CORS headers, and answers `503` naming the migration until `0007_api_keys.sql` has been run.
+- Serves an API at `/api/v1` with keys minted in Settings → Connect: other projects of mine read the diary (by day, month, year, category, type, every deadline, and the counts) with a **read key**, and an app files notes with a **write key**, a separate key that can add and cannot read. Keys are hashed at rest and revoked one at a time; the API is uncached, has no CORS headers, and answers `503` naming the migration until `0007_api_keys.sql` has been run.
 
 ## The cleanup step
 
@@ -85,7 +85,7 @@ Line two is one of `Formatted, <before> -> <after> characters.`, `Cleaned up, no
 
 ### Keys
 
-Settings → Access mints one per project. A key looks like `ddk_live_…` (52 characters) and is shown **once**: the database keeps only its SHA-256 beside a 16-character lookup prefix, so there is nothing to read back. Give each project its own key and set its limits as you create it, so a leak exposes only that slice; revoking a key takes effect on its next request.
+Settings → Connect mints one per project. A key looks like `ddk_live_…` (52 characters) and is shown **once**: the database keeps only its SHA-256 beside a 16-character lookup prefix, so there is nothing to read back. Give each project its own key and set its limits as you create it, so a leak exposes only that slice; revoking a key takes effect on its next request.
 
 A key also carries a **policy**, stored beside its scopes and enforced on every read:
 
@@ -162,7 +162,7 @@ A note comes back as `{ id, day, time, at, category, type, source, text, words, 
 
 ### Writing to the diary
 
-One endpoint files notes: `POST /api/v1/notes`, for a key that holds `notes:write`. A write key is **separate from a read key** (Settings → Access switches between Read keys and Write keys) and it cannot read a single note back, which is what makes it safe to hand to an agent that summarizes your day for you.
+One endpoint files notes: `POST /api/v1/notes`, for a key that holds `notes:write`. A write key is **separate from a read key** (Settings → Connect switches between Read keys and Write keys) and it cannot read a single note back, which is what makes it safe to hand to an agent that summarizes your day for you.
 
 ```sh
 curl -s -X POST "https://<site>/api/v1/notes" \
@@ -337,7 +337,7 @@ From then on the page shows a sign-in card: `POST /api/session` with `{"passphra
 
 Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_init.sql`, `0002_settings.sql`, `0003_row_level_security.sql`, `0004_service_role_grants.sql`, `0005_reminders.sql`, `0006_usage.sql`, `0007_api_keys.sql`, `0008_key_policy.sql`, `0009_write_api.sql`, `0010_write_metering.sql`, `0011_archive_notes.sql`, `0012_cleanup_ms.sql`, `0013_backups.sql`. Every one is safe to run again.
 
-`0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Access says the same; the rest of the diary is unaffected.
+`0007` is what the API needs: `api_keys` (one row per key, hash and prefix only), `api_usage` (the rate-limit counters), and the three functions the newer reads go through (`bump_api_usage`, `diary_stats`, `diary_days`). Until it has been run, `/api/v1` answers `503` naming the file, and Settings → Connect says the same; the rest of the diary is unaffected.
 
 `0008` adds `api_keys.policy` and gives `diary_stats` and `diary_days` a `p_categories` argument, so a limited key cannot count its way around its limit. Until it has been run, a key with limits answers `403 policy` rather than reading more than it should; the defaults keep every existing key open.
 

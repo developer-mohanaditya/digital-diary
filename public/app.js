@@ -1097,15 +1097,8 @@ function viewSettings() {
 
   <section class="card">
     <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">/api/v1</span></div>
-    <div class="setrow"><div><span class="lab">Connecting an agent</span><span class="sub">The prompt to paste, the files it reads, and the key it files with</span></div>
-      <a class="microbtn" href="#/settings/connect">Set up an agent →</a></div>
-    <div class="setrow"><div><span class="lab">Which kind of key</span><span class="sub">A read key pulls notes out; a write key files notes in. They are separate keys</span></div>
-      <div class="seg"><button data-action="key-kind" data-v="read" aria-pressed="${state.keyKind === 'read'}">Read keys</button><button data-action="key-kind" data-v="write" aria-pressed="${state.keyKind === 'write'}">Write keys</button></div></div>
-    <h2>${state.keyKind === 'write' ? 'Write keys' : 'Read keys'}</h2>
-    <p class="muted" style="margin:0 0 2px;font-size:.84rem">${state.keyKind === 'write'
-      ? 'An app files notes into this diary with a write key: one note, or a whole session in one request, and the receipt comes back on Telegram. The limits below work in the other direction (which categories it may write into, and which dates) and a write key cannot read a single note back. This is the key to give Claude Code, Codex, or anything else that should write and nothing more.'
-      : 'Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Give every project its own key, and set its limits as you create it: which categories, which dates, and whether it may read the text at all. A key that leaks then exposes only the slice it was given.'}</p>
-    ${keysHTML()}
+    <div class="setrow"><div><span class="lab">Agents and API keys</span><span class="sub">The prompt to paste, the files an agent reads, and the read and write keys that reach /api/v1</span></div>
+      <a class="microbtn" href="#/settings/connect">Open Connect →</a></div>
   </section>
 
   <section class="card">
@@ -1571,9 +1564,20 @@ function viewConnect() {
   <section class="card">
     <div class="lhead"><span class="kicker">The prompt</span>${key ? '<span class="muted" style="font-size:.76rem">with your new key</span>' : ''}</div>
     <h2>Paste this into the agent</h2>
-    <p class="muted" style="margin:0;font-size:.84rem">Paste it once and let the agent work: it reads the setup page, saves the skill where it loads skills from, and files one note to prove the pipe. ${key ? 'Your new key is already in it.' : 'Without a key it says where one goes; mint one and come back.'}</p>
+    <p class="muted" style="margin:0;font-size:.84rem">Paste it once and let the agent work: it reads the setup page, saves the skill where it loads skills from, and files one note to prove the pipe. ${key ? 'Your new key is already in it.' : 'Without a key it says where one goes; mint one below and copy the prompt again.'}</p>
     <pre class="pasteline wrap" id="setup-prompt">${esc(setupPrompt(key))}</pre>
-    <div class="crow"><button class="cbtn" data-action="copy-prompt">Copy the prompt</button>${key ? '' : '<a class="microbtn" href="#/settings">Get a write key →</a>'}</div>
+    <div class="crow"><button class="cbtn" data-action="copy-prompt">Copy the prompt</button>${key ? '' : '<button class="microbtn" data-action="keys-jump">Get a write key under this ↓</button>'}</div>
+  </section>
+
+  <section class="card" id="keys-card">
+    <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">/api/v1</span></div>
+    <div class="setrow"><div><span class="lab">Which kind of key</span><span class="sub">A read key pulls notes out; a write key files notes in. They are separate keys</span></div>
+      <div class="seg"><button data-action="key-kind" data-v="read" aria-pressed="${state.keyKind === 'read'}">Read keys</button><button data-action="key-kind" data-v="write" aria-pressed="${state.keyKind === 'write'}">Write keys</button></div></div>
+    <h2>${state.keyKind === 'write' ? 'Write keys' : 'Read keys'}</h2>
+    <p class="muted" style="margin:0 0 2px;font-size:.84rem">${state.keyKind === 'write'
+      ? 'An app files notes into this diary with a write key: one note, or a whole session in one request, and the receipt comes back on Telegram. The limits below work in the other direction (which categories it may write into, and which dates) and a write key cannot read a single note back. This is the key to give Claude Code, Codex, or anything else that should write and nothing more.'
+      : 'Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Give every project its own key, and set its limits as you create it: which categories, which dates, and whether it may read the text at all. A key that leaks then exposes only the slice it was given.'}</p>
+    ${keysHTML()}
   </section>
 
   <section class="card">
@@ -1584,8 +1588,6 @@ function viewConnect() {
       <a class="microbtn" href="${SKILL_PAGE}" target="_blank" rel="noreferrer">SKILL.md →</a></div>
     <div class="setrow"><div><span class="lab">The commands</span><span class="sub">Fifty-eight of them, one per shape: ink-brief-work, ink-note-project, ink-guide</span></div>
       <a class="microbtn" href="${COMMANDS_PAGE}" target="_blank" rel="noreferrer">commands/ →</a></div>
-    <div class="setrow"><div><span class="lab">A write key</span><span class="sub">One per agent, so revoking it stops that agent and nothing else</span></div>
-      <a class="microbtn" href="#/settings">Create one →</a></div>
   </section>
 
   <section class="card">
@@ -1679,7 +1681,8 @@ function render() {
   if (signinEl) signinEl.hidden = true;
   if (appEl) appEl.hidden = false;
   // Settings reads the key list the first time it is opened, then remembers it.
-  if (r.view === 'settings') { ensureKeys(); ensureBackup(); }
+  // Keys live on the Connect page now, so both routes read them; only Settings reads backups.
+  if (r.view === 'settings' || r.view === 'connect') { ensureKeys(); if (r.view === 'settings') ensureBackup(); }
   syncNav(r);
   renderCrumbs(r);
   const t = parse(TODAY);
@@ -1816,6 +1819,7 @@ document.addEventListener('click', e => {
   else if (a === 'look-accent') { prefs.accent = v; applyPrefs(); savePrefs(); render(); }
   else if (a === 'look-chips') { prefs.chips = v; savePrefs(); render(); }
   else if (a === 'key-kind') { state.keyKind = v === 'write' ? 'write' : 'read'; render(); }
+  else if (a === 'keys-jump') { document.getElementById('keys-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   else if (a === 'look-reset') {
     prefs.font = ''; prefs.accent = ''; prefs.cats = {}; prefs.chips = 'pills';
     ui.previewTab = 'all'; applyPrefs(); savePrefs(); render();
