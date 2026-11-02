@@ -13,3 +13,7 @@ logo-drafts/
 
 # Inked drafts and the sent copies
 .ink/
+
+# Installed per-command skills, generated from commands/
+.agents/skills/ink-*/
+.agents/skills/ink/

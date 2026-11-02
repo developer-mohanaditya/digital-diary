@@ -42,6 +42,15 @@ describe('served commands', () => {
     }
   });
 
+  // The skill ships as one directory, so the command list has to travel inside it. A wrapper
+  // served on its own can be missed; a reference beside SKILL.md cannot.
+  it('carries the whole catalogue inside the skill', () => {
+    const served = readFileSync('public/skills/ink/references/commands.md', 'utf8');
+    expect(served).toBe(readFileSync('skills/ink/references/commands.md', 'utf8'));
+    for (const name of names) expect(served, name).toContain('`/' + name + '`');
+    expect(readFileSync('public/skills/ink/SKILL.md', 'utf8')).toContain('references/commands.md');
+  });
+
   it('sends nobody to the prompt folder Codex stopped reading', () => {
     for (const file of ['public/connect.md', 'public/skills/ink/SKILL.md']) {
       const text = readFileSync(file, 'utf8');

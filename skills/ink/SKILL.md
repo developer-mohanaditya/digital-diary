@@ -39,9 +39,10 @@ writes `/ink-brief` where Codex mentions the same command as `$ink-brief`:
 
 ### The full catalogue
 
-There are 59 commands. `commands/COMMANDS.md` lists every one with what it does, and
-`commands/manifest.json` carries the same rows for anything that wants to read them. They are built
-from ten categories, four depths, two units, two phases and one task:
+There are 59 commands, and every one is a preset of this skill rather than a separate set of rules.
+`references/commands.md`, beside this file, lists all of them with the unit, depth, category and
+mode each name stands for: read it when he names a command you cannot place, or asks what one is
+for. They are built from ten categories, four depths, two units, two phases and one task:
 
 ```
 categories  work  project  learning  thought  quote  task  deadline  life  class  inbox
