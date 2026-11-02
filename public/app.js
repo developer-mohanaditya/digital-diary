@@ -1587,7 +1587,7 @@ function viewConnect() {
       <a class="microbtn" href="${CONNECT_PAGE}" target="_blank" rel="noreferrer">connect.md →</a></div>
     <div class="setrow"><div><span class="lab">The skill file</span><span class="sub">How many notes a session becomes, how long each runs, where each one goes</span></div>
       <a class="microbtn" href="${SKILL_PAGE}" target="_blank" rel="noreferrer">SKILL.md →</a></div>
-    <div class="setrow"><div><span class="lab">The commands</span><span class="sub">Fifty-nine, installed by the setup so /ink- completes: ink-brief-work, ink-note-project, ink-guide. /ink-update refetches them</span></div>
+    <div class="setrow"><div><span class="lab">The commands</span><span class="sub">Fifty-nine, installed by the setup so /ink- completes: ink-brief-work, ink-note-project, ink-guide. /ink-update refetches them. Codex shows the same files as /prompts:ink-</span></div>
       <a class="microbtn" href="${COMMANDS_PAGE}" target="_blank" rel="noreferrer">commands/ →</a></div>
   </section>
 

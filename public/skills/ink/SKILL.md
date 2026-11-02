@@ -96,7 +96,8 @@ update, and only then. `/ink update`, with only that word, means the same thing,
 preset cannot file a note about updating.
 
 - Claude Code reads `~/.claude/commands`, flat, so `ink-brief.md` is `/ink-brief`.
-- Codex reads `~/.codex/prompts`, flat, with the same file names.
+- Codex reads `~/.codex/prompts`, flat, and puts its own namespace in front of every file there, so
+  the same file is `/prompts:ink-brief` and the refresh is `/prompts:ink-update`.
 
 Refresh every folder on this machine that exists, because he switches between tools:
 
@@ -122,8 +123,9 @@ reading this from, the same path, not a new one. If these words reached you in a
 than from a file, there is no path to overwrite: say so, and tell him the wrappers are current
 while this text needs fetching again.
 
-The menu is built when a session starts, so `/ink-` will not complete in the session that ran the
-update. Report the folders, the counts it printed and that the skill file was rewritten, then stop.
+The menu is built when a session starts, so the commands will not complete in the session that ran
+the update, and Codex keeps writing its `prompts:` namespace when the new session opens. Report the
+folders, the counts it printed and that the skill file was rewritten, then stop.
 An update is not a session worth remembering, so never file a note about it.
 
 ## Category and mode

@@ -127,8 +127,11 @@ ls "$HOME"/.claude/commands/ink-*.md | wc -l
 ```
 
 The last line answers 59. Codex reads `~/.codex/prompts/` instead, with the same loop and that
-directory in place of `~/.claude/commands`. Copy only the `ink-` files: `names.txt` is the list the
-loop reads, not a command, and a stray file in that folder shows up in the menu as one.
+directory in place of `~/.claude/commands`. Codex writes its own namespace in front of every file it
+finds there, so in Codex the same commands are `/prompts:ink-brief` and `/prompts:ink-update`. The
+prefix belongs to the app, not to the file, and the command behind it is identical. Copy only the
+`ink-` files: `names.txt` is the list the loop reads, not a command, and a stray file in that folder
+shows up in the menu as one.
 
 The menu is built when a session starts, so a new session is what makes `/ink-` complete after
 this. The skill's own presets still work without the wrappers, as in `/ink note project the grid is
@@ -137,7 +140,8 @@ generated`, so a tool with no commands folder is not locked out, only unsuggeste
 ### Updating later
 
 The files on this machine are snapshots, so an edit to the skill or to a wrapper reaches a tool
-only when it is fetched again. `/ink-update` does that: it refetches both, in each of the two
+only when it is fetched again. `/ink-update`, which is `/prompts:ink-update` in Codex, does that: it
+refetches both, in each of the two
 folders it knows, and removes any wrapper the list no longer names. Without the skill, the same
 loop by hand, with `~/.codex/prompts` in place of `~/.claude/commands` for Codex:
 
@@ -172,7 +176,9 @@ Setup happens once, and afterwards there is one command per shape:
 ```
 
 Each takes the subject after it, as in `/ink-brief the deploy broke`. The longer form works too,
-`/ink threads brief`, because the skill reads presets from the words after the command.
+`/ink threads brief`, because the skill reads presets from the words after the command. In Codex
+every one of these carries the app's namespace, `/prompts:ink-brief the deploy broke`, for the reason
+in step 4.
 
 `/ink-update` is the one command that is not a shape: it refetches this skill and the wrappers, as
 Step 4 describes.
