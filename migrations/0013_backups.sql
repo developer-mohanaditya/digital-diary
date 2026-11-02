@@ -6,7 +6,7 @@
 -- and keeps the last twelve, so the most that can ever be lost is seven days.
 --
 -- What is copied: the notes, the captures they came from (raw text, origin, status), the
--- reminders, and the archive that 0011 shelved. Not the API keys or the settings — a backup is
+-- reminders, and the archive that 0011 shelved. Not the API keys or the settings, a backup is
 -- for the diary, and copying a passphrase hash into another table only widens where it lives.
 --
 -- The snapshot is JSONB inside the same database, not an export to somewhere else: it undoes
@@ -132,7 +132,7 @@ begin
   );
 end $$;
 
--- The schedule. Monday 03:00 UTC — after the Sunday-evening notes and before the Monday morning
+-- The schedule. Monday 03:00 UTC, after the Sunday-evening notes and before the Monday morning
 -- ones, and at an hour when nobody is waiting on the database. pg_cron is a Supabase-supported
 -- extension but is not guaranteed to be installed, so both the extension and the job are
 -- optional here: without them the functions above still work, called by hand.
@@ -141,7 +141,7 @@ begin
   begin
     execute 'create extension if not exists pg_cron';
   exception when others then
-    raise notice 'pg_cron could not be installed (%) — the backup functions are still usable by hand.', sqlerrm;
+    raise notice 'pg_cron could not be installed (%), the backup functions are still usable by hand.', sqlerrm;
   end;
 
   if exists (select 1 from pg_extension where extname = 'pg_cron') then

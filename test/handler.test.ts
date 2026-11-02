@@ -296,7 +296,7 @@ describe('reply format', () => {
     const text = savedMessage({
       category: 'inbox', note: 'a note', state: 'failed', error: 'AI quota exhausted', ms: 3200,
     });
-    expect(text).toContain('cleanup failed — AI quota exhausted');
+    expect(text).toContain('cleanup failed: AI quota exhausted');
     expect(text).toContain('<i>"a note"</i>');
   });
 

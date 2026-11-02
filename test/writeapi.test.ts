@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { generateKey, hashKey, lookupPrefix } from '../src/apikey';
 
-// The write half of the API. These tests go through the Worker — the route, the key, the
-// capture, the thought, the receipt and the Telegram acknowledgement — rather than the module
+// The write half of the API. These tests go through the Worker, the route, the key, the
+// capture, the thought, the receipt and the Telegram acknowledgement, rather than the module
 // alone, because what matters is what a caller and the owner actually see. The database is a
 // small in-memory stand-in for the two tables involved, so a retry can be tested as a retry.
 
@@ -44,7 +44,9 @@ function stub(opts: StubOpts = {}) {
   const reminders: any[] = [];
   const keyRow = {
     id: 'key-write',
-    name: 'Demo for Agents',
+    // The note is named after the key, not after anything the request body says, so the key the
+    // harness holds is the name every assertion below should see.
+    name: 'Claude Code',
     prefix: lookupPrefix(KEY),
     hash: keyHash,
     scopes: opts.scopes ?? ['notes:write'],
@@ -172,6 +174,15 @@ describe('POST /api/v1/notes', () => {
     });
     // No model bound in this env, and the note is stored as written rather than not at all.
     expect(answer.receipt.notes[0].cleanup).toBe('unavailable');
+  });
+
+  // The key names the note. A caller can call itself anything in the body; the one name the
+  // owner chose is the key's, and that is what the row, the sheet and the phone should say.
+  it("files the note under the key's name, not the name the caller claims", async () => {
+    const s = stub();
+    const res = await worker.fetch(post({ client: 'some-other-app', notes: [note()] }), env());
+    expect(res.status).toBe(200);
+    expect(s.captures[0]).toMatchObject({ source: 'api', client: 'claude-code' });
   });
 
   it('confirms on Telegram with the receipt the caller was given', async () => {

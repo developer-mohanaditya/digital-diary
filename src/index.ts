@@ -63,8 +63,8 @@ function supabaseStore(env: Env): Store {
       };
       let res = await write(row);
       // client and dedupe_key arrive with 0009, and a deploy can reach production before the
-      // migration does. The note still lands exactly once — idempotency rides source_update_id,
-      // which is older than both — so only the readable key is lost.
+      // migration does. The note still lands exactly once, idempotency rides source_update_id,
+      // which is older than both, so only the readable key is lost.
       if (res.status === 400) {
         const { client: _client, dedupe_key: _key, ...bare } = row;
         res = await write(bare);
@@ -81,7 +81,7 @@ function supabaseStore(env: Env): Store {
       let res = await write(t);
       // The usage columns arrive with 0006 and the cleanup's duration with 0012; a deploy can
       // reach production before either migration does. The note matters more than what it cost,
-      // so a 400 retries without them — the fallback the web paths already take.
+      // so a 400 retries without them, the fallback the web paths already take.
       if (res.status === 400) {
         const { tokens_in: _in, tokens_out: _out, cleanup_model: _model, cleanup_ms: _ms, ...bare } = t;
         res = await write(bare);
@@ -91,7 +91,7 @@ function supabaseStore(env: Env): Store {
     // The write API's two reads. findCaptures is how a retried request finds the captures the
     // first one made: the id is derived from the caller's Idempotency-Key, so the same request
     // asks the same question. writtenNotes reads back rows that API just wrote, which is what
-    // its receipt and the owner's Telegram message are built from — never anything else.
+    // its receipt and the owner's Telegram message are built from, never anything else.
     async findCaptures(source, sourceUpdateIds) {
       if (!sourceUpdateIds.length) return [];
       const res = await check(await fetch(
@@ -226,7 +226,7 @@ function supabaseStore(env: Env): Store {
       }));
     },
     // Which keep-alive slot has already been beaten. Read on every cron run, written only when a
-    // row is made, so the second run in the same slot — the twin entry an hour out — can see that
+    // row is made, so the second run in the same slot (the twin entry an hour out) can see that
     // its beat is already there.
     async heartbeatMark() {
       const res = await check(await fetch(`${base}/settings?key=eq.heartbeat&select=value`, { headers }));
@@ -476,7 +476,7 @@ async function signIn(request: Request, env: Env): Promise<Response> {
 
 // POST /api/passphrase { current, next }: change the diary's passphrase from Settings. This is
 // the one credential the Worker can change, so the page no longer needs the Cloudflare dashboard
-// for it — though the dashboard is still the way back in once you cannot sign in at all.
+// for it, though the dashboard is still the way back in once you cannot sign in at all.
 async function passphraseApi(request: Request, env: Env): Promise<Response> {
   let stored: string | null;
   try {
@@ -635,7 +635,7 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
   // deploy and the migration being run, so the read falls back to the older column set.
   const readThoughts = async (select: string) =>
     fetch(`${base}/thoughts?day=gte.${from}&day=lte.${to}&select=${select}&order=day.asc&limit=1000`, { headers });
-  // The capture rides along as an embed, because the capture is where a note's origin lives —
+  // The capture rides along as an embed, because the capture is where a note's origin lives, 
   // the door it came through and, for an API note, the app that filed it. One request, and the
   // row already carries the id it joins on. It needs captures.client (0009): on an older
   // database the whole read answers 400, so the plain column set is the fallback, and then a
@@ -682,7 +682,7 @@ async function entriesApi(request: Request, env: Env): Promise<Response> {
 type NoteCleanup = CleanupKind;
 
 // POST /api/note: a note typed on the page. It takes the same path as a Telegram message
-// — storage, cleanup, then the result — so a note added here is the same kind of row as
+// (storage, cleanup, then the result) so a note added here is the same kind of row as
 // one sent to the bot. Before this existed the page only pushed the note into browser
 // memory: it showed "Refined" without asking a model, and was gone on the next load.
 async function noteApi(request: Request, env: Env): Promise<Response> {
@@ -982,7 +982,7 @@ async function reminderDoneApi(request: Request, env: Env): Promise<Response> {
   }
 }
 
-// The host a browser stamped an Origin with, or an empty string when it is not a URL at all —
+// The host a browser stamped an Origin with, or an empty string when it is not a URL at all, 
 // which then fails the comparison and is refused, rather than throwing.
 function originHost(origin: string): string {
   try {
@@ -1051,7 +1051,7 @@ async function keysApi(request: Request, env: Env): Promise<Response> {
 }
 
 // The Settings card's two questions: when the diary was last copied, and take one now. This is a
-// session route like the others and never a key route — a snapshot is the whole diary in one
+// session route like the others and never a key route, a snapshot is the whole diary in one
 // document, which is the last thing a leaked read key should be able to reach.
 async function backupApi(request: Request, env: Env): Promise<Response> {
   if (!(await signedIn(request, env))) {
@@ -1097,7 +1097,7 @@ async function webhook(request: Request, env: Env): Promise<Response> {
         const rid = q.data.slice(5);
         if (store.markReminderDone) await store.markReminderDone(rid);
         // The toast above the button follows the same grammar as the messages: a verdict first.
-        await answerCallback(env, q.id, '✓ Marked done — no more pings');
+        await answerCallback(env, q.id, '✓ Marked done, no more pings');
       } else {
         await answerCallback(env, q.id, '✓ Nothing to do');
       }
@@ -1176,7 +1176,7 @@ async function dailySummary(env: Env): Promise<void> {
 // quiet week and pauses. Every heartbeat is said out loud as it is written, from whichever
 // source wrote it: this one, and /heartbeat when it is asked for by hand.
 //
-// A beat belongs to a slot, and the first run at or after that slot writes it — once, because the
+// A beat belongs to a slot, and the first run at or after that slot writes it, once, because the
 // slot it satisfied is recorded in settings. Both of the day's paired cron entries resolve to the
 // same slot from the diary's clock, and a run that comes late still beats rather than being
 // skipped, which is what requiring the exact minute used to do whenever a trigger was missing or
@@ -1210,7 +1210,7 @@ async function heartbeat(env: Env): Promise<void> {
 
 // The copy that leaves. Once a week, on the Monday run: the snapshot pg_cron made at 03:00 is
 // already in the table by the first tick of the day, so the usual case is a read and an upload.
-// If that snapshot is missing or old the Worker takes a fresh one first — a stale document sent
+// If that snapshot is missing or old the Worker takes a fresh one first, a stale document sent
 // as if it were this week's would be worse than no message at all.
 async function exportBackup(env: Env): Promise<void> {
   const store = supabaseStore(env);

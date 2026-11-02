@@ -26,7 +26,7 @@ crons = ["45 6,7 * * *", "30 10,11 * * *", "0 15,16 * * *", "0 20,21 * * *"]
 
 # Timezone for day grouping (IANA name). Change when you move; see the timezone setting plan.
 # Non-secret vars only. Secrets (TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET,
-# SUPABASE_SERVICE_KEY) stay in Cloudflare dashboard / `wrangler secret put` — never here.
+# SUPABASE_SERVICE_KEY) stay in Cloudflare dashboard / `wrangler secret put`, never here.
 [vars]
 DIARY_TZ = "Europe/Paris"
 ALLOWED_CHAT_ID = "1353449143"

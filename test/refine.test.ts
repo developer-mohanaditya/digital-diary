@@ -128,7 +128,7 @@ describe('cleanNote', () => {
     expect(out.tokensIn).toBe(141);
   });
 
-  // Neither of these reached a model, so there is no duration — and null is not zero, which
+  // Neither of these reached a model, so there is no duration, and null is not zero, which
   // would draw as an instant cleanup that never happened.
   it('reports no duration when no model ran', async () => {
     const verbatim = await cleanNote(refiner('x'), { text: 'exact words', mode: 'verbatim', category: 'work' });

@@ -1,6 +1,6 @@
 # Agent notes
 
-## Commits — no agent attribution
+## Commits: no agent attribution
 
 Every commit in this repository is authored by the repository owner, and nothing else. Do not
 add `Co-Authored-By:` trailers for an agent, a tool or a service, and do not add
@@ -11,7 +11,14 @@ A `commit-msg` hook enforces this in `.githooks/commit-msg`; enable it in a fres
 `git config core.hooksPath .githooks`. The hook strips attribution lines rather than blocking
 the commit, so a message that still carries one will silently lose that line.
 
-## `/impeccable` — design skill
+## Prose: no em-dashes
+
+No em-dashes anywhere in this repository: not in prose, not in code comments, not in UI copy, not
+in commit messages, not in anything the Worker sends. Use a comma, a colon, a full stop or
+parentheses instead. A plain hyphen between spaces is not a substitute, because it reads as the
+same mannerism in a different costume.
+
+## `/impeccable`: design skill
 
 The Impeccable design skill (v4.7.0) lives at `.agents/skills/impeccable`. When the user
 writes `/impeccable` or `/impeccable <subcommand> …`, read
@@ -46,7 +53,7 @@ redesign goes through `init`/`shape` first.
 ## This project's design truth
 
 The served app is everything the Worker serves: `public/index.html`, `public/app.js` and
-`public/diary.css` — the shell, the day page, the month and dashboard, the sheets and the Look
+`public/diary.css`, the shell, the day page, the month and dashboard, the sheets and the Look
 page. The sample-data demo that used to answer at `/demo/` is gone, so there is exactly one
 copy of the interface and nothing to keep in step with it. `src/`, the Telegram handler and
 the migrations are backend and are out of scope for design work.

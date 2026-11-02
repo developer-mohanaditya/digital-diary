@@ -130,8 +130,8 @@ export interface ReminderAi {
 }
 
 // When a deadline's reminder should first fire: three days before the due date, or now when that
-// day has already passed. Three callers set a deadline — the page's composer, a move to
-// Deadline, and the write API — and they have to agree, or the same due date would ping on
+// day has already passed. Three callers set a deadline, the page's composer, a move to
+// Deadline, and the write API, and they have to agree, or the same due date would ping on
 // different days depending on which door the note came through.
 export function reminderTimes(due: string, now: Date): { dueAt: Date; next: Date } {
   const dueAt = new Date(`${due}T09:00:00.000Z`);

@@ -2,7 +2,7 @@
 //
 // Two things make a chat message readable on a phone: a first line that says what happened, and
 // the same order after it every time. Both are easy to lose when each call site writes its own
-// sentence — which is how the bot ended up with three voices saying the same kind of thing (a
+// sentence, which is how the bot ended up with three voices saying the same kind of thing (a
 // full stop, a `key value` dump, and a run of `·`-joined fragments). So the shape lives here:
 //
 //   ✓ Saved to Inbox                 <- the verdict: one glyph, one bold line
@@ -97,7 +97,7 @@ export function storedPreview(text: string, limit = PREVIEW_CHARS): string {
   return flat.length > limit ? `${flat.slice(0, limit).trimEnd()}...` : flat;
 }
 
-const quoted = (text: string) => `<i>"${escapeHtml(storedPreview(text) || '—')}"</i>`;
+const quoted = (text: string) => `<i>"${escapeHtml(storedPreview(text) || '-')}"</i>`;
 
 /* ---------- Saved ---------- */
 
@@ -121,7 +121,7 @@ export function savedMessage(f: SaveFacts): string {
   if (f.due) facts.push(`due ${dayStamp(f.due)}`);
   if (f.state === 'verbatim') facts.push('as written');
   else if (f.state === 'unavailable') facts.push('no cleanup available');
-  else if (f.state === 'failed') facts.push(`cleanup failed — ${escapeHtml((f.error ?? 'unknown error').slice(0, 160))}`);
+  else if (f.state === 'failed') facts.push(`cleanup failed: ${escapeHtml((f.error ?? 'unknown error').slice(0, 160))}`);
   if (f.ms != null) facts.push(duration(f.ms));
   if (f.tokensIn != null || f.tokensOut != null) facts.push(`${f.tokensIn ?? '–'} in / ${f.tokensOut ?? '–'} out`);
   if (f.model) facts.push(escapeHtml(f.model));
@@ -136,7 +136,7 @@ export function savedMessage(f: SaveFacts): string {
 // A refusal always names what did not happen, then what to type instead. `hint` is markup the
 // caller builds from fixed strings, so it may carry <code>.
 export function notSavedMessage(headline: string, hint?: string): string {
-  const lines = [`⚠️ <b>Not saved</b> — ${escapeHtml(headline)}`];
+  const lines = [`⚠️ <b>Not saved</b>, ${escapeHtml(headline)}`];
   if (hint) lines.push('', hint);
   return lines.join('\n');
 }
@@ -181,13 +181,13 @@ export function startMessage(): string {
     '/project /life /task /deadline',
     '',
     '<b>Longer takes</b>',
-    '/reason — a point, then why',
-    '/think — sharpened until it holds',
+    '/reason, a point, then why',
+    '/think, sharpened until it holds',
     '',
     '<b>The diary</b>',
-    '/heartbeat — database and schedule check',
-    '/timezone Europe/Paris — set your clock',
-    '/reclean — re-run the cleanup on old notes',
+    '/heartbeat, database and schedule check',
+    '/timezone Europe/Paris, set your clock',
+    '/reclean, re-run the cleanup on old notes',
   ].join('\n');
 }
 
@@ -251,7 +251,7 @@ export function timezoneSetMessage(zone: string): string {
 
 export function timezoneRefusedMessage(input: string): string {
   return notSavedMessage(
-    `not a timezone I know — "${input}"`,
+    `not a timezone I know, "${input}"`,
     'Use a name like <code>Europe/Paris</code> or <code>Asia/Kolkata</code>.',
   );
 }

@@ -98,7 +98,7 @@ line('token', `valid (@${me.json.result.username}, id ${me.json.result.id})`);
 // 2. Registered webhook
 const info = await api('getWebhookInfo');
 let w = info.json?.result ?? {};
-line('webhook url', w.url ? w.url : '(not set — Telegram delivers nothing)');
+line('webhook url', w.url ? w.url : '(not set: Telegram delivers nothing)');
 line('pending updates', w.pending_update_count ?? 0);
 line('max connections', w.max_connections ?? 'default');
 if (w.allowed_updates) line('allowed updates', JSON.stringify(w.allowed_updates));
@@ -120,7 +120,7 @@ if (flag('--probe') && w.url) {
   line('probe (wrong secret)', `${res.status} ${body}`);
   if (res.status === 401) line('endpoint', 'alive, secret check working');
   else if (res.status === 200) line('endpoint', 'alive, but the secret check is NOT running');
-  else line('endpoint', 'unexpected answer — URL probably points somewhere else');
+  else line('endpoint', 'unexpected answer: URL probably points somewhere else');
 }
 
 // 4. Optional: can the bot message you?

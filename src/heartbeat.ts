@@ -4,7 +4,7 @@
 
 // 08:45, 12:30 and 17:00 on the diary's clock.
 //
-// A beat belongs to a slot, and the first cron run at or after that slot writes it — once, which
+// A beat belongs to a slot, and the first cron run at or after that slot writes it, once, which
 // is what the marker in settings records. Matching the exact minute instead meant that a trigger
 // that was never registered, an entry an hour out after a clock change, or a run that landed a
 // little late each turned the beat off silently. That is how this feature died twice: an empty
@@ -49,8 +49,8 @@ export function beatSlot(now: Date, timeZone: string): BeatSlot | null {
 // The line the phone gets when the beat lands: the heart and the slot it is beating for, then
 // the same counts /heartbeat shows. It names the slot rather than the moment the run happened,
 // because the slot is what the beat is for; a run that had to catch a slot up says how late it
-// was, so a schedule that has drifted looks like one. Without counts — the reads failed, or the
-// build has none — it still says the keep-alive went in, because that is the part that matters.
+// was, so a schedule that has drifted looks like one. Without counts, the reads failed, or the
+// build has none, it still says the keep-alive went in, because that is the part that matters.
 export function beatMessage(slot: BeatSlot, timeZone: string, stats?: HealthStats | null): string {
   const late = slot.lateBy ? ` · ${slot.lateBy}m late` : '';
   const head = `❤️ ${pad(slot.hour)}:${pad(slot.minute)}${late}`;

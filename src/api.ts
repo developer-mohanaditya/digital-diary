@@ -35,7 +35,7 @@ export interface ThoughtRow {
   captures?: { source: string; client?: string | null } | null;
 }
 
-// Where a note came from: the door it came through, and — for the API door — the app that
+// Where a note came from: the door it came through, and (for the API door) the app that
 // filed it ("claude-code"). The words on screen are the page's business; this is what the
 // capture recorded.
 export interface NoteOrigin {

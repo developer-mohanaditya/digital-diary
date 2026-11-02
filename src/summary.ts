@@ -76,7 +76,7 @@ export function summaryMessage(input: {
   if (reminders.length > 0) {
     lines.push('', `⏳ <b>Still open</b> · ${reminders.length}`);
     for (const reminder of reminders) {
-      const due = reminder.dueAt ? ` — ${dueLine(reminder.dueAt)}` : '';
+      const due = reminder.dueAt ? `: ${dueLine(reminder.dueAt)}` : '';
       lines.push(`• ${escapeHtml(reminder.title)}${due}`);
     }
   }
@@ -84,7 +84,7 @@ export function summaryMessage(input: {
 }
 
 // Two cron entries cover CET and CEST, so the run speaks only once the local clock has
-// reached 22:00 — and only once per day, because the hour clocks go back can match twice.
+// reached 22:00, and only once per day, because the hour clocks go back can match twice.
 export function summaryDue(localHour: number, sentOn: string | null, day: string): boolean {
   return localHour >= 22 && sentOn !== day;
 }

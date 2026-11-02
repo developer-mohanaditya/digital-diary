@@ -3,16 +3,16 @@
 // the passphrase at /api/session. The tokens, cards, chips and sheets all come from
 // diary.css beside it, so the markup and the look cannot drift apart.
 const CATS = [
-  { id:'class',    label:'Class',    color:'#4f6ef7' },
+  { id:'class', label:'Class', color:'#4f6ef7' },
   { id:'learning', label:'Learning', color:'#14a37f' },
-  { id:'thought',  label:'Thought',  color:'#e8a33d' },
-  { id:'quote',    label:'Quote',    color:'#c2578a' },
-  { id:'work',     label:'Work',     color:'#64748b' },
-  { id:'project',  label:'Project',  color:'#8b5cf6' },
-  { id:'life',     label:'Life',     color:'#f0643c' },
-  { id:'task',     label:'Task',     color:'#0ea5b7' },
+  { id:'thought', label:'Thought', color:'#e8a33d' },
+  { id:'quote', label:'Quote', color:'#c2578a' },
+  { id:'work', label:'Work', color:'#64748b' },
+  { id:'project', label:'Project', color:'#8b5cf6' },
+  { id:'life', label:'Life', color:'#f0643c' },
+  { id:'task', label:'Task', color:'#0ea5b7' },
   { id:'deadline', label:'Deadline', color:'#e5484d' },
-  { id:'inbox',    label:'Inbox',    color:'#9ca3af' },
+  { id:'inbox', label:'Inbox', color:'#9ca3af' },
 ];
 const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 const MODE_LABEL = { refined:'Refined', verbatim:'Verbatim', reason:'Reason', think:'Think' };
@@ -431,7 +431,7 @@ function duePill(it) {
 
 const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>';
 
-// What a deadline is waiting for, stated in days — and the button that ends the waiting.
+// What a deadline is waiting for, stated in days, and the button that ends the waiting.
 // A deadline is only done when someone says so, and the note is where they decide; the
 // Telegram Done button writes the same row, so the two cannot disagree. The button stays
 // afterwards, to reopen a mistake.
@@ -474,7 +474,7 @@ const hasRawText = it => it.mode !== 'verbatim' && !!it.raw;
 /* ---------- Ledger, sheet ---------- */
 // Three doors lead in: the bot, this page, and the API other projects write through. The note
 // sheet says which one this note came in by, and an API note is named after the app that filed
-// it — "Claude" says something "API" does not. The ledger line stays as it was: a mark on every
+// it, "Claude" says something "API" does not. The ledger line stays as it was: a mark on every
 // row competes with the note itself, and the note is what the day is for.
 const ORIGIN_LABEL = { telegram: 'Telegram', web: 'Web', api: 'API' };
 const CLIENT_LABEL = {
@@ -551,7 +551,7 @@ function noteHTML(ref) {
     </div></div>`;
 }
 
-// The move menu: the note's categories, then a yes/no confirm — and a due date when the target
+// The move menu: the note's categories, then a yes/no confirm, and a due date when the target
 // is Deadline, because a deadline without one is only half a move.
 function moveMenuHTML(it) {
   if (!ui.moveCat) {
@@ -609,7 +609,7 @@ function ledgerHTML(list, k) {
   }).join('');
 }
 // One renderer, six shapes. The Look page samples exactly this code, so what it shows is
-// what the day gets — a picture of the tabs cannot drift from the tabs themselves.
+// what the day gets, a picture of the tabs cannot drift from the tabs themselves.
 const chipColor = id => (id !== 'all' && CAT[id] ? CAT[id].color : 'var(--accent)');
 function tabsHTML(defs, sel, opts = {}) {
   const shape = opts.chips ?? prefs.chips;
@@ -662,8 +662,8 @@ function statCardsHTML(k) {
   const cards = [
     { n: list.length, label: 'entries', title: `${list.length} ${list.length === 1 ? 'entry' : 'entries'}` },
     { n: cats, label: 'categories', title: `${cats} ${cats === 1 ? 'category' : 'categories'}` },
-    { n: known ? compact(tokens) : '—', label: 'tokens', title: known ? `${tokens.toLocaleString()} tokens in and out` : 'No note on this day recorded usage' },
-    { n: known ? neurons.toFixed(1) : '—', label: 'neurons', title: known ? `${neurons.toFixed(1)} neurons, estimated` : 'No note on this day recorded usage' },
+    { n: known ? compact(tokens) : '-', label: 'tokens', title: known ? `${tokens.toLocaleString()} tokens in and out` : 'No note on this day recorded usage' },
+    { n: known ? neurons.toFixed(1) : '-', label: 'neurons', title: known ? `${neurons.toFixed(1)} neurons, estimated` : 'No note on this day recorded usage' },
   ];
   return `<div class="hstats">${cards.map(c =>
     `<div class="hstat" title="${esc(c.title)}"><b>${c.n}</b><span>${c.label}</span></div>`).join('')}</div>`;
@@ -1100,7 +1100,7 @@ function viewSettings() {
       <div class="seg"><button data-action="key-kind" data-v="read" aria-pressed="${state.keyKind === 'read'}">Read keys</button><button data-action="key-kind" data-v="write" aria-pressed="${state.keyKind === 'write'}">Write keys</button></div></div>
     <h2>${state.keyKind === 'write' ? 'Write keys' : 'Read keys'}</h2>
     <p class="muted" style="margin:0 0 2px;font-size:.84rem">${state.keyKind === 'write'
-      ? 'An app files notes into this diary with a write key: one note, or a whole session in one request, and the receipt comes back on Telegram. The limits below work in the other direction — which categories it may write into, and which dates — and a write key cannot read a single note back. This is the key to give Claude Code, Codex, or anything else that should write and nothing more.'
+      ? 'An app files notes into this diary with a write key: one note, or a whole session in one request, and the receipt comes back on Telegram. The limits below work in the other direction (which categories it may write into, and which dates) and a write key cannot read a single note back. This is the key to give Claude Code, Codex, or anything else that should write and nothing more.'
       : 'Any other project reads this diary with a key: notes by day, month, year, category or type, every deadline, and the counts. Give every project its own key, and set its limits as you create it: which categories, which dates, and whether it may read the text at all. A key that leaks then exposes only the slice it was given.'}</p>
     ${keysHTML()}
   </section>
@@ -1188,7 +1188,7 @@ const keycats = () => CATS.map(c => `<label><input type="checkbox" data-cat="${c
 // A key's limits in the words the form used to set them, so the row can be read at a glance:
 // "work, project · since 1 Jan 2026 · counts only".
 function policyWords(p) {
-  if (!p) return 'limits could not be read — this key is refused';
+  if (!p) return 'limits could not be read, this key is refused';
   const cats = p.categories ? p.categories.map(c => (CAT[c] ? CAT[c].label : c)).join(', ') : 'every category';
   const days = p.from && p.to ? `${keyDay(p.from)} – ${keyDay(p.to)}`
     : p.from ? `since ${keyDay(p.from)}`
@@ -1206,7 +1206,7 @@ function keysHTML() {
       ? 'Put it in the app\u2019s environment as DIARY_API_KEY \u2014 the MCP server and the /diary command both read it from there.'
       : 'Put it in the other project\u2019s environment secrets, never in a browser bundle.';
     return `<div class="keyonce">
-      <span class="lab">Your new key — copy it now</span>
+      <span class="lab">Your new key, copy it now</span>
       <div class="keyline">
         <input class="keymono" id="key-value" readonly value="${esc(k.key)}" aria-label="New API key" />
         <button class="cbtn" data-action="key-copy">Copy</button>
@@ -1262,8 +1262,8 @@ function keysHTML() {
       <label class="field"><span>Notes ${write ? 'dated from' : 'written since'}</span><input type="date" id="key-from" /></label>
       <label class="field"><span>Notes ${write ? 'dated until' : 'written until'}</span><input type="date" id="key-to" /></label>
       ${write ? '' : `<label class="field keywide"><span>Note text</span><select id="key-text">
-        <option value="clean">Full text — the notes themselves</option>
-        <option value="none">Counts only — days, categories and word counts, no sentences</option>
+        <option value="clean">Full text, the notes themselves</option>
+        <option value="none">Counts only, days, categories and word counts, no sentences</option>
       </select></label>`}
       <p class="keyhint">${write
         ? 'This key may add notes and nothing else: reading is refused, whatever the fields above say. Leave every category ticked and the dates empty for one that may file anything, on any day.'
@@ -1493,7 +1493,7 @@ function viewLook() {
   <section class="card">
     <div class="lhead"><span class="kicker">Category filters</span></div>
     <h2>How the day's tabs are drawn</h2>
-    <p class="muted" style="margin:0 0 2px;font-size:.84rem">Six shapes, one job. The sample is live — click a category in it.</p>
+    <p class="muted" style="margin:0 0 2px;font-size:.84rem">Six shapes, one job. The sample is live, click a category in it.</p>
     <div class="tabpreview" id="tabpreview">${tabsHTML(LOOK_SAMPLE, ui.previewTab, { chips: prefs.chips, preview: true })}</div>
     <div class="chipset">${CHIPS.map(([v, label]) => `<button class="chipopt" data-action="look-chips" data-v="${v}" aria-pressed="${prefs.chips === v}">${label}</button>`).join('')}</div>
   </section>`;

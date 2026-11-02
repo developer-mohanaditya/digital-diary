@@ -6,10 +6,10 @@
 // There are exactly three places a value can live, and this file is the list of which
 // name belongs where:
 //
-//   1. wrangler.toml  [vars]  — plain values, committed, identical in production and
+//   1. wrangler.toml  [vars], plain values, committed, identical in production and
 //                               local dev because `wrangler dev` loads them too.
-//   2. Cloudflare             — secrets, set in the dashboard, used by the deployed Worker.
-//   3. .dev.vars              — the SAME secret names, same values, for local runs.
+//   2. Cloudflare, secrets, set in the dashboard, used by the deployed Worker.
+//   3. .dev.vars, the SAME secret names, same values, for local runs.
 //
 // A name must appear in exactly one of (1) and (3). A name in both is the bug that made
 // local dev read an empty SUPABASE_URL while production worked: .dev.vars wins, even

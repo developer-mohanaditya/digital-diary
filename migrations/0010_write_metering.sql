@@ -1,7 +1,7 @@
 -- A write is metered by the notes it carries, not only by the request that carried them.
 --
 -- bump_api_usage counts one request. A write key may put 25 notes in one request, so counting
--- requests alone let a 300-a-day ceiling buy 7,500 notes — and with them 7,500 model cleanups.
+-- requests alone let a 300-a-day ceiling buy 7,500 notes, and with them 7,500 model cleanups.
 -- The write route counts the request first (that happens before the body is read, which is what
 -- keeps a flood of large bodies cheap), then adds the rest of the batch here, into the same
 -- per-minute and per-day buckets, so both ceilings are spent at the rate the notes arrive.

@@ -2,7 +2,7 @@
 #
 # .dev.vars is the ONE local file for secrets. There is no .env. `wrangler dev` reads this
 # file, and so do scripts/*.mjs. Anything in it that is also in wrangler.toml [vars] wins,
-# even when its value is empty — which is why the non-secrets are NOT listed here.
+# even when its value is empty, which is why the non-secrets are NOT listed here.
 #
 # Never type a value into a shell command: it lands in history. Use the silent prompt:
 #   npm run secret NAME

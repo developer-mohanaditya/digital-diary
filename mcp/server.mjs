@@ -28,7 +28,7 @@ export const TOOLS = [
     name: 'diary_add_notes',
     title: 'Add notes to the diary',
     description:
-      'File notes into Aweditya\'s private diary — the same diary his Telegram bot writes to. Use it when a ' +
+      'File notes into Aweditya\'s private diary, the same diary his Telegram bot writes to. Use it when a ' +
       'session ends: one note for a single entry, several when the session covered distinct topics. ' +
       `${MARKUP} ` +
       'Each note needs text. category is one of class, learning, thought, quote, work, project, life, task, ' +
@@ -69,7 +69,7 @@ export const TOOLS = [
     name: 'diary_whoami',
     title: 'What this key may do',
     description:
-      'Report the diary key this server is using: its name, scopes, rate limits and policy — which categories and ' +
+      'Report the diary key this server is using: its name, scopes, rate limits and policy, which categories and ' +
       'dates it may touch, and whether it may read text at all. Call it when a write is refused, or before telling ' +
       'the user what can or cannot be filed.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -95,7 +95,7 @@ function receiptSummary(receipt) {
   if (receipt.telegram === 'sent') lines.push('Confirmed on Telegram.');
   if (receipt.telegram === 'failed') lines.push('Telegram confirmation failed; the notes are stored.');
   if (receipt.telegram === 'skipped' && !stored) lines.push('Nothing new to confirm on Telegram.');
-  for (const f of failed) lines.push(`Failed: ${f.category} — ${f.error ?? 'unknown error'}`);
+  for (const f of failed) lines.push(`Failed: ${f.category} (${f.error ?? 'unknown error'})`);
   lines.push(`Receipt ${receipt.code}.`);
   return lines.join('\n');
 }
@@ -122,7 +122,7 @@ export function createDiaryServer({ apiUrl, apiKey, fetchImpl = fetch }) {
     const detail = error ? `${error.code}: ${error.message}` : `the diary answered ${status}`;
     return {
       isError: true,
-      content: [text(`The diary refused that — ${detail}`)],
+      content: [text(`The diary refused that, ${detail}`)],
       structuredContent: { ok: false, status, error },
     };
   };
@@ -176,7 +176,7 @@ export function createDiaryServer({ apiUrl, apiKey, fetchImpl = fetch }) {
     return { isError: true, content: [text(`There is no tool called ${String(params.name).slice(0, 60)}.`) ] };
   };
 
-  // A message in, a response object out — or null for a notification, which takes no answer.
+  // A message in, a response object out, or null for a notification, which takes no answer.
   const handle = async (message) => {
     const id = message && message.id !== undefined ? message.id : null;
     const reply = (result) => ({ jsonrpc: '2.0', id, result });

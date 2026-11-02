@@ -13,18 +13,18 @@
 --
 -- Safe to run again: the move is guarded by the note ids it names, `on conflict` skips a row
 -- already on the shelf, and the deletes only touch what was just archived. Six notes are
--- deliberately absent from that list — the ones written by hand on 23, 25 and 26 October.
+-- deliberately absent from that list, the ones written by hand on 23, 25 and 26 October.
 
 create table if not exists archived_notes (
-  id          uuid primary key,            -- the thought's own id, so a restore is exact
+  id          uuid primary key, -- the thought's own id, so a restore is exact
   day         date not null,
   captured_at timestamptz not null,
   category    text not null,
-  source      text not null,               -- telegram | web | api
+  source      text not null, -- telegram | web | api
   client      text,
   clean_text  text not null,
-  thought     jsonb not null,              -- the whole thought row, as it stood
-  capture     jsonb not null,              -- the whole capture row, as it stood
+  thought     jsonb not null, -- the whole thought row, as it stood
+  capture     jsonb not null, -- the whole capture row, as it stood
   archived_at timestamptz not null default now(),
   reason      text not null default 'sample data written while building the diary'
 );
@@ -38,8 +38,8 @@ select t.id, t.day, t.captured_at, t.category, c.source, c.client, t.clean_text,
   from thoughts t
   join captures c on c.id = t.capture_id
  where t.id in (
-   '466ea514-1ce8-4fc5-9ab3-4bc2d03261dd',  -- "Hello diary. Test."
-   'fb08bf8f-eab0-4b69-ac63-1e604f933485',  -- "Had a coffee with Ram."
+   '466ea514-1ce8-4fc5-9ab3-4bc2d03261dd', -- "Hello diary. Test."
+   'fb08bf8f-eab0-4b69-ac63-1e604f933485', -- "Had a coffee with Ram."
    '9623ac99-5d3f-436e-af1c-9d3483349b36',
    '299ca882-9ace-41c0-a188-14fe1bcbf602',
    'df8cd9cb-443d-4975-b9ce-5590ad65880f',
@@ -48,18 +48,18 @@ select t.id, t.day, t.captured_at, t.category, c.source, c.client, t.clean_text,
    '943a13b2-14bf-43c1-862f-e91fbf538c38',
    'd8e92164-0414-49c0-a30f-f6182912e1ce',
    '7968c27f-848d-450b-bcb0-63fb6fc24e5d',
-   'af8456c4-c884-458f-9e5f-75f75275d5fb',  -- the ClearRoute deadline note and its reminder
+   'af8456c4-c884-458f-9e5f-75f75275d5fb', -- the ClearRoute deadline note and its reminder
    'cf2ebb2b-e290-4a69-ae7a-75163eab5550',
    '2a617581-5c45-4d01-b3a2-8f34b35d2b04',
    '99712488-e076-47bd-b53f-e47b27a3b5b7',
    '1daea694-8ce6-4d1a-8346-599a5983a5aa',
    'c933e562-855c-4ada-82c1-b9121090f1a5',
-   'a5653f03-e12a-4e91-9015-e4aa7bbe1c3d',  -- posted to the webhook by a script
+   'a5653f03-e12a-4e91-9015-e4aa7bbe1c3d', -- posted to the webhook by a script
    'd656ccde-4225-4de9-885c-ba7b707cb3c2',
    'c6b77ac6-f4c0-4da1-9590-37794fc53150',
-   '3a98bb34-6973-48bc-85f1-2223072535aa',  -- the one note typed on the page while testing
+   '3a98bb34-6973-48bc-85f1-2223072535aa', -- the one note typed on the page while testing
    '9691a909-72c5-4ee6-9955-e9eced94242f',
-   '7f0dc538-34dd-4d2e-bd59-d667e50b0055',  -- filed through POST /api/v1/notes
+   '7f0dc538-34dd-4d2e-bd59-d667e50b0055', -- filed through POST /api/v1/notes
    'ab8355cd-a54d-45a9-8c62-d64d4860193e'   -- the webhook check after the move to ink.aweditya.com
  )
 on conflict (id) do nothing;
