@@ -136,10 +136,10 @@ generated`, so a tool with no commands folder is not locked out, only unsuggeste
 
 ### Updating later
 
-The files on this machine are snapshots, so an edit to the skill or to a wrapper reaches a tool only
-when it is fetched again. `/ink update` does that: it refetches both, in every tool that has a
-commands folder, and removes any wrapper the list no longer names. Without the skill, the same loop
-by hand, with `~/.codex/prompts` in place of `~/.claude/commands` for Codex:
+The files on this machine are snapshots, so an edit to the skill or to a wrapper reaches a tool
+only when it is fetched again. `/ink update` does that: it refetches both, in each of the two
+folders it knows, and removes any wrapper the list no longer names. Without the skill, the same
+loop by hand, with `~/.codex/prompts` in place of `~/.claude/commands` for Codex:
 
 ```sh
 base=https://ink.aweditya.com/commands
