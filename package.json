@@ -12,7 +12,11 @@
     "secret": "node scripts/set-secret.mjs",
     "env:check": "node scripts/check-env.mjs",
     "bindings:check": "node scripts/check-bindings.mjs",
-    "doctor": "node scripts/telegram-doctor.mjs"
+    "doctor": "node scripts/telegram-doctor.mjs",
+    "gen:commands": "node scripts/gen-ink-commands.mjs",
+    "gen:skill": "node scripts/sync-skill.mjs",
+    "predev": "node scripts/sync-skill.mjs",
+    "predeploy": "node scripts/sync-skill.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261013.1",

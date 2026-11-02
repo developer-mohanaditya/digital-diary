@@ -10,3 +10,6 @@ logo-drafts/
 
 # Impeccable ships a per-platform launcher binary; it re-downloads on demand.
 .agents/skills/impeccable/scripts/bin/
+
+# Inked drafts and the sent copies
+.ink/

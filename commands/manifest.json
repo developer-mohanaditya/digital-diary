@@ -1,0 +1,466 @@
+[
+  {
+    "command": "/ink-brief",
+    "unit": "one",
+    "depth": "brief",
+    "category": null,
+    "mode": "refine",
+    "does": "a line or two, category from the session"
+  },
+  {
+    "command": "/ink-brief-class",
+    "unit": "one",
+    "depth": "brief",
+    "category": "class",
+    "mode": "refine",
+    "does": "a line or two about class"
+  },
+  {
+    "command": "/ink-brief-deadline",
+    "unit": "one",
+    "depth": "brief",
+    "category": "deadline",
+    "mode": "refine",
+    "does": "a line or two about deadline"
+  },
+  {
+    "command": "/ink-brief-inbox",
+    "unit": "one",
+    "depth": "brief",
+    "category": "inbox",
+    "mode": "refine",
+    "does": "a line or two about inbox"
+  },
+  {
+    "command": "/ink-brief-learning",
+    "unit": "one",
+    "depth": "brief",
+    "category": "learning",
+    "mode": "refine",
+    "does": "a line or two about learning"
+  },
+  {
+    "command": "/ink-brief-life",
+    "unit": "one",
+    "depth": "brief",
+    "category": "life",
+    "mode": "refine",
+    "does": "a line or two about life"
+  },
+  {
+    "command": "/ink-brief-project",
+    "unit": "one",
+    "depth": "brief",
+    "category": "project",
+    "mode": "refine",
+    "does": "a line or two about project"
+  },
+  {
+    "command": "/ink-brief-quote",
+    "unit": "one",
+    "depth": "brief",
+    "category": "quote",
+    "mode": "refine",
+    "does": "a line or two about quote"
+  },
+  {
+    "command": "/ink-brief-task",
+    "unit": "one",
+    "depth": "brief",
+    "category": "task",
+    "mode": "refine",
+    "does": "a line or two about task"
+  },
+  {
+    "command": "/ink-brief-thought",
+    "unit": "one",
+    "depth": "brief",
+    "category": "thought",
+    "mode": "refine",
+    "does": "a line or two about thought"
+  },
+  {
+    "command": "/ink-brief-work",
+    "unit": "one",
+    "depth": "brief",
+    "category": "work",
+    "mode": "refine",
+    "does": "a line or two about work"
+  },
+  {
+    "command": "/ink-class",
+    "unit": "one",
+    "depth": "brief",
+    "category": "class",
+    "mode": "refine",
+    "does": "a line or two about class"
+  },
+  {
+    "command": "/ink-deadline",
+    "unit": "one",
+    "depth": "brief",
+    "category": "deadline",
+    "mode": "refine",
+    "does": "a line or two about deadline, asks for due:"
+  },
+  {
+    "command": "/ink-detail",
+    "unit": "one",
+    "depth": "detail",
+    "category": null,
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker, category from the session"
+  },
+  {
+    "command": "/ink-detail-class",
+    "unit": "one",
+    "depth": "detail",
+    "category": "class",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about class"
+  },
+  {
+    "command": "/ink-detail-deadline",
+    "unit": "one",
+    "depth": "detail",
+    "category": "deadline",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about deadline"
+  },
+  {
+    "command": "/ink-detail-inbox",
+    "unit": "one",
+    "depth": "detail",
+    "category": "inbox",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about inbox"
+  },
+  {
+    "command": "/ink-detail-learning",
+    "unit": "one",
+    "depth": "detail",
+    "category": "learning",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about learning"
+  },
+  {
+    "command": "/ink-detail-life",
+    "unit": "one",
+    "depth": "detail",
+    "category": "life",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about life"
+  },
+  {
+    "command": "/ink-detail-project",
+    "unit": "one",
+    "depth": "detail",
+    "category": "project",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about project"
+  },
+  {
+    "command": "/ink-detail-quote",
+    "unit": "one",
+    "depth": "detail",
+    "category": "quote",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about quote"
+  },
+  {
+    "command": "/ink-detail-task",
+    "unit": "one",
+    "depth": "detail",
+    "category": "task",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about task"
+  },
+  {
+    "command": "/ink-detail-thought",
+    "unit": "one",
+    "depth": "detail",
+    "category": "thought",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about thought"
+  },
+  {
+    "command": "/ink-detail-work",
+    "unit": "one",
+    "depth": "detail",
+    "category": "work",
+    "mode": "refine",
+    "does": "a few paragraphs, with the decision and the blocker about work"
+  },
+  {
+    "command": "/ink-draft",
+    "unit": "draft",
+    "depth": null,
+    "category": null,
+    "mode": null,
+    "does": "drafts the session into .ink/draft.md, revises on request, sends nothing"
+  },
+  {
+    "command": "/ink-guide",
+    "unit": "one",
+    "depth": "guide",
+    "category": null,
+    "mode": "verbatim",
+    "does": "a written-up method, category from the session"
+  },
+  {
+    "command": "/ink-guide-class",
+    "unit": "one",
+    "depth": "guide",
+    "category": "class",
+    "mode": "verbatim",
+    "does": "a written-up method about class"
+  },
+  {
+    "command": "/ink-guide-deadline",
+    "unit": "one",
+    "depth": "guide",
+    "category": "deadline",
+    "mode": "verbatim",
+    "does": "a written-up method about deadline"
+  },
+  {
+    "command": "/ink-guide-inbox",
+    "unit": "one",
+    "depth": "guide",
+    "category": "inbox",
+    "mode": "verbatim",
+    "does": "a written-up method about inbox"
+  },
+  {
+    "command": "/ink-guide-learning",
+    "unit": "one",
+    "depth": "guide",
+    "category": "learning",
+    "mode": "verbatim",
+    "does": "a written-up method about learning"
+  },
+  {
+    "command": "/ink-guide-life",
+    "unit": "one",
+    "depth": "guide",
+    "category": "life",
+    "mode": "verbatim",
+    "does": "a written-up method about life"
+  },
+  {
+    "command": "/ink-guide-project",
+    "unit": "one",
+    "depth": "guide",
+    "category": "project",
+    "mode": "verbatim",
+    "does": "a written-up method about project"
+  },
+  {
+    "command": "/ink-guide-quote",
+    "unit": "one",
+    "depth": "guide",
+    "category": "quote",
+    "mode": "verbatim",
+    "does": "a written-up method about quote"
+  },
+  {
+    "command": "/ink-guide-task",
+    "unit": "one",
+    "depth": "guide",
+    "category": "task",
+    "mode": "verbatim",
+    "does": "a written-up method about task"
+  },
+  {
+    "command": "/ink-guide-thought",
+    "unit": "one",
+    "depth": "guide",
+    "category": "thought",
+    "mode": "verbatim",
+    "does": "a written-up method about thought"
+  },
+  {
+    "command": "/ink-guide-work",
+    "unit": "one",
+    "depth": "guide",
+    "category": "work",
+    "mode": "verbatim",
+    "does": "a written-up method about work"
+  },
+  {
+    "command": "/ink-inbox",
+    "unit": "one",
+    "depth": "brief",
+    "category": "inbox",
+    "mode": "refine",
+    "does": "a line or two about inbox"
+  },
+  {
+    "command": "/ink-learning",
+    "unit": "one",
+    "depth": "brief",
+    "category": "learning",
+    "mode": "refine",
+    "does": "a line or two about learning"
+  },
+  {
+    "command": "/ink-life",
+    "unit": "one",
+    "depth": "brief",
+    "category": "life",
+    "mode": "refine",
+    "does": "a line or two about life"
+  },
+  {
+    "command": "/ink-note",
+    "unit": "one",
+    "depth": "note",
+    "category": null,
+    "mode": "refine",
+    "does": "a short paragraph or two, category from the session"
+  },
+  {
+    "command": "/ink-note-class",
+    "unit": "one",
+    "depth": "note",
+    "category": "class",
+    "mode": "refine",
+    "does": "a short paragraph or two about class"
+  },
+  {
+    "command": "/ink-note-deadline",
+    "unit": "one",
+    "depth": "note",
+    "category": "deadline",
+    "mode": "refine",
+    "does": "a short paragraph or two about deadline"
+  },
+  {
+    "command": "/ink-note-inbox",
+    "unit": "one",
+    "depth": "note",
+    "category": "inbox",
+    "mode": "refine",
+    "does": "a short paragraph or two about inbox"
+  },
+  {
+    "command": "/ink-note-learning",
+    "unit": "one",
+    "depth": "note",
+    "category": "learning",
+    "mode": "refine",
+    "does": "a short paragraph or two about learning"
+  },
+  {
+    "command": "/ink-note-life",
+    "unit": "one",
+    "depth": "note",
+    "category": "life",
+    "mode": "refine",
+    "does": "a short paragraph or two about life"
+  },
+  {
+    "command": "/ink-note-project",
+    "unit": "one",
+    "depth": "note",
+    "category": "project",
+    "mode": "refine",
+    "does": "a short paragraph or two about project"
+  },
+  {
+    "command": "/ink-note-quote",
+    "unit": "one",
+    "depth": "note",
+    "category": "quote",
+    "mode": "refine",
+    "does": "a short paragraph or two about quote"
+  },
+  {
+    "command": "/ink-note-task",
+    "unit": "one",
+    "depth": "note",
+    "category": "task",
+    "mode": "refine",
+    "does": "a short paragraph or two about task"
+  },
+  {
+    "command": "/ink-note-thought",
+    "unit": "one",
+    "depth": "note",
+    "category": "thought",
+    "mode": "refine",
+    "does": "a short paragraph or two about thought"
+  },
+  {
+    "command": "/ink-note-work",
+    "unit": "one",
+    "depth": "note",
+    "category": "work",
+    "mode": "refine",
+    "does": "a short paragraph or two about work"
+  },
+  {
+    "command": "/ink-project",
+    "unit": "one",
+    "depth": "brief",
+    "category": "project",
+    "mode": "refine",
+    "does": "a line or two about project"
+  },
+  {
+    "command": "/ink-push",
+    "unit": "push",
+    "depth": null,
+    "category": null,
+    "mode": null,
+    "does": "sends the reviewed draft in one request, then archives it"
+  },
+  {
+    "command": "/ink-quote",
+    "unit": "one",
+    "depth": "brief",
+    "category": "quote",
+    "mode": "refine",
+    "does": "a line or two about quote"
+  },
+  {
+    "command": "/ink-split",
+    "unit": "split",
+    "depth": "note",
+    "category": null,
+    "mode": "refine",
+    "does": "one note per distinct decision or topic"
+  },
+  {
+    "command": "/ink-task",
+    "unit": "one",
+    "depth": "brief",
+    "category": "task",
+    "mode": "refine",
+    "does": "a line or two about task"
+  },
+  {
+    "command": "/ink-thought",
+    "unit": "one",
+    "depth": "brief",
+    "category": "thought",
+    "mode": "refine",
+    "does": "a line or two about thought"
+  },
+  {
+    "command": "/ink-threads",
+    "unit": "threads",
+    "depth": "note",
+    "category": null,
+    "mode": "refine",
+    "does": "one note per separate line of work"
+  },
+  {
+    "command": "/ink-work",
+    "unit": "one",
+    "depth": "brief",
+    "category": "work",
+    "mode": "refine",
+    "does": "a line or two about work"
+  }
+]
