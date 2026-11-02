@@ -312,6 +312,7 @@ function route() {
     if (p[1] && p[2]) return { view:'month', y:+p[1], m:+p[2] };
     return { view:'year', y: +p[1] || now.getFullYear() };
   }
+  if (p[0] === 'settings' && p[1] === 'connect') return { view:'connect' };
   if (p[0] === 'settings' && p[1] === 'look') return { view:'look' };
   if (p[0] === 'settings') return { view:'settings' };
   return { view:'home' };
@@ -1096,6 +1097,8 @@ function viewSettings() {
 
   <section class="card">
     <div class="lhead"><span class="kicker">Access</span><span class="muted" style="font-size:.76rem">/api/v1</span></div>
+    <div class="setrow"><div><span class="lab">Connecting an agent</span><span class="sub">The prompt to paste, the files it reads, and the key it files with</span></div>
+      <a class="microbtn" href="#/settings/connect">Set up an agent →</a></div>
     <div class="setrow"><div><span class="lab">Which kind of key</span><span class="sub">A read key pulls notes out; a write key files notes in. They are separate keys</span></div>
       <div class="seg"><button data-action="key-kind" data-v="read" aria-pressed="${state.keyKind === 'read'}">Read keys</button><button data-action="key-kind" data-v="write" aria-pressed="${state.keyKind === 'write'}">Write keys</button></div></div>
     <h2>${state.keyKind === 'write' ? 'Write keys' : 'Read keys'}</h2>
@@ -1203,7 +1206,7 @@ function keysHTML() {
     const expires = k.expiresAt ? `Expires ${keyWhen(k.expiresAt)}.` : 'It does not expire.';
     // Where the key belongs, which is the question the one-time panel exists to answer.
     const where = isWriteKey(k)
-      ? 'Put it in the app\u2019s environment as DIARY_API_KEY \u2014 the MCP server and the /diary command both read it from there.'
+      ? 'Put it in the app\u2019s environment as DIARY_API_KEY: the MCP server and the ink commands both read it from there.'
       : 'Put it in the other project\u2019s environment secrets, never in a browser bundle.';
     return `<div class="keyonce">
       <span class="lab">Your new key, copy it now</span>
@@ -1217,7 +1220,7 @@ function keysHTML() {
           : `Up to ${k.perMinute} requests a minute, ${k.perDay} a day. `) : ''}
         This is the only time it is shown: the diary keeps a hash, so it cannot be read back.
         ${where}</p>
-      <div class="passrow" style="margin-top:10px"><button class="btn" data-action="key-done">Done</button></div>
+      <div class="passrow" style="margin-top:10px"><button class="cbtn" data-action="key-prompt">Copy the setup prompt</button><button class="btn" data-action="key-done">Done</button></div>
     </div>`;
   }
 
@@ -1424,6 +1427,31 @@ async function copyKey() {
   }
 }
 
+// The clipboard is not guaranteed on a plain origin, so a throwaway textarea is the fallback
+// rather than a message asking the owner to do by hand what the button was for.
+function copyText(text, ok) {
+  const done = () => toast(ok || 'Copied.');
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    document.body.appendChild(ta);
+    ta.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (_) {}
+    ta.remove();
+    toast(copied ? (ok || 'Copied.') : 'Copying is blocked here; select the text and press Ctrl/Cmd + C.');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } else fallback();
+}
+function copyBlock(el) {
+  if (el) copyText(el.textContent, 'Copied.');
+}
+
 async function revokeKey(id) {
   const row = document.querySelector(`[data-action="key-revoke"][data-v="${id}"]`);
   const name = row && row.dataset.name ? row.dataset.name : 'this key';
@@ -1500,6 +1528,79 @@ function viewLook() {
 }
 
 
+/* ---------- Connect ---------- */
+// The handover in the words the owner can paste: the agent reads the page that owns the
+// detail, and the key rides in the same block as the sentence saying where it goes. Every
+// line here is a link to a served file or a block with a copy button, because the point of
+// the section is that nothing has to be retyped by hand.
+const CONNECT_PAGE = 'https://ink.aweditya.com/connect.md';
+const SKILL_PAGE = 'https://ink.aweditya.com/skills/ink/SKILL.md';
+const COMMANDS_PAGE = 'https://github.com/developer-mohanaditya/digital-diary/tree/main/commands';
+const CLAUDE_ADD = [
+  'claude mcp add --transport stdio --scope user diary \\',
+  '  --env DIARY_API_KEY=ddk_live_YOUR_KEY \\',
+  '  -- npx -y github:developer-mohanaditya/digital-diary ink-mcp',
+].join('\n');
+const CURL_CHECK = [
+  'curl -s https://ink.aweditya.com/api/v1/me \\',
+  '  -H "Authorization: Bearer $DIARY_API_KEY"',
+].join('\n');
+
+// The placeholder keeps the block worth copying before a key exists; the panel that reveals a
+// new key copies the same words with the secret already in place.
+function setupPrompt(key) {
+  return [
+    'Connect to my ink diary at ink.aweditya.com and set up filing.',
+    `Read ${CONNECT_PAGE} first. It is the whole setup; follow it step by step.`,
+    `Then fetch the skill file at ${SKILL_PAGE} and save it where you load skills from.`,
+    `My write key is ${key || '<your write key>'}. Keep it in DIARY_API_KEY in .env, never print it, never commit it.`,
+    'File one test note, report the receipt to me, and stop there.',
+  ].join('\n');
+}
+
+function viewConnect() {
+  const key = state.newKey && state.newKey.key ? state.newKey.key : '';
+  return `
+  <section class="hero sethead">
+    <div>
+      <span class="kicker">Connect</span><h1>Connect an agent</h1>
+      <p class="muted" style="margin:0">One block to paste, one file for the agent to read, and a write key that files notes and cannot read one back.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">The prompt</span>${key ? '<span class="muted" style="font-size:.76rem">with your new key</span>' : ''}</div>
+    <h2>Paste this into the agent</h2>
+    <p class="muted" style="margin:0;font-size:.84rem">Paste it once and let the agent work: it reads the setup page, saves the skill where it loads skills from, and files one note to prove the pipe. ${key ? 'Your new key is already in it.' : 'Without a key it says where one goes; mint one and come back.'}</p>
+    <pre class="pasteline wrap" id="setup-prompt">${esc(setupPrompt(key))}</pre>
+    <div class="crow"><button class="cbtn" data-action="copy-prompt">Copy the prompt</button>${key ? '' : '<a class="microbtn" href="#/settings">Get a write key →</a>'}</div>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">What it reads</span></div>
+    <div class="setrow"><div><span class="lab">The setup page</span><span class="sub">The steps, the fields, the markup notes render, and what each refusal means</span></div>
+      <a class="microbtn" href="${CONNECT_PAGE}" target="_blank" rel="noreferrer">connect.md →</a></div>
+    <div class="setrow"><div><span class="lab">The skill file</span><span class="sub">How many notes a session becomes, how long each runs, where each one goes</span></div>
+      <a class="microbtn" href="${SKILL_PAGE}" target="_blank" rel="noreferrer">SKILL.md →</a></div>
+    <div class="setrow"><div><span class="lab">The commands</span><span class="sub">Fifty-eight of them, one per shape: ink-brief-work, ink-note-project, ink-guide</span></div>
+      <a class="microbtn" href="${COMMANDS_PAGE}" target="_blank" rel="noreferrer">commands/ →</a></div>
+    <div class="setrow"><div><span class="lab">A write key</span><span class="sub">One per agent, so revoking it stops that agent and nothing else</span></div>
+      <a class="microbtn" href="#/settings">Create one →</a></div>
+  </section>
+
+  <section class="card">
+    <div class="lhead"><span class="kicker">Installing it</span></div>
+    <h2>The server the agent runs</h2>
+    <p class="muted" style="margin:0;font-size:.84rem">Claude Code takes it in one line. Codex and Cursor take the same server in their own config, and the setup page has both blocks.</p>
+    <pre class="pasteline" id="setup-claude">${esc(CLAUDE_ADD)}</pre>
+    <div class="crow"><button class="cbtn" data-action="copy-block" data-v="setup-claude">Copy</button></div>
+    <p class="muted" style="margin:20px 0 0;font-size:.84rem">Or no server at all, with the key already in the environment:</p>
+    <pre class="pasteline" id="setup-curl">${esc(CURL_CHECK)}</pre>
+    <div class="crow"><button class="cbtn" data-action="copy-block" data-v="setup-curl">Copy</button></div>
+    <p class="note">The first note is the proof. It comes back as a receipt with the code to quote and whether Telegram was told, and the agent repeats that back rather than a cheerful done.</p>
+  </section>`;
+}
+
 /* ---------- Crumbs + render ---------- */
 const iconSVG = (body, attrs = '') => `<svg ${attrs}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const DASH_ICON = iconSVG('<rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/>');
@@ -1537,6 +1638,7 @@ function renderCrumbs(r) {
   if (r.view === 'home') trail = `<span class="crumbhome" title="Home">${HOME_CRUMB}</span>`;
   if (r.view === 'year') trail += `<span class="sep">/</span><a href="#/dashboard">Dashboard</a><span class="sep">/</span><span aria-current="page">${r.y}</span>`;
   if (r.view === 'settings') trail += '<span class="sep">/</span><span aria-current="page">Settings</span>';
+  if (r.view === 'connect') trail += '<span class="sep">/</span><a href="#/settings">Settings</a><span class="sep">/</span><span aria-current="page">Connect</span>';
   if (r.view === 'look') trail += '<span class="sep">/</span><a href="#/settings">Settings</a><span class="sep">/</span><span aria-current="page">Look</span>';
   if (r.view === 'month' || r.view === 'day') trail += `<span class="sep">/</span><a href="#/y/${r.y}/m/${r.m}">${MONTHS[r.m-1]} ${r.y}</a>`;
   if (r.view === 'day') trail += `<span class="sep">/</span><span aria-current="page">${r.d}</span>`;
@@ -1561,7 +1663,7 @@ function renderCrumbs(r) {
   tools.innerHTML = isDay
     ? `${statCardsHTML(k)}<button class="newbtn" data-action="compose" title="New note (n)" aria-label="New note">${PLUS_ICON}<span>New note</span></button>`
     : r.view === 'settings' ? SIGNOUT_BTN
-    : r.view === 'look' ? '<a class="microbtn" href="#/settings">Done →</a>'
+    : r.view === 'look' || r.view === 'connect' ? '<a class="microbtn" href="#/settings">Done →</a>'
     : back;
 }
 function render() {
@@ -1585,6 +1687,7 @@ function render() {
     r.view === 'year' ? statsPage(r.y) :
     r.view === 'settings' ? viewSettings() :
     r.view === 'look' ? viewLook() :
+    r.view === 'connect' ? viewConnect() :
     r.view === 'month' ? statsPage(r.y, r.m) :
     r.view === 'day' ? dayPage(r.y, r.m, r.d, false) :
     dayPage(t.getFullYear(), t.getMonth() + 1, t.getDate(), true);
@@ -1736,6 +1839,9 @@ document.addEventListener('click', e => {
   else if (a === 'refresh' || a === 'retry') boot();
   else if (a === 'signout') signOut();
   else if (a === 'key-copy') copyKey();
+  else if (a === 'key-prompt') copyText(setupPrompt(state.newKey ? state.newKey.key : ''), 'The prompt and the key are copied. Paste it into the agent.');
+  else if (a === 'copy-prompt') copyBlock($('#setup-prompt'));
+  else if (a === 'copy-block') copyBlock(document.getElementById(v));
   else if (a === 'key-done') { state.newKey = null; render(); }
   else if (a === 'key-revoke') revokeKey(v);
   else if (a === 'keys-retry') { state.keys = null; state.keysError = ''; ensureKeys(); }
