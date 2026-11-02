@@ -10,7 +10,7 @@
 -- `dedupe_key` is the caller's Idempotency-Key, kept verbatim rather than hashed. A retried
 -- request finds the capture it already made and answers with the same receipt instead of
 -- filing the note a second time. The uniqueness that makes that retry a no-op is the one the
--- bot already relies on — (source, source_update_id), with the id derived from the key — so
+-- bot already relies on ((source, source_update_id), with the id derived from the key) so
 -- this index is here to make the lookup an exact match, not to enforce anything.
 --
 -- Both are null for every row that already exists and for every Telegram or page capture.

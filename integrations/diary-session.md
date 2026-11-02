@@ -27,35 +27,35 @@ literal characters:
 | a blank line between lines | a new paragraph |
 | a line starting `- ` | a bullet list |
 | a line starting `1. ` | a numbered list |
-| `**words**` | **bold** — at most three per note |
+| `**words**` | **bold**, at most three per note |
 | `*words*` | *italic* |
-| `==words==` | highlight — for a date or deadline not to forget, at most two |
+| `==words==` | highlight, for a date or deadline not to forget, at most two |
 
 No headings, no tables, no code fences, no emoji. A short note about one thing stays one plain
 paragraph with no markup at all.
 
 ## What the argument asks for
 
-- `one note` — the whole session as a single entry.
-- `split` — one entry per topic, decision or piece of work, each filed under its own category.
-- `notes: X; Y; Z` — exactly those lines, one note each, as close to the words given as possible.
-- `deadline <when>: …` — a `deadline` note with `due` set to that date.
+- `one note`, the whole session as a single entry.
+- `split`, one entry per topic, decision or piece of work, each filed under its own category.
+- `notes: X; Y; Z`, exactly those lines, one note each, as close to the words given as possible.
+- `deadline <when>: …`, a `deadline` note with `due` set to that date.
 
 ## Filing it
 
 Call `diary_add_notes` with:
 
-- `client` — the app you are: `claude-code`, `codex`, or similar.
-- `idempotencyKey` — one per session and stable, like `claude-code-2026-10-26-write-api`. The same
+- `client`, the app you are: `claude-code`, `codex`, or similar.
+- `idempotencyKey`, one per session and stable, like `claude-code-2026-10-26-write-api`. The same
   key a second time files nothing and returns the first receipt, so a retry is always safe.
-- `mode` — `verbatim` when the prose above is already what should be stored, `refine` when the
+- `mode`, `verbatim` when the prose above is already what should be stored, `refine` when the
   diary should format it for you.
-- `category` — whichever fits (`work`, `project`, `learning`, `thought`, `life`, `task`, `class`,
+- `category`, whichever fits (`work`, `project`, `learning`, `thought`, `life`, `task`, `class`,
   `quote`); `deadline` with `due` for anything dated.
 
 Then tell Aweditya what the receipt says: how many notes were filed, under which categories, the
 receipt code, the words the Telegram confirmation carried, and anything that failed. If it is
-refused (403), say so plainly and call `diary_whoami` to show which limit the key carries — do not
+refused (403), say so plainly and call `diary_whoami` to show which limit the key carries, do not
 try again with different categories to get around it.
 
 ## If the MCP server is not set up

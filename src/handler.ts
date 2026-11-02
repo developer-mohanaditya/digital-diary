@@ -45,7 +45,7 @@ export interface ThoughtInput {
   tokens_out?: number | null;
   cleanup_model?: string | null;
   // How long the cleanup took (0012). Absent for verbatim notes, for a build with no refiner,
-  // and for anything older than the column — the page shows nothing rather than a zero.
+  // and for anything older than the column, the page shows nothing rather than a zero.
   cleanup_ms?: number | null;
 }
 
@@ -71,7 +71,7 @@ export interface HealthStats {
 }
 
 // What the write API reads back to answer a caller: the captures it already made for a retried
-// request, and the notes those captures hold. Both are optional — a store without them simply
+// request, and the notes those captures hold. Both are optional, a store without them simply
 // cannot file API notes, and nothing else has to know.
 export interface ExistingCapture {
   id: string;
@@ -105,7 +105,7 @@ export interface Store {
   // Optional, so a store without it simply never beats instead of failing the schedule.
   beat?(note: string): Promise<void>;
   // The beat's marker: the slot that has already been beaten, e.g. "2026-10-27T12:30". Optional
-  // like the rest — and a store without it never beats, rather than beating twice.
+  // like the rest, and a store without it never beats, rather than beating twice.
   heartbeatMark?(): Promise<string | null>;
   markHeartbeat?(slot: string): Promise<void>;
   // The 10pm summary. Optional, so a store without them has no summary instead of a
@@ -115,7 +115,7 @@ export interface Store {
   summarySentOn?(): Promise<string | null>;
   markSummarySent?(day: string): Promise<void>;
   // The weekly copy out (0013). Optional like the rest: a store without them takes no snapshot,
-  // sends none, and fails nothing — the diary simply has no copy outside the database.
+  // sends none, and fails nothing, the diary simply has no copy outside the database.
   latestBackup?(): Promise<{ available: boolean; backup: Backup | null }>;
   takeBackup?(reason: string): Promise<void>;
   backupExportedOn?(): Promise<string | null>;

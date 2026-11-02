@@ -37,14 +37,14 @@
   // not a washed theme-adjusted one. These mirror the kit's picker
   // colors in site/styles/kinpaku-kit.css; keep them in sync by hand.
   const C = {
-    brand:     'oklch(84% 0.19 80.46)',         // kinpaku gold
-    brandHov:  'oklch(86% 0.07 84)',            // kinpaku-pale (hover lift)
-    brandSoft: 'oklch(84% 0.19 80.46 / 0.18)',  // kinpaku-dim
-    ink:       'oklch(4% 0.004 95)',            // lacquer-deep
-    ash:       'oklch(55% 0.018 82)',           // warm muted text
-    paper:     'oklch(98% 0.005 95 / 0.92)',    // light overlay on user pages
+    brand:     'oklch(84% 0.19 80.46)', // kinpaku gold
+    brandHov:  'oklch(86% 0.07 84)', // kinpaku-pale (hover lift)
+    brandSoft: 'oklch(84% 0.19 80.46 / 0.18)', // kinpaku-dim
+    ink:       'oklch(4% 0.004 95)', // lacquer-deep
+    ash:       'oklch(55% 0.018 82)', // warm muted text
+    paper:     'oklch(98% 0.005 95 / 0.92)', // light overlay on user pages
     paperSolid:'oklch(98% 0.005 95)',
-    mist:      'oklch(90% 0.008 82 / 0.6)',     // light hairline
+    mist:      'oklch(90% 0.008 82 / 0.6)', // light hairline
     white:     'oklch(99% 0 0)',
   };
   // Picker bar chrome - mirrors .live-demo-gbar / .live-demo-ctx in kinpaku-kit.css.
@@ -456,8 +456,8 @@
   let annotState = { comments: [], strokes: [] };
   let annotActive = false;
   // `annotPointer` is either:
-  //   { kind: 'new',   x0, y0, moved, strokeEl, strokePoints }   creating a stroke/pin
-  //   { kind: 'pin',   idx, startPointer, startPin, moved }     dragging an existing pin
+  //   { kind: 'new', x0, y0, moved, strokeEl, strokePoints }   creating a stroke/pin
+  //   { kind: 'pin', idx, startPointer, startPin, moved }     dragging an existing pin
   let annotPointer = null;
   let annotEditing = null;        // { idx, input, wrapEl }
   let annotLastPinClick = { idx: -1, time: 0 }; // for click-click-to-delete
@@ -6349,7 +6349,7 @@
         // Mid-generation the source legitimately holds a scaffold wrapper
         // with no variants yet (the server-side preflight wraps before the
         // agent writes). Tearing the session down here would destroy an
-        // in-flight generation; stay in GENERATING — the variant observer
+        // in-flight generation; stay in GENERATING, the variant observer
         // is armed and the server re-delivers a missed `done`.
         if (!opts.generationCompleted) {
           console.log('[impeccable] Source has scaffold but no variants yet; still generating.');
@@ -6357,7 +6357,7 @@
         }
         // Generation finished, yet the read shows only the scaffold: the
         // source view is stale and no further event will fire. Re-read a
-        // few times before surfacing recovery — a single silent return
+        // few times before surfacing recovery, a single silent return
         // here would strand the tab in GENERATING forever.
         const attempt = opts.attempt || 0;
         if (attempt < COMPLETED_SOURCE_FALLBACK_RETRIES) {
@@ -6687,7 +6687,7 @@
   // divs are scaffolded into page source, so SSR frameworks (Next.js App
   // Router) server-render them; toggling their `hidden` / inline `style` /
   // `--p-*` client-side trips a React 19 hydration mismatch on the next
-  // Fast-Refresh re-render — the same failure mode the scroll-anchor (#276)
+  // Fast-Refresh re-render, the same failure mode the scroll-anchor (#276)
   // and pick-cursor (#286) fixes address. A stylesheet rule has the same
   // computed effect without mutating any hydrated element's attributes.
   // (steps params keep driving `data-p-*` attributes, matching scoped CSS.)
@@ -7808,7 +7808,7 @@
   // Progress events must never overtake the event that CREATES their session:
   // the Go-time checkpoint and the generate POST are concurrent fetches, and
   // when the checkpoint lands first the server rightly refuses it as
-  // unknown_session — which must mean "foreign leftovers", not "you raced
+  // unknown_session, which must mean "foreign leftovers", not "you raced
   // your own Go click". The gate serializes creation before progress.
   let sessionCreationGate = Promise.resolve();
 
@@ -9123,10 +9123,10 @@ void main() {
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
         -1, -1, 0, 1,
          1, -1, 1, 1,
-        -1,  1, 0, 0,
-        -1,  1, 0, 0,
+        -1, 1, 0, 0,
+        -1, 1, 0, 0,
          1, -1, 1, 1,
-         1,  1, 1, 0,
+         1, 1, 1, 0,
       ]), gl.STATIC_DRAW);
       const posLoc = gl.getAttribLocation(program, 'a_position');
       const uvLoc = gl.getAttribLocation(program, 'a_uv');
@@ -11654,7 +11654,7 @@ void main() {
       boxShadow: P.shadow,
       fontFamily: FONT, fontSize: '12px', lineHeight: '1',
       opacity: '0',
-      overflow: 'hidden',          // clip the full-bleed brand mark to the bar radius
+      overflow: 'hidden', // clip the full-bleed brand mark to the bar radius
       maxWidth: 'calc(100vw - 16px)',
       boxSizing: 'border-box',
       transition: 'opacity 0.3s ' + EASE + ', transform 0.3s ' + EASE,
@@ -12340,13 +12340,13 @@ void main() {
   let designShadow = null;
   let designState = {
     open: false,
-    tab: 'visual',          // 'visual' | 'raw'
-    parsed: null,           // parseDesignMd output (frontmatter + body sections)
-    sidecar: null,          // .impeccable/design.json v2 payload (extensions + components + narrative)
+    tab: 'visual', // 'visual' | 'raw'
+    parsed: null, // parseDesignMd output (frontmatter + body sections)
+    sidecar: null, // .impeccable/design.json v2 payload (extensions + components + narrative)
     hasMd: false,
     hasSidecar: false,
-    present: null,          // true/false once fetch resolves
-    raw: null,              // raw DESIGN.md for the raw tab
+    present: null, // true/false once fetch resolves
+    raw: null, // raw DESIGN.md for the raw tab
     mdNewerThanJson: false, // stale-hint flag
     loading: false,
     error: null,
@@ -12416,15 +12416,15 @@ void main() {
   // Neutral panel palette - deliberately NOT Impeccable-branded. The panel is
   // a viewer of the project's design system, not an Impeccable surface.
   const DP = {
-    canvas:   'oklch(94% 0 0)',            // panel background
-    tile:     'oklch(98.5% 0 0)',          // card-on-canvas
-    tileAlt:  'oklch(96% 0 0)',            // subtler tile for inner surfaces
+    canvas:   'oklch(94% 0 0)', // panel background
+    tile:     'oklch(98.5% 0 0)', // card-on-canvas
+    tileAlt:  'oklch(96% 0 0)', // subtler tile for inner surfaces
     ink:      'oklch(15% 0 0)',
     ink2:     'oklch(35% 0 0)',
     meta:     'oklch(55% 0 0)',
     hairline: 'oklch(88% 0 0)',
     hairlineSoft: 'oklch(92% 0 0)',
-    amber:    'oklch(77% 0.13 82)',         // stale-hint accent
+    amber:    'oklch(77% 0.13 82)', // stale-hint accent
     amberBg:  'oklch(89% 0.055 84)',
   };
 
@@ -13041,7 +13041,7 @@ void main() {
     // If base value is OKLCH, synthesize an 8-step ramp across lightness.
     const m = typeof c.value === 'string' && c.value.match(/^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+))?\s*\)$/i);
     if (!m) return [];
-    const [, , chroma, hue] = m;
+    const [,, chroma, hue] = m;
     const steps = [20, 32, 44, 56, 68, 80, 90, 96];
     return steps.map((l) => `oklch(${l}% ${chroma} ${hue})`);
   }

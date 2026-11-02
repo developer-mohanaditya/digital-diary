@@ -1,7 +1,7 @@
 // When the weekly copy leaves the database, and what it is called.
 //
 // The snapshot itself is taken inside Postgres by pg_cron (migration 0013). Getting a copy *out*
-// is the Worker's job, because the Worker is the only thing here that can reach Telegram — and a
+// is the Worker's job, because the Worker is the only thing here that can reach Telegram, and a
 // backup that lives only in the project it protects is half a backup. The rule is one export a
 // week: the first cron run on a Monday sends the snapshot the 03:00 job just took, and the
 // settings marker keeps the rest of that day's runs quiet.

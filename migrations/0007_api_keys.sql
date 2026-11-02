@@ -6,15 +6,15 @@
 
 create table if not exists api_keys (
   id           uuid primary key default gen_random_uuid(),
-  name         text not null,                      -- "portfolio site", "analysis notebook"
-  prefix       text not null unique,               -- ddk_live_xxxxxxx, the lookup index
-  hash         text not null,                      -- sha256 of the whole key, hex
+  name         text not null, -- "portfolio site", "analysis notebook"
+  prefix       text not null unique, -- ddk_live_xxxxxxx, the lookup index
+  hash         text not null, -- sha256 of the whole key, hex
   scopes       text[] not null default '{notes:read,deadlines:read,stats:read}',
   per_minute   int  not null default 60,
   per_day      int  not null default 5000,
   created_at   timestamptz not null default now(),
   last_used_at timestamptz,
-  expires_at   timestamptz,                        -- null: no expiry
+  expires_at   timestamptz, -- null: no expiry
   revoked_at   timestamptz                         -- set by Revoke, checked on every request
 );
 

@@ -2,7 +2,7 @@
 -- Raw captures are append-only: never update or delete rows here.
 
 create table if not exists categories (
-  id          text primary key,            -- class | learning | thought | quote | work | project | life | task | inbox
+  id          text primary key, -- class | learning | thought | quote | work | project | life | task | inbox
   label       text not null,
   sort_order  int  not null
 );
@@ -17,11 +17,11 @@ on conflict (id) do nothing;
 create table if not exists captures (
   id                 uuid primary key default gen_random_uuid(),
   source             text not null default 'telegram',
-  source_update_id   bigint not null,       -- Telegram update_id, used for idempotency
+  source_update_id   bigint not null, -- Telegram update_id, used for idempotency
   source_chat_id     bigint not null,
   kind               text not null check (kind in ('text', 'voice', 'photo', 'link')),
-  raw_text           text,                   -- exactly what was typed or transcribed
-  media_path         text,                   -- Supabase Storage path for voice/photo
+  raw_text           text, -- exactly what was typed or transcribed
+  media_path         text, -- Supabase Storage path for voice/photo
   command_mode       text check (command_mode in ('refine', 'verbatim', 'reason', 'think')),
   command_category   text references categories(id),
   status             text not null default 'received'
@@ -36,14 +36,14 @@ create table if not exists captures (
 create table if not exists thoughts (
   id               uuid primary key default gen_random_uuid(),
   capture_id       uuid not null references captures(id),
-  day              date not null,           -- local day of capture
+  day              date not null, -- local day of capture
   captured_at      timestamptz not null,
   category         text not null references categories(id),
   category_source  text not null check (category_source in ('tag', 'auto', 'manual')),
   mode             text not null check (mode in ('refine', 'verbatim', 'reason', 'think')),
-  clean_text       text not null,          -- shown in the diary
-  raw_text         text not null,          -- kept forever, for reprocessing and training
-  reasoning        text,                   -- /reason and /think output, if any
+  clean_text       text not null, -- shown in the diary
+  raw_text         text not null, -- kept forever, for reprocessing and training
+  reasoning        text, -- /reason and /think output, if any
   created_at       timestamptz not null default now()
 );
 create index if not exists thoughts_day_idx on thoughts (day);

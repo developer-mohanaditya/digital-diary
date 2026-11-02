@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDiaryServer } from '../mcp/server.mjs';
 
 // The MCP server. Two things are worth proving: that it speaks both the current revision and the
-// handshake older clients open with, and that its two tools say what the diary actually did —
+// handshake older clients open with, and that its two tools say what the diary actually did, 
 // including a refusal, which a model has to relay rather than paper over. The last test runs the
 // real entry point as a process, because the framing is half of what an MCP server is.
 
@@ -108,7 +108,7 @@ describe('the MCP server', () => {
       jsonrpc: '2.0', id: 1, method: 'tools/call',
       params: { name: 'diary_add_notes', arguments: { notes: [{ text: 'a' }, { text: 'b' }] } },
     });
-    expect(res.result.content[0].text).toContain('Failed: life — Supabase 500: nope');
+    expect(res.result.content[0].text).toContain('Failed: life (Supabase 500: nope)');
   });
 
   it('tells the model what the key may do', async () => {

@@ -35,7 +35,7 @@ describe('summaryMessage', () => {
     });
     expect(text.split('\n').slice(0, 2)).toEqual(['☾ <b>Sunday 25 October</b>', 'No notes today.']);
     expect(text).toContain('⏳ <b>Still open</b> · 1');
-    expect(text).toContain('• Submit the tax form — Tue 27 Oct');
+    expect(text).toContain('• Submit the tax form: Tue 27 Oct');
   });
 
   it('leaves a review without a due date as a plain bullet', () => {
@@ -46,7 +46,7 @@ describe('summaryMessage', () => {
       reminders: [{ kind: 'review', title: 'Reread the chapter', dueAt: null }],
     });
     expect(text.endsWith('• Reread the chapter')).toBe(true);
-    expect(text).not.toContain('• Reread the chapter —');
+    expect(text).not.toContain('• Reread the chapter, ');
   });
 
   it('keeps one note to one line and cuts long text at a word boundary', () => {

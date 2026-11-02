@@ -22,11 +22,11 @@ The longer goal is to keep a record of how I change over time: habits, projects,
 - Commands and empty messages (`/start`, `/heartbeat`, `/timezone`, a bare `/push`, a blank message) are answered and never written to the database.
 - Shows *typing…* from the moment a note arrives and keeps it showing while the note is cleaned and stored, so a few seconds of work looks like work instead of a message that never landed. It is a Telegram chat action, refreshed every four seconds (the indicator lapses after five) and dropped the moment the reply goes out; a chat action that fails is swallowed, because the note matters and the indicator does not.
 - Puts untagged text in Inbox for now.  - Sends one summary at 22:00 in the diary's timezone: the day's count and its categories, each note on one line with its hour, and whatever is still open. One cron entry (`0 20,21` UTC) covers CET and CEST, the Worker sends only when the local clock has reached 22:00, and a `daily_summary` row in `settings` keeps it to one message a day, so the hour the clocks go back cannot repeat it. A day with nothing written says so rather than skipping the message.
-  - Keeps itself awake without being asked: three heartbeat rows a day at 08:45, 12:30 and 17:00 in the diary's timezone, so the free Supabase project never goes a quiet week and pauses. Every heartbeat is confirmed on Telegram as it is written, from whichever source wrote it — the cron, or `/heartbeat` when you ask by hand — and the beat names its slot on the diary's clock, so a heartbeat is something you can see rather than only a row the database has. They are written by the same cron that pings reminders. Each slot has a cron entry for its hour under CET and one under CEST; `src/heartbeat.ts` picks the run that lands on the local clock, so the beats keep their hour when the clocks change. Four cron entries in all, because the Free plan allows five per account.
+  - Keeps itself awake without being asked: three heartbeat rows a day at 08:45, 12:30 and 17:00 in the diary's timezone, so the free Supabase project never goes a quiet week and pauses. Every heartbeat is confirmed on Telegram as it is written, from whichever source wrote it (the cron, or `/heartbeat` when you ask by hand) and the beat names its slot on the diary's clock, so a heartbeat is something you can see rather than only a row the database has. They are written by the same cron that pings reminders. Each slot has a cron entry for its hour under CET and one under CEST; `src/heartbeat.ts` picks the run that lands on the local clock, so the beats keep their hour when the clocks change. Four cron entries in all, because the Free plan allows five per account.
 - Ignores duplicate Telegram updates, so a retry never creates a second entry.
 - Serves the diary on the web from the same Worker: `public/index.html` plus `public/app.js` read it from `GET /api/entries`, save a typed note through `POST /api/note`, unlock with the passphrase at `/api/session`, and change that passphrase from Settings → Access through `POST /api/passphrase`. The page's look is one stylesheet, `public/diary.css`, shared by nothing else.
-- Says in the note sheet which door the note came in by — `via Telegram`, `via Web`, or the app that filed it through the write API (`Claude`, `Codex`, `Freebuff`, or any other client name, title-cased). The ledger line is left alone: a mark on every row competes with the notes. It is the capture's own origin, embedded in the single read the page already makes; on a database that predates `captures.client` the read falls back to the plain column set and the sheet simply omits the line rather than the page going blank.
-- Serves an API at `/api/v1` with keys minted in Settings → Access: other projects of mine read the diary (by day, month, year, category, type, every deadline, and the counts) with a **read key**, and an app files notes with a **write key** — a separate key that can add and cannot read. Keys are hashed at rest and revoked one at a time; the API is uncached, has no CORS headers, and answers `503` naming the migration until `0007_api_keys.sql` has been run.
+- Says in the note sheet which door the note came in by, `via Telegram`, `via Web`, or the app that filed it through the write API (`Claude`, `Codex`, `Freebuff`, or any other client name, title-cased). The ledger line is left alone: a mark on every row competes with the notes. It is the capture's own origin, embedded in the single read the page already makes; on a database that predates `captures.client` the read falls back to the plain column set and the sheet simply omits the line rather than the page going blank.
+- Serves an API at `/api/v1` with keys minted in Settings → Access: other projects of mine read the diary (by day, month, year, category, type, every deadline, and the counts) with a **read key**, and an app files notes with a **write key**, a separate key that can add and cannot read. Keys are hashed at rest and revoked one at a time; the API is uncached, has no CORS headers, and answers `503` naming the migration until `0007_api_keys.sql` has been run.
 
 ## The cleanup step
 
@@ -55,8 +55,8 @@ Each model is tried in turn; an answer that is empty, a lecture, or several time
 
 ### What the labels mean
 
-- **Refined / Reason / Think** — the note went through the cleanup and came back different, so the Raw control is offered and shows the exact words that were sent.
-- **Verbatim** — either `/push` was used, or the cleanup found nothing to change. There is nothing behind a Raw control in that case, so it is not shown.
+- **Refined / Reason / Think**: the note went through the cleanup and came back different, so the Raw control is offered and shows the exact words that were sent.
+- **Verbatim**: either `/push` was used, or the cleanup found nothing to change. There is nothing behind a Raw control in that case, so it is not shown.
 - A note is never lost and never silently rewritten: `raw_text` always holds what was typed.
 
 Both are in the current catalog. Workers AI retired eighteen older models on 30 May 2026, including `@cf/meta/llama-3.1-8b-instruct`, and a retired id fails only at runtime: check [the catalog](https://developers.cloudflare.com/workers-ai/models/) before changing these.
@@ -95,7 +95,7 @@ A key also carries a **policy**, stored beside its scopes and enforced on every 
 | `from` / `to` | the earliest and latest day it may read; a wider period is clamped to the window, and a note outside it is `404` |
 | `text` | `clean` reads the sentences; `none` answers counts, days, categories and word counts with no `text` field, refuses `q=` and `fields=text`, cannot export, and gets `"A deadline"` in place of a deadline's title (a title is the note's own first line) |
 
-The defaults are every category, any day and full text, which is what every key did before limits existed. A note outside a key's policy does not exist as far as that key is concerned (`404`, never `403`), the day and count rollups are narrowed to the policy's categories and window, and a deadline whose note is outside it is hidden or `404` as well — including one whose note cannot be found to check.
+The defaults are every category, any day and full text, which is what every key did before limits existed. A note outside a key's policy does not exist as far as that key is concerned (`404`, never `403`), the day and count rollups are narrowed to the policy's categories and window, and a deadline whose note is outside it is hidden or `404` as well, including one whose note cannot be found to check.
 
 | Scope | Reads |
 | --- | --- |
@@ -118,8 +118,8 @@ A request without a valid key is `401`, and the answer never says whether the ke
 
 | Endpoint | Scope | Answers |
 | --- | --- | --- |
-| `GET /api/v1` | — | the API describing itself (no note content) |
-| `GET /api/v1/me` | — | this key: name, scopes, `policy` (categories, from, to, text), rate limits, last use |
+| `GET /api/v1` | - | the API describing itself (no note content) |
+| `GET /api/v1/me` | - | this key: name, scopes, `policy` (categories, from, to, text), rate limits, last use |
 | `GET /api/v1/notes` | `notes:read` | notes, filtered and paged |
 | `GET /api/v1/notes/{id}` | `notes:read` | one note |
 | `GET /api/v1/days` | `stats:read` | per day: notes, words, category tally, first and last hour |
@@ -147,7 +147,7 @@ A request without a valid key is `401`, and the answer never says whether the ke
 
 `/days`, `/stats` and `/export` take the same time selectors. `/deadlines` takes `status=open|done|all`, `due_before`, `due_after` and `limit`.
 
-A note comes back as `{ id, day, time, at, category, type, source, text, words, due?, done?, doneAt?, usage?, raw? }`. `day` and `time` are the diary's local day and clock (`DIARY_TZ`), `at` is the stored timestamp, and `words` is counted from the cleaned text. `usage` carries what the cleanup cost — `tokensIn`, `tokensOut`, the `model` and `ms`, how long it took — and each is null when nothing measured it. The envelope is `{ ok, meta: { version, timeZone, count, next }, … }`.
+A note comes back as `{ id, day, time, at, category, type, source, text, words, due?, done?, doneAt?, usage?, raw? }`. `day` and `time` are the diary's local day and clock (`DIARY_TZ`), `at` is the stored timestamp, and `words` is counted from the cleaned text. `usage` carries what the cleanup cost (`tokensIn`, `tokensOut`, the `model` and `ms`, how long it took) and each is null when nothing measured it. The envelope is `{ ok, meta: { version, timeZone, count, next }, … }`.
 
 ### What the transport guarantees
 
@@ -155,14 +155,14 @@ A note comes back as `{ id, day, time, at, category, type, source, text, words, 
 - No CORS header is ever sent: a web page on another origin cannot read a response even if a key is pasted into it. Server-to-server calls are unaffected.
 - Nothing the caller sends reaches a query unfiltered. Each value is checked against a shape (a real date, a known category, a known type) and the PostgREST query is rebuilt server-side. There is no endpoint that proxies the database.
 - Only the method, path, status, row count and key prefix are ever logged. Never a note, never a query value, never the caller's address.
-- Each key is limited per minute and per day — 60 and 5,000 by default, 30 and 300 for a key that may add notes. Every answer carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a spent allowance answers `429` with `Retry-After`. The counter is one atomic Postgres function, so a burst cannot slip past a read-then-write race.
+- Each key is limited per minute and per day, 60 and 5,000 by default, 30 and 300 for a key that may add notes. Every answer carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a spent allowance answers `429` with `Retry-After`. The counter is one atomic Postgres function, so a burst cannot slip past a read-then-write race.
 - A write spends the ceiling per **note**, not per request: a batch of 25 costs 25 of the 300, because each note is a model call. If the counter cannot be reached, a write is refused rather than filed uncounted; a read carries on.
 - Twenty keys that do not work, a minute, per client address, and the answer stops costing a database round trip. The count is per Worker instance, so it is a speed bump; a rate-limiting rule on `/api/v1/*` in Cloudflare is the wall.
 - Every authenticated call writes one line to Worker Logs: `api <key prefix> <method> <path> <status>`. No query string (a search term is note text) and no body.
 
 ### Writing to the diary
 
-One endpoint files notes: `POST /api/v1/notes`, for a key that holds `notes:write`. A write key is **separate from a read key** — Settings → Access switches between Read keys and Write keys — and it cannot read a single note back, which is what makes it safe to hand to an agent that summarizes your day for you.
+One endpoint files notes: `POST /api/v1/notes`, for a key that holds `notes:write`. A write key is **separate from a read key** (Settings → Access switches between Read keys and Write keys) and it cannot read a single note back, which is what makes it safe to hand to an agent that summarizes your day for you.
 
 ```sh
 curl -s -X POST "https://<site>/api/v1/notes" \
@@ -178,14 +178,14 @@ curl -s -X POST "https://<site>/api/v1/notes" \
 | `notes[]` | one to twenty-five notes: 4,000 characters in a note, 40,000 in a request |
 | `notes[].text` | required; everything else is a hint |
 | `notes[].category` | one of the ten; `inbox` when it is left out |
-| `notes[].mode` | `refine` (the cleanup formats it — the default), `verbatim` (keep the words exactly), `reason`, `think` |
+| `notes[].mode` | `refine` (the cleanup formats it, the default), `verbatim` (keep the words exactly), `reason`, `think` |
 | `notes[].day` | `YYYY-MM-DD`; today in `DIARY_TZ` unless the session belongs to another day |
 | `notes[].at` | the moment the work happened; its local day has to agree with `day` |
 | `notes[].due` | on a `deadline` note, schedules the same T-3 reminder the composer sets |
-| `client` | the app's own name (`claude-code`, `codex`); it is what the receipt and the Telegram message say |
+| `client` | ignored when the key has a name, which is every key: the note is filed under the key's name, so a key called `Codex CLI` files as `codex-cli` and the sheet says *via Codex CLI*. The body's field is kept as the fallback for a build that authenticates another way |
 | `Idempotency-Key` | the same key on a retry files nothing the second time and returns the *same* receipt |
 
-A note written here is the same kind of row as one sent to the bot: a capture holding exactly what arrived, then one thought, then a reminder if it is a deadline. It goes through the same cleanup, and the same five outcomes come back — `formatted`, `unchanged`, `verbatim`, `unavailable`, `failed` — and a cleanup that fails never costs the note.
+A note written here is the same kind of row as one sent to the bot: a capture holding exactly what arrived, then one thought, then a reminder if it is a deadline. It goes through the same cleanup, and the same five outcomes come back (`formatted`, `unchanged`, `verbatim`, `unavailable`, `failed`) and a cleanup that fails never costs the note.
 
 The answer is a receipt, not just “ok”:
 
@@ -203,7 +203,7 @@ The answer is a receipt, not just “ok”:
 
 Each note is its own row, so a batch is not all-or-nothing on purpose: the receipt says per note what happened (`stored`, `duplicate`, or `failed` with the reason), and a retry with the same `Idempotency-Key` skips whatever already landed. Nothing stored and something failed answers `502`. A pure retry answers `200` with `duplicate: true` and no Telegram message, because the owner has seen that one already.
 
-A write key carries the same limits as a read key, read the other way round: `categories` is what it may **file into**, `from`/`to` is which days it may **date**, and reaching past either is `403 out_of_policy`. `text: none` is a read limit and does not block writing. `deadline` gets no scope of its own: every deadline in this schema has a note behind it — through `thought_id`, or through the capture when the reminder came from this API — so the category policy is what guards it. A deadline whose note cannot be found is not shown to a limited key at all.
+A write key carries the same limits as a read key, read the other way round: `categories` is what it may **file into**, `from`/`to` is which days it may **date**, and reaching past either is `403 out_of_policy`. `text: none` is a read limit and does not block writing. `deadline` gets no scope of its own: every deadline in this schema has a note behind it (through `thought_id`, or through the capture when the reminder came from this API) so the category policy is what guards it. A deadline whose note cannot be found is not shown to a limited key at all.
 
 The owner gets the receipt on Telegram, which is the point of the whole thing:
 
@@ -218,7 +218,7 @@ It cannot be silenced. There is no ack field: a caller may not switch off the on
 
 ### Telling Claude Code, Codex or Freebuff about it
 
-`mcp/` holds a dependency-free MCP server with two tools: `diary_add_notes`, and `diary_whoami` for what the key may do — so a refusal gets explained rather than retried around. It reads `DIARY_API_KEY` and `DIARY_API_URL` from the environment, speaks both the current protocol revision (`server/discover`) and the older `initialize` handshake, and writes nothing but protocol messages to stdout.
+`mcp/` holds a dependency-free MCP server with two tools: `diary_add_notes`, and `diary_whoami` for what the key may do, so a refusal gets explained rather than retried around. It reads `DIARY_API_KEY` and `DIARY_API_URL` from the environment, speaks both the current protocol revision (`server/discover`) and the older `initialize` handshake, and writes nothing but protocol messages to stdout.
 
 ```sh
 # Claude Code (user scope, so it is there in every project)
@@ -237,9 +237,9 @@ args = ["/path/to/digital-diary/mcp/diary.mjs"]
 DIARY_API_KEY = "ddk_live_…"
 ```
 
-Cursor takes the same JSON shape as Claude Code at `.cursor/mcp.json`. The key belongs in the client's own config — it is a credential, and this repository ignores `.env` and `.dev.vars` for exactly that reason.
+Cursor takes the same JSON shape as Claude Code at `.cursor/mcp.json`. The key belongs in the client's own config, it is a credential, and this repository ignores `.env` and `.dev.vars` for exactly that reason.
 
-Where MCP is not set up, [integrations/diary-session.md](integrations/diary-session.md) is the same thing as a command: copy it to `~/.claude/commands/diary.md` (Claude Code) or `~/.codex/prompts/diary.md` (Codex) and invoke it at the end of a session — `/diary one note` for a single entry, `/diary split` for one per topic, `/diary notes: X; Y` for exactly those lines, `/diary deadline fri: …` for a dated one. It spells out the markup the diary renders (blank-line paragraphs, `- ` bullets, `**bold**`, `==highlight==`) and reaches for `verbatim` when the agent's own prose should be stored as written.
+Where MCP is not set up, [integrations/diary-session.md](integrations/diary-session.md) is the same thing as a command: copy it to `~/.claude/commands/diary.md` (Claude Code) or `~/.codex/prompts/diary.md` (Codex) and invoke it at the end of a session, `/diary one note` for a single entry, `/diary split` for one per topic, `/diary notes: X; Y` for exactly those lines, `/diary deadline fri: …` for a dated one. It spells out the markup the diary renders (blank-line paragraphs, `- ` bullets, `**bold**`, `==highlight==`) and reaches for `verbatim` when the agent's own prose should be stored as written.
 
 ## What is not built yet
 
@@ -304,9 +304,9 @@ npm run env:check                     # lists every name, its home, and what is 
 npm run bindings:check                # diffs the DEPLOYED Worker against wrangler.toml
 ```
 
-`env:check` is about this checkout. `bindings:check` is about the live Worker: it reads the deployed version's binding list from Cloudflare and compares it with `wrangler.toml` — every `[vars]` value present and equal, every required secret present *as a secret*, the `AI` and `ASSETS` bindings attached, and the compatibility date not older than the config. It exits 0 in step, 1 on drift, 2 when it cannot check. Reading the bindings needs **Workers Scripts: Read** on `CLOUDFLARE_API_TOKEN`; an analytics-only token answers 403 and the command says which permission to add.
+`env:check` is about this checkout. `bindings:check` is about the live Worker: it reads the deployed version's binding list from Cloudflare and compares it with `wrangler.toml`, every `[vars]` value present and equal, every required secret present *as a secret*, the `AI` and `ASSETS` bindings attached, and the compatibility date not older than the config. It exits 0 in step, 1 on drift, 2 when it cannot check. Reading the bindings needs **Workers Scripts: Read** on `CLOUDFLARE_API_TOKEN`; an analytics-only token answers 403 and the command says which permission to add.
 
-The prompt never echoes. Pushing to Cloudflare is attempted with the same `CLOUDFLARE_API_TOKEN` everything else uses; `npm run secret NAME -- --local` writes only the local file. Pushing needs that token to carry **Workers Scripts: Edit** — an analytics-only token is refused, and the command says so, leaving the value in `.dev.vars` for one paste in the dashboard (Workers → ink → Settings → Variables and Secrets).
+The prompt never echoes. Pushing to Cloudflare is attempted with the same `CLOUDFLARE_API_TOKEN` everything else uses; `npm run secret NAME -- --local` writes only the local file. Pushing needs that token to carry **Workers Scripts: Edit**, an analytics-only token is refused, and the command says so, leaving the value in `.dev.vars` for one paste in the dashboard (Workers → ink → Settings → Variables and Secrets).
 
 | Name | Home | On Cloudflare? | What it is |
 | --- | --- | --- | --- |
@@ -341,19 +341,19 @@ Open the Supabase SQL editor and run each file in `migrations/` in order: `0001_
 
 `0008` adds `api_keys.policy` and gives `diary_stats` and `diary_days` a `p_categories` argument, so a limited key cannot count its way around its limit. Until it has been run, a key with limits answers `403 policy` rather than reading more than it should; the defaults keep every existing key open.
 
-`0009` adds `captures.client` and `captures.dedupe_key`: which app filed an API note, and the caller's `Idempotency-Key` kept verbatim. Until it has been run an API capture stores both as null — idempotency still holds, because it rides the older `source_update_id` — so only the readable key is lost.
+`0009` adds `captures.client` and `captures.dedupe_key`: which app filed an API note, and the caller's `Idempotency-Key` kept verbatim. Until it has been run an API capture stores both as null (idempotency still holds, because it rides the older `source_update_id`) so only the readable key is lost.
 
 `0010` adds `bump_api_notes`, which spends a write key's allowance once per note instead of once per request. **Run it before deploying the Worker that calls it**: a write of two or more notes answers `503` naming the file until the function exists, because a key that can spend money is refused rather than filed uncounted. A single-note write does not call it, so the old behaviour survives in the meantime.
 
 `0012` adds `thoughts.cleanup_ms`, how long each note's cleanup took. It is a recording, not a
-behaviour: until it has been run, a note still saves and still shows its tokens — the duration is
+behaviour: until it has been run, a note still saves and still shows its tokens, the duration is
 simply absent, which the note sheet says by leaving the figure out. The column is what the note
 sheet's footer leads with, so a slow cleanup is visible as a slow note rather than only as a long
 spinner and a quiet `typing…`.
 
 `0013` is the backup: a weekly JSONB snapshot of the notes, their captures, the reminders and the
-archive, kept twelve deep in `diary_backups`. It schedules itself with `pg_cron` — Monday 03:00
-UTC, job name `diary-weekly-backup` — and is the one migration whose optional half is the
+archive, kept twelve deep in `diary_backups`. It schedules itself with `pg_cron`: Monday 03:00
+UTC, job name `diary-weekly-backup`, and is the one migration whose optional half is the
 schedule: where `pg_cron` cannot be installed the functions still exist and still work when
 called by hand, and the file says so with a notice instead of failing. Nothing in the app reads
 the table. To take one now, and to put back what has gone missing:
@@ -367,18 +367,18 @@ select public.diary_restore(3);                          -- writes only rows tha
 `diary_restore` is additive by design: it never deletes and never overwrites, so running it twice
 is harmless and running it after a partial deletion restores only the gap. What it cannot do is
 survive the loss of the project, because the snapshots live in the same database they protect;
-it is there for the failure this diary has actually had — a delete or a migration that took rows
+it is there for the failure this diary has actually had, a delete or a migration that took rows
 it should not have. `api_keys` and `settings` are deliberately not copied.
 
-The copy also leaves the database. On the first cron run after a snapshot is taken — Monday, in
-practice — the Worker uploads it to Telegram as `ink-backup-<day>.json`, with a caption saying
+The copy also leaves the database. On the first cron run after a snapshot is taken: Monday, in
+practice, the Worker uploads it to Telegram as `ink-backup-<day>.json`, with a caption saying
 what it holds, so losing the Supabase project does not take the backups with it. The
 `backup_export` settings row holds the ISO week that last left: a failed upload leaves it
 unwritten, and any later run that week tries again. Settings → Backups shows when the last
 snapshot was taken and can take one on demand (`GET`/`POST /api/backup`, behind the session).
 
 `0011` is a one-off housekeeping run, not a behaviour the code depends on. It shelves the notes
-written while building the diary — 22 sent to the bot and one filed through the write API — into
+written while building the diary (22 sent to the bot and one filed through the write API) into
 `archived_notes`, with the thought row and its capture store verbatim, then deletes them from
 `thoughts`, `captures` and `reminders`, along with the deadline one of them carried. Nothing
 reads the archive at runtime; it is there so a future fixture, demo or restore has the text. The

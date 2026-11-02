@@ -263,8 +263,8 @@ Regenerate the sidecar whenever you regenerate root `DESIGN.md`. If the user onl
   "title": "Design System: [Project Title]",
   "extensions": {
     "colorMeta": {
-      "primary":        { "role": "primary",  "displayName": "Editorial Magenta", "canonical": "oklch(60% 0.25 350)", "tonalRamp": ["...", "...", "..."] },
-      "cool-paper": { "role": "neutral",  "displayName": "Cool Paper",    "canonical": "oklch(96% 0.005 230)", "tonalRamp": ["...", "...", "..."] }
+      "primary":        { "role": "primary", "displayName": "Editorial Magenta", "canonical": "oklch(60% 0.25 350)", "tonalRamp": ["...", "...", "..."] },
+      "cool-paper": { "role": "neutral", "displayName": "Cool Paper", "canonical": "oklch(96% 0.005 230)", "tonalRamp": ["...", "...", "..."] }
     },
     "typographyMeta": {
       "display": { "displayName": "Display", "purpose": "Hero headlines only." }

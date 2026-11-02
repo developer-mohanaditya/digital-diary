@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The stdio loop for the diary's MCP server: one JSON-RPC message per line in, one per line out.
 //
-// Nothing else is ever written to stdout — a stray print would corrupt the stream — so anything
+// Nothing else is ever written to stdout (a stray print would corrupt the stream) so anything
 // worth seeing goes to stderr, where a client keeps it as the server's log.
 //
 //   DIARY_API_KEY=ddk_live_… DIARY_API_URL=https://<worker> node mcp/diary.mjs
@@ -42,7 +42,7 @@ const onLine = async (line) => {
 
 let buffer = '';
 // Requests are handled one at a time, in the order they arrived. A client may pipeline them, and
-// filing notes out of order — or twice at once — would let two identical requests race each other
+// filing notes out of order (or twice at once) would let two identical requests race each other
 // into the diary. The queue is the whole of the concurrency policy: one message, then the next.
 let queue = Promise.resolve();
 process.stdin.setEncoding('utf8');

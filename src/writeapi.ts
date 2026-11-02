@@ -1,7 +1,7 @@
 // The write half of /api/v1: another app filing notes into the diary.
 //
-// A note written here is the same thing a note sent to the bot is — a capture holding exactly
-// what arrived, then one thought, and a reminder when the note is a deadline — so an entry
+// A note written here is the same thing a note sent to the bot is, a capture holding exactly
+// what arrived, then one thought, and a reminder when the note is a deadline, so an entry
 // from Claude Code sits in the same day page, with the same cleanup, as one typed on a phone.
 // What is different is the answer. The caller is a program, so it gets a receipt: per note,
 // what was stored, what the cleanup did, and what it cost. The owner gets the same receipt on
@@ -24,7 +24,7 @@ import { MODES, type Category, type Mode } from './parse';
 import { MAX_INPUT_CHARS, cleanNote, type CleanupKind, type Refiner } from './refine';
 import { localDay, type ExistingCapture, type Store, type WrittenNote } from './handler';
 import { categoryLabel, escapeHtml, storedPreview } from './receipts';
-import { hasScope } from './apikey';
+import { clientFor, hasScope } from './apikey';
 import { reminderTimes } from './reminders';
 import type { KeyPolicy, KeySession } from './publicapi';
 
@@ -69,7 +69,10 @@ function addDays(day: string, days: number): string {
 
 // The whole request, checked until there is nothing left to interpret. Every refusal names the
 // thing to fix, because the caller reading it is a model that will otherwise guess.
-export function normaliseWrite(body: unknown, opts: { timeZone: string; now: Date; headerKey?: string | null }): WriteResult {
+export function normaliseWrite(
+  body: unknown,
+  opts: { timeZone: string; now: Date; headerKey?: string | null; keyName?: string | null },
+): WriteResult {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return bad('bad_note', 'Send JSON: { "notes": [ { "text": "..." } ] }');
   }
@@ -81,10 +84,16 @@ export function normaliseWrite(body: unknown, opts: { timeZone: string; now: Dat
     return bad('too_many', `One request carries up to ${MAX_NOTES} notes; that one holds ${raw.notes.length}. Send them over two requests.`);
   }
 
-  const client = raw.client === undefined || raw.client === null ? 'api' : raw.client;
-  if (typeof client !== 'string' || !CLIENT_SHAPE.test(client)) {
+  // The key that filed the note names it, not the request body. A caller can call itself
+  // anything, and the key is the one name the owner chose, so a note filed with the Codex key
+  // says codex even when the body claims something else. The body's client is the fallback for
+  // a build that authenticates some other way.
+  const fromKey = opts.keyName ? clientFor(opts.keyName) : null;
+  const claimed = raw.client === undefined || raw.client === null ? 'api' : raw.client;
+  if (!fromKey && (typeof claimed !== 'string' || !CLIENT_SHAPE.test(claimed))) {
     return bad('bad_note', 'client is a short name for the sending app, like "claude-code".');
   }
+  const client = fromKey ?? (claimed as string);
 
   const bodyKey = raw.idempotencyKey;
   if (bodyKey !== undefined && bodyKey !== null && typeof bodyKey !== 'string') {
@@ -231,7 +240,7 @@ const words = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
 // The id the capture's uniqueness runs on. With an Idempotency-Key it is a digest of the key's
 // own id, that key and the note's place in the batch, so a retry lands on the same row and the
-// note is stored once — the same mechanism the bot gets from Telegram's update_id. The key id
+// note is stored once, the same mechanism the bot gets from Telegram's update_id. The key id
 // is in the seed so two apps cannot dedupe each other by happening to use the same words.
 async function seedFor(keyId: string, dedupeKey: string, index: number): Promise<number> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${keyId}|${dedupeKey}|${index}`));
@@ -349,7 +358,7 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
       if (!capture.inserted || !capture.id) {
         // The row was already there: almost always the same request arriving twice at once, each
         // getting past the lookup before the other had written. Ask again which capture holds it
-        // rather than moving on — a receipt that omits a note that is in the diary is exactly the
+        // rather than moving on, a receipt that omits a note that is in the diary is exactly the
         // thing this answer exists to prevent, and saying nothing looks like nothing was stored.
         const found = (await store.findCaptures('api', [seed]).catch(() => [])).find((c) => c.sourceUpdateId === seed);
         if (found) {
@@ -472,7 +481,7 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
 
   // The acknowledgement is the owner's half of the receipt. A retry that stored nothing is
   // answered silently: they have seen that message already. A failed send is reported, never
-  // fatal — the notes are in the diary either way.
+  // fatal, the notes are in the diary either way.
   if (stored > 0 && deps.notify) {
     const first = read
       .filter((r) => notes.some((n, index) => n.status === 'stored' && captureAt.get(index) === r.captureId))

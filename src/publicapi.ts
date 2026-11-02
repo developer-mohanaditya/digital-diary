@@ -4,7 +4,7 @@
 // without the passphrase: key authentication with its rate limit, the filter language, the
 // query it turns into, and the response envelope. The router at the bottom owns the paths.
 //
-// Two rules run through the file. Nothing the caller sends reaches a query unfiltered — every
+// Two rules run through the file. Nothing the caller sends reaches a query unfiltered, every
 // value is validated against a shape and rebuilt server-side. And every answer carries
 // `Cache-Control: private, no-store` with no CORS header at all, so neither the edge nor a
 // foreign page can hold on to a single note.
@@ -82,7 +82,7 @@ interface KeyRow {
 }
 
 // What a key is allowed to see beyond its scopes: which categories, which days, and whether
-// it may read the sentences at all. An open policy is every category, any day, full text — the
+// it may read the sentences at all. An open policy is every category, any day, full text, the
 // behaviour every key had before limits existed.
 export interface KeyPolicy {
   categories: string[] | null;
@@ -131,8 +131,8 @@ const isMissing = (res: Response, text: string) =>
 // Anyone can send a well-shaped key that matches no row, and each one costs a database round
 // trip before it is refused: with no key at all, the Worker would be a query amplifier. A
 // client gets twenty misses a minute, after which the refusal costs nothing until the window
-// turns. The count lives in the isolate, so this is a speed bump rather than a wall — the
-// durable fix is a rate-limiting rule in front of /api/v1 — but it bounds the bill. Requests
+// turns. The count lives in the isolate, so this is a speed bump rather than a wall, the
+// durable fix is a rate-limiting rule in front of /api/v1, but it bounds the bill. Requests
 // with no client address (a local `wrangler dev` run) are not throttled.
 const AUTH_MISSES = new Map<string, { count: number; reset: number }>();
 const MISS_LIMIT = 20;
@@ -427,7 +427,7 @@ export async function revokeApiKey(env: Env, id: string): Promise<boolean> {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-// A day, a month, a year, or an explicit from/to — never two ways of saying the same thing.
+// A day, a month, a year, or an explicit from/to, never two ways of saying the same thing.
 export interface Period {
   from?: string;
   to?: string;
@@ -468,7 +468,7 @@ export function parsePeriod(params: URLSearchParams): Period {
 
 /* ---------- A key's limits ---------- */
 
-// The policy as it arrives — from the page when a key is created, or from the row on the way
+// The policy as it arrives, from the page when a key is created, or from the row on the way
 // through authenticate. Both go through here, so the two can never disagree about the shape.
 export function normalisePolicy(input: unknown): { policy: KeyPolicy } | { error: string } {
   if (input === undefined || input === null) return { policy: OPEN_POLICY };
@@ -1030,7 +1030,7 @@ function toApiDeadline(r: ReminderRow, ctx: Ctx, note?: ThoughtRow) {
 // The notes behind a page of deadlines, so a client can see what the deadline was about and
 // so a key's limits have something to check. A reminder the bot made carries thought_id; one
 // filed through the write API carries only the capture it was made from, so that is the
-// second way in — without it every API-created deadline would escape a key's policy.
+// second way in, without it every API-created deadline would escape a key's policy.
 async function notesForReminders(env: Env, rows: ReminderRow[]): Promise<Map<string, ThoughtRow>> {
   const byThought = new Map<string, ThoughtRow>();
   const byCapture = new Map<string, ThoughtRow>();
@@ -1201,7 +1201,7 @@ async function exportNotes(ctx: Ctx, url: URL): Promise<Response> {
       },
     });
   }
-  // Markdown: one heading a day, one bullet a note — the shape a person reads. The refusal
+  // Markdown: one heading a day, one bullet a note, the shape a person reads. The refusal
   // above is what lets this read the text straight; a counts-only key never gets here.
   const written = notes as (ApiNote & { text: string })[];
   const lines: string[] = [`# INK · ${label}`, ''];
@@ -1212,7 +1212,7 @@ async function exportNotes(ctx: Ctx, url: URL): Promise<Response> {
       lines.push(`## ${markdownDay(n.day)}`, '');
     }
     const flags = [n.due ? `due ${n.due}` : '', n.done ? 'done' : ''].filter(Boolean).join(', ');
-    lines.push(`- **${n.time} · ${n.category}** — ${n.text.replace(/\s*\n\s*/g, ' ')}${flags ? ` _(${flags})_` : ''}`);
+    lines.push(`- **${n.time} · ${n.category}**, ${n.text.replace(/\s*\n\s*/g, ' ')}${flags ? ` _(${flags})_` : ''}`);
   }
   if (!notes.length) lines.push('_No notes in this range._');
   return new Response(lines.join('\n') + '\n', {
@@ -1269,7 +1269,7 @@ export function describe(tz: string) {
 
 // Row ids are uuids, and every id this API takes goes through here first. A malformed one that
 // reached Postgres would come back as a cast error and be reported as a database failure, which
-// is the wrong story — and a cheap way for a caller to fill the error log.
+// is the wrong story, and a cheap way for a caller to fill the error log.
 const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isRowId(value: string): boolean {
@@ -1286,7 +1286,7 @@ function wholeNumber(raw: string, max: number, message: string): number {
 }
 
 // One line per authenticated call: which key, which route, what came back. Never the query
-// string — a search term is note text — and never a request body. The usage counter only
+// string (a search term is note text) and never a request body. The usage counter only
 // summarises how many calls a key made; this says which pages it asked for, refusals included,
 // and it lands in Workers Logs.
 function audit(key: KeySession, request: Request, url: URL, status: number): void {
@@ -1371,8 +1371,8 @@ async function route(ctx: Ctx, request: Request, url: URL, write?: WriteDeps): P
 }
 
 // POST /api/v1/notes. Authentication already happened, and the rate limit was counted with it.
-// Everything else about a write — what a note may say, what this key may file, and the receipt
-// that comes back — belongs to the write module, so there is one place to read for the answer
+// Everything else about a write, what a note may say, what this key may file, and the receipt
+// that comes back, belongs to the write module, so there is one place to read for the answer
 // to "what did that request do?".
 async function writeRoute(ctx: Ctx, request: Request, write?: WriteDeps): Promise<Response> {
   if (!write) return apiFail(503, 'setup', 'This build cannot file notes from another app.');
@@ -1386,6 +1386,8 @@ async function writeRoute(ctx: Ctx, request: Request, write?: WriteDeps): Promis
     timeZone: ctx.tz,
     now: new Date(),
     headerKey: request.headers.get('Idempotency-Key'),
+    // The key's own name is what the note will say filed it, whoever the caller claims to be.
+    keyName: ctx.key.name,
   });
   if (isProblem(parsed)) return apiFail(400, parsed.problem.code, parsed.problem.message);
   // The request was counted when its key was checked; now that the batch is known, the notes

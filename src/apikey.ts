@@ -108,3 +108,20 @@ export function keyNameProblem(name: unknown): string | null {
   if (name.trim().length > 60) return 'Keep the name under 60 characters.';
   return null;
 }
+
+// What a note says filed it. The key's name is the owner's own word for the app holding that
+// key, so it is what a note records: a caller can claim any client in its request body, but the
+// key is the only name the owner controls. Slugged the way the capture's client column and the
+// sheet's origin line already read, so a key called "Codex CLI" files notes as codex-cli and the
+// sheet says "via Codex CLI".
+export function clientFor(keyName: string): string {
+  const slug = keyName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32)
+    .replace(/-+$/g, '');
+  // A name of nothing but punctuation still files, under the same word an unnamed caller gets.
+  return slug || 'api';
+}

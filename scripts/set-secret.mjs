@@ -9,7 +9,7 @@
 // Local half: .dev.vars (gitignored). It replaces any existing line for that name, so a
 // second run rotates the value instead of adding a duplicate.
 //
-// Cloud half: `wrangler secret put`, driven by CLOUDFLARE_API_TOKEN — the same token
+// Cloud half: `wrangler secret put`, driven by CLOUDFLARE_API_TOKEN, the same token
 // everything else uses. It only works if that token carries "Workers Scripts: Edit";
 // an analytics-only token is refused by Cloudflare, and the value is still safe locally.
 // Paste it once in Workers -> ink -> Settings -> Variables and Secrets.

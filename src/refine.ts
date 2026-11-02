@@ -186,7 +186,7 @@ export interface CleanedNote {
 }
 
 // The one place a note is cleaned. The Telegram handler, the page's composer and the write API
-// all go through here, so they cannot disagree about what "formatted" or "failed" means — the
+// all go through here, so they cannot disagree about what "formatted" or "failed" means, the
 // failure mode this code has hit before is a cleanup that quietly did nothing and still
 // reported success. A model that fails never costs the note: the raw text is the answer.
 export async function cleanNote(
@@ -215,7 +215,7 @@ export async function cleanNote(
     return {
       ...bare,
       cleanup: 'failed',
-      // The failed cleanup is the slowest one — every model is tried — and the one worth timing.
+      // The failed cleanup is the slowest one (every model is tried) and the one worth timing.
       ms: Date.now() - started,
       error: err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error',
     };

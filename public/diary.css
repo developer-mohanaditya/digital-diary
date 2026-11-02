@@ -520,11 +520,11 @@
 
   @media (max-width:700px) {
     /* One row of five: the four counters and the plus share the width evenly, and the house
-       steps aside so they can. A cell is 64px wide here, so the label sits at .62rem — the
-       smallest size that still reads as a word — and the number carries the row. */
+       steps aside so they can. A cell is 64px wide here, so the label sits at .62rem, the
+       smallest size that still reads as a word, and the number carries the row. */
     .crumbs.crumb-home { display:none; }
-    /* Only the day's five cells take the whole row. Anything else that lands here — the trail's
-       actions on Settings — stays on the trail's line, right-aligned. */
+    /* Only the day's five cells take the whole row. Anything else that lands here, the trail's
+       actions on Settings, stays on the trail's line, right-aligned. */
     /* Grid, not flex: five equal columns whatever each cell's content is, so the plus is the
        same size as the counters beside it. */
     .crumbtools.cells { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:4px; width:100%; margin-left:0; align-items:stretch; }
@@ -535,8 +535,8 @@
     .newbtn { flex:1 1 0; min-width:0; justify-content:center; padding:6px 0; border-radius:10px; box-shadow:2px 2px 0 var(--shadow); }
     .newbtn span { display:none; }
     .newbtn svg { width:17px; height:17px; }
-    /* The year is 31 columns of days. At the card's 308px that is a 7px cell — unreadable
-       and untappable — so it keeps its links and scrolls sideways at 18px instead. */
+    /* The year is 31 columns of days. At the card's 308px that is a 7px cell, unreadable
+       and untappable, so it keeps its links and scrolls sideways at 18px instead. */
     .heat { overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px; }
     .heat .hrow { grid-template-columns:30px repeat(31,18px); gap:3px; }
     .xmark { display:none; }

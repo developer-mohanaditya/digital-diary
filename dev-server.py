@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Dev server for the preview panel.
 
-Serves public/ — the same files the Worker serves — on :3000 like `python -m
+Serves public/ (the same files the Worker serves) on :3000 like `python -m
 http.server`, plus an extensionless `.html` fallback so a path without the suffix
 works here exactly as it does on hosting. Standard library only.
 """

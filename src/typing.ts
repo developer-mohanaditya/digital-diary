@@ -17,7 +17,7 @@ export interface TypingLoop {
 
 // Starts the indicator and keeps it alive until stop(). Never throws and never rejects: the note
 // is what matters, and a chat action is not worth failing one over. A notifier with no typing port
-// — a test double, another adapter — simply gets none of this.
+// (a test double, another adapter) simply gets none of this.
 export async function keepTyping(
   notifier: Notifier,
   chatId: number,
@@ -39,7 +39,7 @@ export async function keepTyping(
     }
   };
 
-  // Awaited, so the indicator is showing before the slow part — the cleanup and the two writes —
+  // Awaited, so the indicator is showing before the slow part, the cleanup and the two writes, 
   // begins, rather than racing it.
   await ping();
 
