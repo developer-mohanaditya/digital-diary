@@ -13,10 +13,10 @@
     "env:check": "node scripts/check-env.mjs",
     "bindings:check": "node scripts/check-bindings.mjs",
     "doctor": "node scripts/telegram-doctor.mjs",
-    "gen:commands": "node scripts/gen-ink-commands.mjs",
+    "gen:commands": "node scripts/gen-ink-commands.mjs && node scripts/sync-commands.mjs",
     "gen:skill": "node scripts/sync-skill.mjs",
-    "predev": "node scripts/sync-skill.mjs",
-    "predeploy": "node scripts/sync-skill.mjs"
+    "predev": "node scripts/sync-skill.mjs && node scripts/sync-commands.mjs",
+    "predeploy": "node scripts/sync-skill.mjs && node scripts/sync-commands.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261013.1",

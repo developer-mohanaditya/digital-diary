@@ -1,7 +1,8 @@
 # Connecting an agent to INK
 
 INK is a private diary at `https://ink.aweditya.com`. This page is the whole setup: put the key
-where your tool reads it, check it, file one note, and report what the diary answered.
+where your tool reads it, check it, install the commands, file one note, and report what the diary
+answered.
 
 Version v1, 2 November 2026. If something here fails in a way this page does not explain, say so
 plainly rather than working around it.
@@ -109,7 +110,31 @@ the owner was told on their phone at the same moment.
     "telegram": "sent" } }
 ```
 
-## Step 4: tell the owner what happened
+## Step 4: install the commands
+
+`/ink` is the skill, and the menu carries it as one entry. The named commands are files, so the menu
+only lists the ones that exist on this machine: without them, `/ink-` finds nothing even though
+`/ink` works. Install all 58, flat. `~/.claude/commands/ink-brief.md` becomes `/ink-brief`, while
+the same file under `~/.claude/commands/ink/` would be namespaced and would never answer to the
+name you type.
+
+```sh
+mkdir -p ~/.claude/commands
+curl -fsS https://ink.aweditya.com/commands/names.txt | while read -r name; do
+  curl -fsS "https://ink.aweditya.com/commands/$name.md" -o "$HOME/.claude/commands/$name.md"
+done
+ls "$HOME"/.claude/commands/ink-*.md | wc -l
+```
+
+The last line answers 58. Codex reads `~/.codex/prompts/` instead, with the same loop and that
+directory in place of `~/.claude/commands`. Copy only the `ink-` files: `names.txt` is the list the
+loop reads, not a command, and a stray file in that folder shows up in the menu as one.
+
+The menu is built when a session starts, so a new session is what makes `/ink-` complete after
+this. The skill's own presets still work without the wrappers, as in `/ink note project the grid is
+generated`, so a tool with no commands folder is not locked out, only unsuggested.
+
+## Step 5: tell the owner what happened
 
 Report the receipt: how many notes, under which categories, the receipt code, and whether Telegram
 was sent. If a note failed, say which one and why. Do not round a partial write up to "done". Then
@@ -140,10 +165,9 @@ Category and mode are the agent's call, from what the note is about and from the
 command names them: `cat:life` picks the shelf, `mode:verbatim` keeps the words exactly, and
 `due:2026-11-06` dates a deadline, as in `/ink-note cat:deadline due:2026-11-06 renew the domain`.
 
-The skill itself is served at <https://ink.aweditya.com/skills/ink/SKILL.md>: fetch that page and
-save it where your tool loads skills from, `~/.claude/skills/ink/SKILL.md` for Claude Code. The
-wrappers ship in `commands/` in the diary's repository: copy them into `~/.claude/commands/` for
-Claude Code, or `~/.codex/prompts/` for Codex.
+The skill is served at <https://ink.aweditya.com/skills/ink/SKILL.md>, and the wrappers at
+<https://ink.aweditya.com/commands/>, which is what Step 4 installs. Both also sit in the diary's
+repository, for reading rather than for copying by hand.
 
 Tell the owner this once the key works, because it is the part he will actually type.
 
