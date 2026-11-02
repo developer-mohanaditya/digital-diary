@@ -1565,7 +1565,7 @@ function viewConnect() {
   <section class="card">
     <div class="lhead"><span class="kicker">The prompt</span>${key ? '<span class="muted" style="font-size:.76rem">with your new key</span>' : ''}</div>
     <h2>Paste this into the agent</h2>
-    <p class="muted" style="margin:0;font-size:.84rem">Paste it once and let the agent work: it reads the setup page, saves the skill where it loads skills from, installs the 58 commands so `/ink-` completes, and files one note to prove the pipe. ${key ? 'Your new key is already in it.' : 'Without a key it says where one goes; mint one below and copy the prompt again.'}</p>
+    <p class="muted" style="margin:0;font-size:.84rem">Paste it once and let the agent work: it reads the setup page, saves the skill where it loads skills from, installs the 58 commands so /ink- completes, and files one note to prove the pipe. ${key ? 'Your new key is already in it.' : 'Without a key it says where one goes; mint one below and copy the prompt again.'}</p>
     <pre class="pasteline wrap" id="setup-prompt">${esc(setupPrompt(key))}</pre>
     <div class="crow"><button class="cbtn" data-action="copy-prompt">Copy the prompt</button>${key ? '' : '<button class="microbtn" data-action="keys-jump">Get a write key under this ↓</button>'}</div>
   </section>
