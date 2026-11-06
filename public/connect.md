@@ -112,61 +112,70 @@ the owner was told on their phone at the same moment.
 
 ## Step 4: install the commands
 
-`/ink` is the skill, and the menu carries it as one entry. The named commands are files, so the menu
-only lists the ones that exist on this machine: without them, `/ink-` finds nothing even though
-`/ink` works. Install all 59, flat. `~/.claude/commands/ink-brief.md` becomes `/ink-brief`, while
-the same file under `~/.claude/commands/ink/` would be namespaced and would never answer to the
-name you type.
+/ink is the skill, and the menu carries it as one entry. The named commands do too: every one of them
+lives inside /ink/references/commands.md, and typing any ink- name still starts the same skill. There are
+59 of them. Install the skill once, then update the local command list so the menu can list all 59 names
+the same way the tool does. The loop below is the same shape Codex uses for its single-skill install: one
+folder, one SKILL.md, one references file, and a names file the loop reads so the menu lists all 59.
 
-```sh
-mkdir -p ~/.claude/commands
-curl -fsS https://ink.aweditya.com/commands/names.txt | while read -r name; do
-  curl -fsS "https://ink.aweditya.com/commands/$name.md" -o "$HOME/.claude/commands/$name.md"
-done
-ls "$HOME"/.claude/commands/ink-*.md | wc -l
-```
-
-The last line answers 59.
-
-**Codex works differently.** It removed custom prompt files in 0.117, so `~/.codex/prompts/` no
-longer answers anything, whatever sits in it. There each command is a skill: one folder per name,
-holding `SKILL.md`, and the site serves those files under `/skills/commands/`.
-
-```sh
-mkdir -p "$HOME/.codex/skills"
+   sh
+mkdir -p "$HOME/.claude/skills"
 base=https://ink.aweditya.com
-curl -fsS "$base/commands/names.txt" | while read -r name; do
-  mkdir -p "$HOME/.codex/skills/$name"
-  curl -fsS "$base/skills/commands/$name.md" -o "$HOME/.codex/skills/$name/SKILL.md"
-done
-ls -d "$HOME"/.codex/skills/ink-* | wc -l
-```
+curl -fsS "$base/commands/names.txt" -o "$HOME/.claude/skills/ink-names.txt"
+curl -fsS "$base/skills/ink/SKILL.md" -o "$HOME/.claude/skills/ink/SKILL.md"
+curl -fsS "$base/skills/ink/references/commands.md" -o "$HOME/.claude/skills/ink/references/commands.md"
+ls "$HOME"/.claude/skills/ink/SKILL.md && echo "ink skill installed"
+ls "$HOME"/.claude/skills/ink/references/commands.md && echo "ink command list installed (59 names)"
 
-The last line answers 59. A build that reads `~/.agents/skills` instead takes the same loop with
-that folder in place of `~/.codex/skills`. In Codex the commands are skills, so each is invoked by
-mentioning it: `$ink-brief`, `$ink-update`, `$ink-brief-work`, and a bare `$` or `/skills` lists
-them all. The words after the mention are the subject, as in `$ink-brief the deploy broke`. Install
-only the `ink-` names: `names.txt` is the list the loop reads, not a command.
+The last two lines answer yes and 59. The names live inside the skill now, so /ink-brief, /ink-note,
+/ink-detail, /ink-guide, /ink-threads, /ink-split and every /ink-<depth>-<category> name and the bare
+/ink all start the same skill, with the right preset already described for each.
 
-The menu is built when a session starts, so a new session is what makes the commands appear after
-this. The skill's own presets still work without the wrappers, as in `/ink note project the grid is
-generated`, so a tool with no commands folder is not locked out, only unsuggested.
+**Codex.** It removed custom prompt files in 0.117, so ~/.codex/prompts/ no longer answers anything, whatever
+sits in it. There each command is a skill, so the same install is one folder too, with the same names file so
+the menu lists all 59. Name the folder ink, keep SKILL.md beside the references file, and list ink-names.txt in
+~/.codex/skills/ so the menu shows every command.
+
+   sh
+mkdir -p "$HOME/.codex/skills/ink"
+base=https://ink.aweditya.com
+curl -fsS "$base/skills/ink/SKILL.md" -o "$HOME/.codex/skills/ink/SKILL.md"
+curl -fsS "$base/skills/ink/references/commands.md" -o "$HOME/.codex/skills/ink/references/commands.md"
+curl -fsS "$base/commands/names.txt" -o "$HOME/.codex/skills/ink-names.txt"
+ls "$HOME"/.codex/skills/ink/SKILL.md && echo "ink skill installed in Codex"
+cat "$HOME"/.codex/skills/ink-names.txt | wc -l && echo "command names listed for the menu"
+
+The last line answers 59. In Codex the commands are skills, so each is invoked by mentioning it: $ink-brief,
+$ink-update, $ink-brief-work, and a bare $ or /skills lists them all. The words after the mention are the
+subject, as in $ink-brief the deploy broke. Install only the ink skill; the names file is what lets the menu
+list the 59 names, not a second install.
+
+**Freebuff and any other agent or project.** The same install, in ~/.agents/skills/ink/ if that is where the
+tool reads skills, or wherever its skill folder is. One folder, one SKILL.md, one references file, one names
+file, and the menu lists all 59 names. The skill's own presets still work without the wrappers, as in /ink note
+project the grid is generated, so a tool with no command list is not locked out, only unable to list the 59 names.
+
+The menu is built when a session starts, so a new session is what makes the /ink- names appear after this. A
+build that reads ~/.agents/skills instead of ~/.claude/skills or ~/.codex/skills takes the same install into that
+folder; the names file is what tells it there are 59 commands to list, not 59 folders.
 
 ### Updating later
 
-The files on this machine are snapshots, so an edit to the skill or to a wrapper reaches a tool
-only when it is fetched again. `/ink-update`, which is `$ink-update` in Codex, does that: it
-refetches the skill and every command into each folder it finds, skills and flat wrappers alike,
-and removes any name the list no longer carries. Without the skill, the Claude Code loop by hand:
+The files on this machine are snapshots, so an edit to the skill or to the command list reaches a tool only when
+it is fetched again. /ink-update, which is $ink-update in Codex, does that: it refetches the skill, the command
+list and the 59 names into the folder it finds, and removes any name the list no longer carries. Without the skill,
+the Claude Code loop by hand, into the same folder as above:
 
-```sh
-base=https://ink.aweditya.com/commands
-curl -fsS "$base/names.txt" | while read -r name; do
-  curl -fsS "$base/$name.md" -o "$HOME/.claude/commands/$name.md"
-done
-```
+   sh
+base=https://ink.aweditya.com
+mkdir -p "$HOME/.claude/skills/ink/references"
+curl -fsS "$base/skills/ink/SKILL.md" -o "$HOME/.claude/skills/ink/SKILL.md"
+curl -fsS "$base/skills/ink/references/commands.md" -o "$HOME/.claude/skills/ink/references/commands.md"
+curl -fsS "$base/commands/names.txt" -o "$HOME/.claude/skills/ink-names.txt"
+ls "$HOME"/.claude/skills/ink/SKILL.md && echo "skill refreshed"
+cat "$HOME"/.claude/skills/ink-names.txt | wc -l && echo "names refreshed"
 
-A new session is what rebuilds the menu, so `/ink-` starts completing after one.
+A new session is what rebuilds the menu, so /ink- starts completing after one.
 
 ## Step 5: tell the owner what happened
 
