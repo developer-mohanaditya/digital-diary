@@ -5,7 +5,7 @@
 // sentence, which is how the bot ended up with three voices saying the same kind of thing (a
 // full stop, a `key value` dump, and a run of `·`-joined fragments). So the shape lives here:
 //
-//   ✓ Saved to Inbox                 <- the verdict: one glyph, one bold line
+//   ✅ Saved to Inbox                <- the verdict: one glyph, one bold line
 //                                    <- blank
 //   "Had coffee with Ram."           <- the note itself, quoted
 //                                    <- blank
@@ -97,7 +97,16 @@ export function storedPreview(text: string, limit = PREVIEW_CHARS): string {
   return flat.length > limit ? `${flat.slice(0, limit).trimEnd()}...` : flat;
 }
 
-const quoted = (text: string) => `<i>"${escapeHtml(storedPreview(text) || '-')}"</i>`;
+// A note that carries a title, which means a first line followed by a blank line, is quoted by
+// that title alone: a receipt that runs a heading straight into the body it introduces reads as
+// one long sentence and hides the one thing the title was written to say.
+export function noteHead(text: string, limit = PREVIEW_CHARS): string {
+  const [first] = text.split(/\n\s*\n/);
+  const head = first.trim();
+  return storedPreview(head && head !== text.trim() ? head : text, limit);
+}
+
+const quoted = (text: string) => `<i>"${escapeHtml(noteHead(text) || '-')}"</i>`;
 
 /* ---------- Saved ---------- */
 
@@ -126,7 +135,7 @@ export function savedMessage(f: SaveFacts): string {
   if (f.tokensIn != null || f.tokensOut != null) facts.push(`${f.tokensIn ?? '–'} in / ${f.tokensOut ?? '–'} out`);
   if (f.model) facts.push(escapeHtml(f.model));
 
-  const lines = [heading('✓', `Saved to ${categoryLabel(f.category)}`), '', quoted(f.note)];
+  const lines = [heading('✅', `Saved to ${categoryLabel(f.category)}`), '', quoted(f.note)];
   if (facts.length) lines.push('', facts.join(' · '));
   return lines.join('\n');
 }
@@ -219,8 +228,8 @@ export function reminderMessage(kind: string, title: string, dueAt: string | nul
 }
 
 export function recleanedMessage(r: { scanned: number; cleaned: number; failed: string[] }): string {
-  if (r.scanned === 0) return [`✓ <b>Nothing to re-clean</b>`, '', 'Every note already has a formatted version.'].join('\n');
-  const lines = [heading('✓', `Re-cleaned ${r.cleaned} of ${r.scanned} note${r.scanned === 1 ? '' : 's'}`)];
+  if (r.scanned === 0) return [`✅ <b>Nothing to re-clean</b>`, '', 'Every note already has a formatted version.'].join('\n');
+  const lines = [heading('✅', `Re-cleaned ${r.cleaned} of ${r.scanned} note${r.scanned === 1 ? '' : 's'}`)];
   if (r.failed.length) lines.push('', `Failed: ${escapeHtml(r.failed.slice(0, 3).join('; '))}`);
   return lines.join('\n');
 }
@@ -243,7 +252,7 @@ export function timezoneShownMessage(zone: string): string {
 
 export function timezoneSetMessage(zone: string): string {
   return [
-    `✓ <b>Timezone set</b> · ${escapeHtml(zone)}`,
+    `✅ <b>Timezone set</b> · ${escapeHtml(zone)}`,
     '',
     'New notes use it. Older notes keep their day.',
   ].join('\n');

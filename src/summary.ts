@@ -37,6 +37,13 @@ function dueLine(dueAt: string): string {
   }).format(new Date(dueAt));
 }
 
+// The title of a note: its first line when the note carries a title and a body, the whole text
+// when it does not. A day's list reads as headings rather than as paragraphs cut mid-sentence.
+function noteHead(text: string): string {
+  const [first] = text.split(/\n\s*\n/);
+  return oneLine(first.trim() || text);
+}
+
 // One line per note: collapse the newlines a note may carry, and cut at a word boundary so
 // a long note reads as a beginning rather than as a severed word.
 function oneLine(text: string): string {
@@ -54,7 +61,7 @@ export function summaryMessage(input: {
   reminders: SummaryReminder[];
 }): string {
   const { day, timeZone, notes, reminders } = input;
-  const lines: string[] = [`☾ <b>${escapeHtml(dayLine(day))}</b>`];
+  const lines: string[] = [`🌙 <b>${escapeHtml(dayLine(day))}</b>`];
 
   if (notes.length === 0) {
     lines.push('No notes today.');
@@ -68,7 +75,7 @@ export function summaryMessage(input: {
     );
     lines.push('');
     for (const note of notes.slice(0, SHOWN_NOTES)) {
-      lines.push(`${clock(note.at, timeZone)} · ${label(note.category)} · ${escapeHtml(oneLine(note.text))}`);
+      lines.push(`${clock(note.at, timeZone)} · ${label(note.category)} · ${escapeHtml(noteHead(note.text))}`);
     }
     if (notes.length > SHOWN_NOTES) lines.push(`…and ${notes.length - SHOWN_NOTES} more.`);
   }

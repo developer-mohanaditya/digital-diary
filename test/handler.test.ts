@@ -100,7 +100,7 @@ describe('handleUpdate', () => {
     }));
     expect(n.reply).toHaveBeenCalledWith(
       42,
-      '✓ <b>Saved to Thought</b>\n\n<i>"Stay hungry, stay foolish"</i>\n\nas written',
+      '✅ <b>Saved to Thought</b>\n\n<i>"Stay hungry, stay foolish"</i>\n\nas written',
     );
   });
 
@@ -125,7 +125,7 @@ describe('handleUpdate', () => {
     expect(await handleUpdate(update('/reclean 3'), store, n, SETTINGS, NOW, undefined, { repair })).toBe('ignored');
     expect(repair).toHaveBeenCalledWith(3);
     expect(store.insertCapture).not.toHaveBeenCalled();
-    expect(n.reply.mock.calls[0][1]).toBe('✓ <b>Re-cleaned 2 of 3 notes</b>');
+    expect(n.reply.mock.calls[0][1]).toBe('✅ <b>Re-cleaned 2 of 3 notes</b>');
   });
 
   it('/reclean defaults to five notes and caps a big number at 25', async () => {
@@ -212,7 +212,7 @@ describe('cleanup', () => {
     }));
     // Verdict, the note as stored, then what the wait cost.
     const lines = n.reply.mock.calls[0][1].split('\n');
-    expect(lines[0]).toBe('✓ <b>Saved to Inbox</b>');
+    expect(lines[0]).toBe('✅ <b>Saved to Inbox</b>');
     expect(lines[2]).toBe('<i>"Had coffee with Ram."</i>');
     expect(lines[4]).toMatch(/^\d+ ms · 31 in \/ 12 out · test-model$/);
   });
@@ -286,7 +286,7 @@ describe('reply format', () => {
       category: 'inbox', note: 'Had coffee with Ram.', state: 'formatted',
       ms: 2140, tokensIn: 210, tokensOut: 48, model: 'glm-4.7-flash',
     })).toBe([
-      '✓ <b>Saved to Inbox</b>', '',
+      '✅ <b>Saved to Inbox</b>', '',
       '<i>"Had coffee with Ram."</i>', '',
       '2.1 s · 210 in / 48 out · glm-4.7-flash',
     ].join('\n'));

@@ -208,6 +208,7 @@ export interface ReceiptNote {
   mode: string;
   status: 'stored' | 'duplicate' | 'failed';
   cleanup: CleanupKind | 'duplicate';
+  title: string; // the note's own first line, so a batch can be listed without cutting prose
   words: number;
   error: string | null;
 }
@@ -237,6 +238,14 @@ export type WriteOutcome =
   | { ok: false; status: number; code: string; message: string };
 
 const words = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+// The first line of a note when it has one, the whole of it when it does not. Capped so a long
+// opening line still fits one line of a phone screen.
+const noteTitle = (text: string) => {
+  const [first] = text.split(/\n\s*\n/);
+  const head = (first || text).replace(/\s+/g, ' ').trim();
+  return head.length > 90 ? `${head.slice(0, 90).trimEnd()}...` : head;
+};
 
 // The id the capture's uniqueness runs on. With an Idempotency-Key it is a digest of the key's
 // own id, that key and the note's place in the batch, so a retry lands on the same row and the
@@ -269,21 +278,32 @@ function dayLabel(days: string[], timeZone: string): string {
   return first === last ? format(first) : `${format(first)}–${format(last)}`;
 }
 
-// What the phone shows, in the shape of every other message: who wrote and where, the first
-// note in the words the diary stored, what was filed, and what it cost. The receipt code ties
-// this message to the API's answer, so the two can be matched after the fact.
+// What the phone shows, in the shape of every other message: the verdict, then what was filed,
+// then what it cost. Every note carries a title, so a batch is listed by its titles instead of
+// one paragraph cut mid-sentence. The receipt code ties this message to the API answer, so the
+// two can be matched after the fact.
+const LISTED_NOTES = 6; // more than this is a scroll, not a confirmation
+
 export function ackMessage(receipt: Receipt, client: string, timeZone: string): string {
   const stored = receipt.notes.filter((n) => n.status === 'stored');
   const who = client === 'api' ? 'An app' : titleCase(client);
   const filed = `${who} filed ${stored.length} note${stored.length === 1 ? '' : 's'}`;
-  const lines = [`✓ <b>${escapeHtml(filed)}</b> · ${dayLabel(stored.map((n) => n.day), timeZone)}`];
-  if (receipt.preview) lines.push('', `<i>"${escapeHtml(storedPreview(receipt.preview))}"</i>`);
+  const lines = [`✅ <b>${escapeHtml(filed)}</b> · ${dayLabel(stored.map((n) => n.day), timeZone)}`];
+
+  if (stored.length === 1) {
+    lines.push('', `<i>"${escapeHtml(stored[0].title || 'a note')}"</i>`);
+  } else {
+    lines.push('');
+    for (const n of stored.slice(0, LISTED_NOTES)) lines.push(`• ${escapeHtml(n.title || 'a note')}`);
+    if (stored.length > LISTED_NOTES) lines.push(`…and ${stored.length - LISTED_NOTES} more.`);
+  }
 
   const tally = Object.entries(receipt.counts.byCategory).map(([c, n]) => `${categoryLabel(c)} ${n}`);
   if (receipt.reminders.length) {
     tally.push(`first ping ${dayLabel(receipt.reminders.map((r) => r.due), timeZone)}`);
   }
-  if (tally.length) lines.push('', tally.join(' · '));
+  const wordCount = `${receipt.counts.words} word${receipt.counts.words === 1 ? '' : 's'}`;
+  lines.push('', [...tally, wordCount].join(' · '));
 
   const cost: string[] = [];
   if (receipt.usage.tokensIn != null || receipt.usage.tokensOut != null) {
@@ -340,7 +360,7 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
     const existing = seen.get(seed);
     if (existing) {
       captureAt.set(i, existing);
-      notes.push({ id: null, day: note.day, category: note.category, mode: note.mode, status: 'duplicate', cleanup: 'duplicate', words: words(note.text), error: null });
+      notes.push({ id: null, day: note.day, category: note.category, mode: note.mode, status: 'duplicate', cleanup: 'duplicate', title: noteTitle(note.text), words: words(note.text), error: null });
       continue;
     }
     try {
@@ -364,10 +384,11 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
         if (found) {
           seen.set(seed, found.id);
           captureAt.set(i, found.id);
-          notes.push({ id: found.id, day: note.day, category: note.category, mode: note.mode, status: 'duplicate', cleanup: 'duplicate', words: words(note.text), error: null });
+          notes.push({ id: found.id, day: note.day, category: note.category, mode: note.mode, status: 'duplicate', cleanup: 'duplicate', title: noteTitle(note.text), words: words(note.text), error: null });
         } else {
           notes.push({
             id: null, day: note.day, category: note.category, mode: note.mode, status: 'failed', cleanup: 'failed', words: 0,
+            title: noteTitle(note.text),
             error: 'The note was not stored and no existing copy could be found.',
           });
           failures.push('one note was neither stored nor found');
@@ -428,6 +449,7 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
         mode: note.mode,
         status: 'stored',
         cleanup: cleaned.cleanup,
+        title: noteTitle(cleaned.clean),
         words: words(cleaned.clean),
         error: cleaned.error,
       });
@@ -435,7 +457,7 @@ export async function writeNotes(deps: WriteDeps, key: KeySession, input: WriteI
       const reason = err instanceof Error ? err.message.split('\n')[0].slice(0, 200) : 'unknown error';
       failures.push(reason);
       console.error('api note failed', err);
-      notes.push({ id: null, day: note.day, category: note.category, mode: note.mode, status: 'failed', cleanup: 'failed', words: 0, error: reason });
+      notes.push({ id: null, day: note.day, category: note.category, mode: note.mode, status: 'failed', cleanup: 'failed', title: noteTitle(note.text), words: 0, error: reason });
     }
   }
 

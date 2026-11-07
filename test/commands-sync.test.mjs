@@ -57,6 +57,6 @@ describe('served commands', () => {
       expect(text, file).not.toContain('/prompts:ink');
       expect(text, file).not.toContain('.codex/prompts/$name');
     }
-    expect(readFileSync('public/connect.md', 'utf8')).toContain('.codex/skills/$name/SKILL.md');
+    expect(readFileSync('public/connect.md', 'utf8')).toContain('.codex/skills/ink/SKILL.md');
   });
 });

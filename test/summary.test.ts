@@ -17,7 +17,7 @@ describe('summaryMessage', () => {
     });
     const lines = text.split('\n');
     // The title, then what the day held, then the tally, then the notes themselves.
-    expect(lines[0]).toBe('☾ <b>Sunday 25 October</b>');
+    expect(lines[0]).toBe('🌙 <b>Sunday 25 October</b>');
     expect(lines[1]).toBe('3 notes · 15 words');
     expect(lines[2]).toBe('Work 2 · Life 1');
     // A CEST note and a CET one: both hours come from the diary's timezone, not UTC.
@@ -33,7 +33,7 @@ describe('summaryMessage', () => {
       notes: [],
       reminders: [{ kind: 'deadline', title: 'Submit the tax form', dueAt: '2026-10-27T09:00:00Z' }],
     });
-    expect(text.split('\n').slice(0, 2)).toEqual(['☾ <b>Sunday 25 October</b>', 'No notes today.']);
+    expect(text.split('\n').slice(0, 2)).toEqual(['🌙 <b>Sunday 25 October</b>', 'No notes today.']);
     expect(text).toContain('⏳ <b>Still open</b> · 1');
     expect(text).toContain('• Submit the tax form: Tue 27 Oct');
   });
@@ -83,7 +83,7 @@ describe('summaryMessage', () => {
       notes: [{ category: 'life', text: 'One thing.', at: '2026-10-25T12:00:00Z' }],
       reminders: [],
     });
-    expect(text.split('\n').slice(0, 2)).toEqual(['☾ <b>Sunday 25 October</b>', '1 note · 2 words']);
+    expect(text.split('\n').slice(0, 2)).toEqual(['🌙 <b>Sunday 25 October</b>', '1 note · 2 words']);
   });
 });
 

@@ -159,7 +159,7 @@ describe('/telegram/webhook cleanup', () => {
       mode: 'refine',
     });
     const lines = (telegram(bodies)?.text ?? '').split('\n');
-    expect(lines[0]).toBe('✓ <b>Saved to Inbox</b>');
+    expect(lines[0]).toBe('✅ <b>Saved to Inbox</b>');
     expect(lines[2]).toBe('<i>"Had coffee with Ram."</i>');
     // The wait and what the model reported, on the one fact line.
     expect(lines[4]).toContain('·');

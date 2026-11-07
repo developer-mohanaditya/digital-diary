@@ -1097,9 +1097,9 @@ async function webhook(request: Request, env: Env): Promise<Response> {
         const rid = q.data.slice(5);
         if (store.markReminderDone) await store.markReminderDone(rid);
         // The toast above the button follows the same grammar as the messages: a verdict first.
-        await answerCallback(env, q.id, '✓ Marked done, no more pings');
+        await answerCallback(env, q.id, '✅ Marked done, no more pings');
       } else {
-        await answerCallback(env, q.id, '✓ Nothing to do');
+        await answerCallback(env, q.id, '✅ Nothing to do');
       }
       return new Response('ok');
     }
